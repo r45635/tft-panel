@@ -112,6 +112,10 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
   SHA-256 is committed. The new image boots "pending verify": it is confirmed once Wi-Fi is up
   and the companion answered, otherwise after 3 min the bootloader goes back to the previous
   one. Console: `ota check|install`.
+- Local upload page (`src/net/web_update.*`): `http://tft-panel-xxxx.local/update` in station mode
+  (not while the setup portal owns port 80). Opening it shows a 6-digit code on the panel for
+  5 min; the upload must carry it (`?code=`), else 403 before anything is written. Same
+  pending-verify rollback as a GitHub update.
 - Every failure becomes the status line (401 → token needed, 503 → Roon Core not connected, transport
   errors by name). A discovered companion is dropped after 6 failures in a row and looked up again.
 

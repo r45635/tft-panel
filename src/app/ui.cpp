@@ -8,6 +8,7 @@
 
 #include "../net/net.h"
 #include "../net/ota.h"
+#include "../net/web_update.h"
 #include "../net/settings.h"
 #include "../board/board.h"
 #include "fonts.h"
@@ -118,6 +119,10 @@ int32_t g_offsetLocal = 0;
 uint32_t g_offsetChangedAt = 0;
 bool g_offsetPending = false;
 String g_offsetTrack;
+
+// Code for the local upload page (http://tft-panel-xxxx.local/update), shown while valid.
+lv_obj_t *g_codePopup = nullptr, *g_codeValue = nullptr;
+uint32_t g_shownCode = 0;
 
 bool g_demo = false;
 uint32_t g_seenVersion = UINT32_MAX;
@@ -728,6 +733,33 @@ void tickPopups(uint32_t now) {
     if (!isHidden(g_offPopup)) showOffset();
 }
 
+void buildCodePopup() {
+    g_codePopup = fullScreen(LV_OPA_90);
+    lv_obj_t *t = label(g_codePopup, fonts::ui20, COL_MID);
+    lv_obj_set_width(t, 640);
+    lv_label_set_long_mode(t, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
+    setText(t, "Firmware update from a browser\n\nType this code on the page to allow the upload (valid 5 minutes):");
+    lv_obj_align(t, LV_ALIGN_CENTER, 0, -110);
+    g_codeValue = label(g_codePopup, fonts::clock, COL_TEXT);
+    lv_obj_align(g_codeValue, LV_ALIGN_CENTER, 0, 10);
+    lv_obj_t *cancel = textButton(g_codePopup, "Cancel", 0x1C232B, [](lv_event_t *) { webupdate::cancelCode(); });
+    lv_obj_align(cancel, LV_ALIGN_CENTER, 0, 150);
+}
+
+void tickCode() {
+    uint32_t code = webupdate::activeCode();
+    if (code == g_shownCode) return;
+    g_shownCode = code;
+    if (code) {
+        char buf[12];
+        snprintf(buf, sizeof buf, "%06u", (unsigned)code);
+        setText(g_codeValue, buf);
+        g_activeAt = millis();   // wake the screen: the user is in front of it
+    }
+    setHidden(g_codePopup, code == 0);
+}
+
 void buildClock() {
     g_clock = lv_obj_create(g_scr);
     lv_obj_remove_style_all(g_clock);
@@ -925,6 +957,7 @@ void build() {
     buildVolumePopup();
     buildOffsetPopup();
     buildClock();
+    buildCodePopup();
     buildOta();
     for (lv_obj_t *o : {g_stage, g_setup}) lv_obj_set_clickable(o, false);
     lv_obj_add_event_cb(g_scr, onScreenTap, LV_EVENT_CLICKED, nullptr);
@@ -1225,7 +1258,7 @@ void tickSleep(uint32_t now) {
     hookTouch();
     bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch ||
                 !isHidden(g_otaConfirm) || !isHidden(g_otaProgress) || settingsui::isOpen() ||
-                !isHidden(g_volPopup) || !isHidden(g_offPopup);
+                !isHidden(g_volPopup) || !isHidden(g_offPopup) || !isHidden(g_codePopup);
     if (busy) g_activeAt = now;
     uint32_t idle = now - g_activeAt;
     uint32_t offAfter = (uint32_t)settings::sleepMin() * 60000u;
@@ -1303,6 +1336,7 @@ void setDemo(bool on) {
 
 void tick() {
     uint32_t now = millis();
+    tickCode();
     tickSleep(now);
     static uint32_t lastClock = 0;
     if (now - lastClock >= 500) {

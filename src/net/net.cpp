@@ -9,6 +9,7 @@
 
 #include "ota.h"
 #include "portal.h"
+#include "web_update.h"
 #include "position_clock.h"
 #include "settings.h"
 
@@ -299,20 +300,25 @@ void reportCompanionFailure(const char *what, const HttpResult &r) {
 
 // ---- Companion discovery ----
 
+// Our own name on the LAN (tft-panel-xxxx.local, also the update page) + companion lookup.
+void startMdns() {
+    if (g_mdnsStarted) return;
+    String mac = WiFi.macAddress();
+    mac.replace(":", "");
+    String host = "tft-panel-" + mac.substring(8);
+    host.toLowerCase();
+    g_mdnsStarted = MDNS.begin(host.c_str());
+    if (g_mdnsStarted) Serial.printf("[net] this panel is %s.local\n", host.c_str());
+    else Serial.println("[net] WARNING: mDNS responder failed to start");
+}
+
 bool discover() {
     settings::Settings st = settings::get();
     if (st.companionUrl.length()) {
         g_baseUrl = st.companionUrl;
         g_baseFromMdns = false;
     } else {
-        if (!g_mdnsStarted) {
-            String mac = WiFi.macAddress();
-            mac.replace(":", "");
-            String host = "tft-panel-" + mac.substring(8);
-            host.toLowerCase();
-            g_mdnsStarted = MDNS.begin(host.c_str());
-            if (!g_mdnsStarted) Serial.println("[net] WARNING: mDNS responder failed to start");
-        }
+        startMdns();
         setPhase(Phase::Discovering, "Looking for the TextFromTrack companion on the network...");
         int n = MDNS.queryService("textfromtrack", "tcp");
         for (int i = 0; i < n; i++) {
@@ -721,6 +727,7 @@ void task(void *) {
                 g_wifiAttemptAt = now;
             }
             if (now - g_wifiDownSince > WIFI_PORTAL_AFTER_MS) openPortalNow();
+            webupdate::loop(false, portal::active());
             delay(20);
             continue;
         }
@@ -731,6 +738,7 @@ void task(void *) {
             Serial.printf("[net] Wi-Fi up, ip %s, rssi %d dBm\n", ip.c_str(), WiFi.RSSI());
             update([&](Snapshot &s) { s.staIp = ip; });
             closePortal();
+            startMdns();
             if (!esp_sntp_enabled()) {   // wall clock for the idle screen; TZ is set by the UI
                 esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
                 esp_sntp_setservername(0, "pool.ntp.org");
@@ -747,6 +755,7 @@ void task(void *) {
                           (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
         }
         ota::tick(true);   // update check (boot + daily) and a confirmed install; no companion needed
+        webupdate::loop(true, portal::active());
         if (!g_baseUrl.length()) {
             if (now - lastDiscovery < DISCOVERY_PERIOD_MS && lastDiscovery) {
                 delay(20);
