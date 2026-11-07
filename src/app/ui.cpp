@@ -3,9 +3,13 @@
 #include <Arduino.h>
 #include <lvgl.h>
 
+#include "src/misc/cache/instance/lv_image_cache.h"   // lv_image_cache_drop (not in lvgl.h)
+
 #include "../net/net.h"
 #include "../net/settings.h"
 #include "fonts.h"
+
+#include <vector>
 
 namespace ui {
 namespace {
@@ -21,6 +25,9 @@ constexpr int LYRIC_ROWS = 5;   // 2 before, current, 2 after
 constexpr int CURRENT_ROW = 2;
 
 lv_obj_t *g_scr = nullptr;
+lv_obj_t *g_bg = nullptr;                      // cover backdrop, behind everything
+std::shared_ptr<const Backdrop> g_shownBackdrop;
+uint32_t g_seenBackdropSerial = UINT32_MAX;
 
 // Header
 lv_obj_t *g_zone = nullptr, *g_status = nullptr;
@@ -34,6 +41,16 @@ lv_obj_t *g_message = nullptr;   // centred message when there is nothing to sin
 lv_obj_t *g_bar = nullptr, *g_elapsed = nullptr, *g_total = nullptr;
 // Setup overlay
 lv_obj_t *g_setup = nullptr, *g_qrWifi = nullptr, *g_qrUrl = nullptr, *g_setupText = nullptr;
+// Controls bar (shown on a tap, hides itself) and zone picker
+constexpr uint32_t CONTROLS_HIDE_MS = 6000;
+constexpr uint32_t COMMAND_ERROR_MS = 5000;
+lv_obj_t *g_controls = nullptr, *g_btnZone = nullptr, *g_zoneBtnLabel = nullptr;
+lv_obj_t *g_btnPrev = nullptr, *g_btnPlay = nullptr, *g_btnNext = nullptr, *g_playIcon = nullptr;
+lv_obj_t *g_btnVolDown = nullptr, *g_btnVolUp = nullptr, *g_volLabel = nullptr;
+lv_obj_t *g_picker = nullptr, *g_pickerList = nullptr;
+std::vector<String> g_pickerIds;
+uint32_t g_controlsShownAt = 0;
+bool g_errorShown = false;
 
 bool g_demo = false;
 uint32_t g_seenVersion = UINT32_MAX;
@@ -49,6 +66,23 @@ lv_obj_t *label(lv_obj_t *parent, const lv_font_t *font, uint32_t colour) {
     lv_obj_set_style_text_color(l, lv_color_hex(colour), 0);
     lv_label_set_text(l, "");
     return l;
+}
+
+// Only touch LVGL when something changed: every set_text / style set invalidates the
+// area, and each redraw is a CPU copy into the PSRAM framebuffer that competes with the
+// RGB DMA refill (seen as flickering dots around labels refreshed 3x per second).
+void setText(lv_obj_t *l, const char *t) {
+    const char *cur = lv_label_get_text(l);
+    if (!cur || strcmp(cur, t) != 0) lv_label_set_text(l, t);
+}
+
+void setTextColour(lv_obj_t *o, uint32_t colour) {
+    lv_color_t c = lv_color_hex(colour);
+    if (!lv_color_eq(lv_obj_get_style_text_color(o, LV_PART_MAIN), c)) lv_obj_set_style_text_color(o, c, 0);
+}
+
+void setHidden(lv_obj_t *o, bool hidden) {
+    if (lv_obj_is_hidden(o) != hidden) lv_obj_set_hidden(o, hidden);
 }
 
 void fmtTime(char *buf, size_t n, uint32_t ms) {
@@ -76,7 +110,7 @@ void buildSetup() {
     lv_obj_set_scrollable(g_setup, false);
 
     lv_obj_t *h = label(g_setup, fonts::lyricsOther, COL_TEXT);
-    lv_label_set_text(h, "Set up TFT Panel");
+    setText(h, "Set up TFT Panel");
     lv_obj_set_pos(h, 40, 24);
 
     auto qrBlock = [](int x, const char *step) {
@@ -88,7 +122,7 @@ void buildSetup() {
         lv_obj_set_style_border_width(qr, 8, 0);
         lv_obj_set_pos(qr, x, 90);
         lv_obj_t *t = label(g_setup, fonts::ui20, COL_MID);
-        lv_label_set_text(t, step);
+        setText(t, step);
         lv_obj_set_width(t, 260);
         lv_obj_set_pos(t, x - 22, 312);
         lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
@@ -101,7 +135,169 @@ void buildSetup() {
     lv_obj_set_pos(g_setupText, 580, 100);
     lv_obj_set_width(g_setupText, 200);
     lv_label_set_long_mode(g_setupText, LV_LABEL_LONG_MODE_WRAP);
-    lv_obj_set_hidden(g_setup, true);
+    setHidden(g_setup, true);
+}
+
+bool isHidden(lv_obj_t *o) { return lv_obj_is_hidden(o); }
+
+void touchControls() { g_controlsShownAt = millis(); }
+
+void showControls(bool on) {
+    setHidden(g_controls, !on);
+    if (on) touchControls();
+}
+
+lv_obj_t *roundButton(lv_obj_t *parent, const char *symbol, lv_obj_t **iconOut, void (*cb)(lv_event_t *)) {
+    lv_obj_t *b = lv_button_create(parent);
+    lv_obj_set_size(b, 76, 76);
+    lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x1C232B), 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(b, LV_OPA_40, LV_STATE_DISABLED);
+    lv_obj_set_style_shadow_width(b, 0, 0);
+    lv_obj_t *l = lv_label_create(b);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(COL_TEXT), 0);
+    setText(l, symbol);
+    lv_obj_center(l);
+    lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
+    if (iconOut) *iconOut = l;
+    return b;
+}
+
+void onPrev(lv_event_t *) { touchControls(); net::control("previous"); }
+void onNext(lv_event_t *) { touchControls(); net::control("next"); }
+void onPlay(lv_event_t *) {
+    touchControls();
+    // Optimistic icon: the next now-playing poll (≤ 300 ms) confirms or corrects it.
+    bool playing = g_s.playing();
+    setText(g_playIcon, playing ? LV_SYMBOL_PLAY : LV_SYMBOL_PAUSE);
+    net::control("playpause");
+}
+void onVolDown(lv_event_t *) { touchControls(); net::volumeStep(-1); }
+void onVolUp(lv_event_t *) { touchControls(); net::volumeStep(+1); }
+
+void closePicker() { setHidden(g_picker, true); }
+
+void onPickZone(lv_event_t *e) {
+    intptr_t i = (intptr_t)lv_event_get_user_data(e);
+    if (i >= 0 && i < (intptr_t)g_pickerIds.size()) net::selectZone(g_pickerIds[i]);
+    closePicker();
+    showControls(false);
+}
+
+void fillPicker() {
+    lv_obj_clean(g_pickerList);
+    g_pickerIds.clear();
+    auto add = [](const String &id, const String &text, bool current) {
+        lv_obj_t *b = lv_button_create(g_pickerList);
+        lv_obj_set_width(b, lv_pct(100));
+        lv_obj_set_style_radius(b, 10, 0);
+        lv_obj_set_style_shadow_width(b, 0, 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x161B22), 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x24303C), LV_STATE_PRESSED);
+        lv_obj_set_style_pad_ver(b, 16, 0);
+        lv_obj_t *l = label(b, fonts::ui20, current ? COL_ACCENT : COL_TEXT);
+        lv_obj_set_width(l, lv_pct(100));
+        lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
+        setText(l, ((current ? String(LV_SYMBOL_OK "  ") : String("     ")) + text).c_str());
+        lv_obj_add_event_cb(b, onPickZone, LV_EVENT_CLICKED, (void *)(intptr_t)g_pickerIds.size());
+        g_pickerIds.push_back(id);
+    };
+    add("", "Follow the playing zone (auto)", !g_s.zonePinned);
+    if (!g_s.zones) return;
+    for (const net::ZoneInfo &z : *g_s.zones) {
+        String t = z.name + "  -  " + z.state;
+        if (z.title.length()) t += "  -  " + z.title + (z.artist.length() ? " (" + z.artist + ")" : "");
+        add(z.id, t, g_s.zonePinned && z.id == g_s.zoneId);
+    }
+}
+
+void onZone(lv_event_t *) {
+    fillPicker();
+    setHidden(g_picker, false);
+}
+
+void buildControls() {
+    g_controls = lv_obj_create(g_scr);
+    lv_obj_remove_style_all(g_controls);
+    lv_obj_set_size(g_controls, 800, 112);
+    lv_obj_align(g_controls, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_bg_color(g_controls, lv_color_hex(0x0A0D11), 0);
+    lv_obj_set_style_bg_opa(g_controls, LV_OPA_90, 0);
+    lv_obj_set_scrollable(g_controls, false);
+    lv_obj_set_flex_flow(g_controls, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(g_controls, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    g_btnZone = lv_button_create(g_controls);
+    lv_obj_set_size(g_btnZone, 190, 64);
+    lv_obj_set_style_radius(g_btnZone, 32, 0);
+    lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(0x1C232B), 0);
+    lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_width(g_btnZone, 0, 0);
+    g_zoneBtnLabel = label(g_btnZone, fonts::ui16, COL_TEXT);
+    lv_obj_set_width(g_zoneBtnLabel, 160);
+    lv_label_set_long_mode(g_zoneBtnLabel, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_style_text_align(g_zoneBtnLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(g_zoneBtnLabel);
+    lv_obj_add_event_cb(g_btnZone, onZone, LV_EVENT_CLICKED, nullptr);
+
+    g_btnPrev = roundButton(g_controls, LV_SYMBOL_PREV, nullptr, onPrev);
+    g_btnPlay = roundButton(g_controls, LV_SYMBOL_PLAY, &g_playIcon, onPlay);
+    g_btnNext = roundButton(g_controls, LV_SYMBOL_NEXT, nullptr, onNext);
+    g_btnVolDown = roundButton(g_controls, LV_SYMBOL_MINUS, nullptr, onVolDown);
+    g_volLabel = label(g_controls, fonts::ui20, COL_MID);
+    lv_obj_set_width(g_volLabel, 80);
+    lv_obj_set_style_text_align(g_volLabel, LV_TEXT_ALIGN_CENTER, 0);
+    g_btnVolUp = roundButton(g_controls, LV_SYMBOL_PLUS, nullptr, onVolUp);
+    setHidden(g_controls, true);
+
+    // Zone picker: full-screen list.
+    g_picker = lv_obj_create(g_scr);
+    lv_obj_remove_style_all(g_picker);
+    lv_obj_set_size(g_picker, 800, 480);
+    lv_obj_set_style_bg_color(g_picker, lv_color_hex(COL_BG), 0);
+    lv_obj_set_style_bg_opa(g_picker, LV_OPA_COVER, 0);
+    lv_obj_t *h = label(g_picker, fonts::lyricsOther, COL_TEXT);
+    setText(h, "Zone");
+    lv_obj_set_pos(h, 32, 20);
+    lv_obj_t *close = roundButton(g_picker, LV_SYMBOL_CLOSE, nullptr, [](lv_event_t *) { closePicker(); });
+    lv_obj_align(close, LV_ALIGN_TOP_RIGHT, -20, 12);
+    g_pickerList = lv_obj_create(g_picker);
+    lv_obj_remove_style_all(g_pickerList);
+    lv_obj_set_size(g_pickerList, 760, 370);
+    lv_obj_set_pos(g_pickerList, 20, 100);
+    lv_obj_set_flex_flow(g_pickerList, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(g_pickerList, 8, 0);
+    lv_obj_set_scroll_dir(g_pickerList, LV_DIR_VER);
+    setHidden(g_picker, true);
+}
+
+void onScreenTap(lv_event_t *) {
+    if (g_s.portalActive || !isHidden(g_picker)) return;
+    showControls(isHidden(g_controls));   // tap toggles the bar
+}
+
+void updateControls() {
+    setText(g_zoneBtnLabel, g_s.zoneName.length()
+                                          ? (String(LV_SYMBOL_LIST " ") + g_s.zoneName).c_str()
+                                          : LV_SYMBOL_LIST " Zone");
+    bool track = g_s.phase == net::Phase::Playing;
+    setText(g_playIcon, g_s.playing() ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY);
+    lv_obj_set_state(g_btnPlay, LV_STATE_DISABLED, !track || !(g_s.canPlay || g_s.canPause));
+    lv_obj_set_state(g_btnPrev, LV_STATE_DISABLED, !track || !g_s.canPrevious);
+    lv_obj_set_state(g_btnNext, LV_STATE_DISABLED, !track || !g_s.canNext);
+
+    const net::OutputInfo *vol = nullptr;
+    for (const net::OutputInfo &o : g_s.outputs)
+        if (o.volumeType.length()) { vol = &o; break; }
+    lv_obj_set_state(g_btnVolDown, LV_STATE_DISABLED, !vol);
+    lv_obj_set_state(g_btnVolUp, LV_STATE_DISABLED, !vol);
+    char buf[24] = "";
+    if (vol && vol->muted) snprintf(buf, sizeof buf, "muted");
+    else if (vol && vol->volumeType == "db") snprintf(buf, sizeof buf, "%.1f dB", vol->value);
+    else if (vol && vol->volumeType == "number") snprintf(buf, sizeof buf, "%.0f", vol->value);
+    setText(g_volLabel, buf);
 }
 
 void build() {
@@ -109,6 +305,12 @@ void build() {
     lv_obj_set_style_bg_color(g_scr, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_text_color(g_scr, lv_color_hex(COL_TEXT), 0);
     lv_obj_set_scrollable(g_scr, false);
+
+    g_bg = lv_image_create(g_scr);
+    lv_obj_set_pos(g_bg, 0, 0);
+    lv_obj_set_size(g_bg, 800, 480);
+    lv_obj_set_clickable(g_bg, false);
+    lv_obj_set_hidden(g_bg, true);
 
     g_zone = label(g_scr, fonts::ui16, COL_MID);
     lv_obj_set_pos(g_zone, 24, 12);
@@ -168,6 +370,9 @@ void build() {
     lv_obj_align(g_total, LV_ALIGN_BOTTOM_RIGHT, -24, -10);
 
     buildSetup();
+    buildControls();
+    for (lv_obj_t *o : {g_stage, g_setup}) lv_obj_set_clickable(o, false);
+    lv_obj_add_event_cb(g_scr, onScreenTap, LV_EVENT_CLICKED, nullptr);
 }
 
 void setRows(int index) {
@@ -177,21 +382,38 @@ void setRows(int index) {
         const char *text = "";
         if (l && i >= 0 && i < (int)l->lines.size()) text = l->lines[i].text.c_str();
         // Before the first line, show the first lines dimmed below an empty current row.
-        lv_label_set_text(g_rows[r], text);
+        setText(g_rows[r], text);
     }
 }
 
 void showMessage(const String &msg, uint32_t colour) {
-    lv_obj_set_hidden(g_stage, true);
-    lv_obj_set_hidden(g_message, false);
-    lv_obj_set_style_text_color(g_message, lv_color_hex(colour), 0);
-    lv_label_set_text(g_message, msg.c_str());
+    setHidden(g_stage, true);
+    setHidden(g_message, false);
+    setTextColour(g_message, colour);
+    setText(g_message, msg.c_str());
+}
+
+void applyBackdrop() {
+    if (g_s.backdropSerial == g_seenBackdropSerial) return;
+    g_seenBackdropSerial = g_s.backdropSerial;
+    std::shared_ptr<const Backdrop> old = g_shownBackdrop;
+    g_shownBackdrop = g_s.backdrop;
+    if (g_shownBackdrop) {
+        lv_image_set_src(g_bg, &g_shownBackdrop->dsc);
+        setHidden(g_bg, false);
+    } else {
+        setHidden(g_bg, true);
+        lv_image_set_src(g_bg, nullptr);
+    }
+    // The old buffer is freed with `old`: make sure LVGL holds no cached reference to it.
+    if (old) lv_image_cache_drop(&old->dsc);
 }
 
 void applySnapshot() {
+    applyBackdrop();
     // Setup overlay
     bool setup = g_s.portalActive;
-    lv_obj_set_hidden(g_setup, !setup);
+    setHidden(g_setup, !setup);
     if (setup) {
         String wifi = "WIFI:T:WPA;S:" + qrEscape(g_s.apSsid) + ";P:" + qrEscape(g_s.apPass) + ";;";
         String url = "http://" + g_s.apIp + "/";
@@ -205,23 +427,25 @@ void applySnapshot() {
         }
         String t = "Or join by hand:\n\nNetwork\n" + g_s.apSsid + "\n\nPassword\n" + g_s.apPass + "\n\nthen open\n" + url;
         if (g_s.phase == net::Phase::WifiFailed) t += "\n\n" + g_s.status;
-        lv_label_set_text(g_setupText, t.c_str());
+        setText(g_setupText, t.c_str());
         return;
     }
 
-    lv_label_set_text(g_zone, g_s.zoneName.length()
+    setText(g_zone, g_s.zoneName.length()
                                   ? (g_s.zoneName + (g_s.zonePinned ? "" : "  (auto)")).c_str()
                                   : "");
     bool bad = g_s.phase == net::Phase::WifiFailed || g_s.phase == net::Phase::CompanionError;
-    lv_obj_set_style_text_color(g_status, lv_color_hex(bad ? COL_ERROR : COL_DIM), 0);
-    lv_label_set_text(g_status, g_s.status.c_str());
+    g_errorShown = g_s.commandError.length() && millis() - g_s.commandErrorAt < COMMAND_ERROR_MS;
+    setTextColour(g_status, bad || g_errorShown ? COL_ERROR : COL_DIM);
+    setText(g_status, g_errorShown ? g_s.commandError.c_str() : g_s.status.c_str());
+    updateControls();
 
     bool track = g_s.phase == net::Phase::Playing || (g_s.title.length() && bad);
-    lv_label_set_text(g_title, track ? g_s.title.c_str() : "");
-    lv_label_set_text(g_artist, track ? (g_s.artist + (g_s.album.length() ? "  -  " + g_s.album : "")).c_str() : "");
-    lv_obj_set_hidden(g_bar, !track);
-    lv_obj_set_hidden(g_elapsed, !track);
-    lv_obj_set_hidden(g_total, !track);
+    setText(g_title, track ? g_s.title.c_str() : "");
+    setText(g_artist, track ? (g_s.artist + (g_s.album.length() ? "  -  " + g_s.album : "")).c_str() : "");
+    setHidden(g_bar, !track);
+    setHidden(g_elapsed, !track);
+    setHidden(g_total, !track);
 
     if (!track) {
         showMessage(g_s.status, bad ? COL_ERROR : COL_MID);
@@ -229,8 +453,8 @@ void applySnapshot() {
     }
     switch (g_s.lyricsStatus) {
         case net::LyricsStatus::Found:
-            lv_obj_set_hidden(g_message, true);
-            lv_obj_set_hidden(g_stage, false);
+            setHidden(g_message, true);
+            setHidden(g_stage, false);
             if (g_s.lyricsSerial != g_seenLyricsSerial) {
                 g_seenLyricsSerial = g_s.lyricsSerial;
                 g_shownIndex = INT32_MIN;   // force a redraw of the rows
@@ -269,8 +493,8 @@ void tickProgress(uint32_t now) {
     char a[12], b[12];
     fmtTime(a, sizeof a, pos);
     fmtTime(b, sizeof b, g_s.durationMs);
-    lv_label_set_text(g_elapsed, a);
-    lv_label_set_text(g_total, b);
+    setText(g_elapsed, a);
+    setText(g_total, b);
 }
 
 }  // namespace
@@ -292,18 +516,18 @@ void setDemo(bool on) {
         "Żółw, façade, garçon, naïve : l'aube est déjà là",
         "Ça ira mieux demain",
     };
-    lv_obj_set_hidden(g_setup, true);
-    lv_obj_set_hidden(g_message, true);
-    lv_obj_set_hidden(g_stage, false);
-    for (int r = 0; r < LYRIC_ROWS; r++) lv_label_set_text(g_rows[r], rows[r]);
-    lv_label_set_text(g_zone, "Living Room");
-    lv_label_set_text(g_status, "Playing");
-    lv_label_set_text(g_title, "Les Néons d'automne");
-    lv_label_set_text(g_artist, "Jean‐Luc Démo  -  Démonstration");
-    for (lv_obj_t *o : {g_bar, g_elapsed, g_total}) lv_obj_set_hidden(o, false);
+    setHidden(g_setup, true);
+    setHidden(g_message, true);
+    setHidden(g_stage, false);
+    for (int r = 0; r < LYRIC_ROWS; r++) setText(g_rows[r], rows[r]);
+    setText(g_zone, "Living Room");
+    setText(g_status, "Playing");
+    setText(g_title, "Les Néons d'automne");
+    setText(g_artist, "Jean‐Luc Démo  -  Démonstration");
+    for (lv_obj_t *o : {g_bar, g_elapsed, g_total}) setHidden(o, false);
     lv_bar_set_value(g_bar, 420, LV_ANIM_OFF);
-    lv_label_set_text(g_elapsed, "1:38");
-    lv_label_set_text(g_total, "3:54");
+    setText(g_elapsed, "1:38");
+    setText(g_total, "3:54");
 }
 
 void tick() {
@@ -315,6 +539,9 @@ void tick() {
         applySnapshot();
     }
     uint32_t now = millis();
+    if (!isHidden(g_controls) && isHidden(g_picker) && now - g_controlsShownAt > CONTROLS_HIDE_MS)
+        showControls(false);
+    if (g_errorShown && now - g_s.commandErrorAt >= COMMAND_ERROR_MS) applySnapshot();
     tickLyrics(now);
     tickProgress(now);
 }

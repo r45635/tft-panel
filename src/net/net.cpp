@@ -39,6 +39,17 @@ int g_consecutiveFails = 0;
 uint32_t g_wifiAttemptAt = 0, g_wifiDownSince = 0;
 uint8_t g_lastDisconnectReason = 0;
 String g_trackKey;
+String g_imageKey;          // cover currently shown (or attempted)
+bool g_backdropWanted = true;
+uint32_t g_lastZonesAt = 0, g_lastNowPlayingAt = 0;
+
+enum class CmdType : uint8_t { Control, Volume, Zone };
+struct Command {
+    CmdType type;
+    int8_t direction;
+    char arg[48];
+};
+QueueHandle_t g_commands = nullptr;
 PositionClock g_clock;
 uint32_t g_lyricsFetchedAt = 0;
 int g_lyricsRetries = 0;
@@ -114,7 +125,8 @@ struct HttpResult {
     String message;        // short human-readable reason
 };
 
-HttpResult getJson(const String &path, JsonDocument &doc, uint32_t timeoutMs) {
+// GET when `body` is null, else POST it as JSON.
+HttpResult request(const String &path, const JsonDocument *body, JsonDocument &doc, uint32_t timeoutMs) {
     HttpResult r;
     WiFiClient client;
     HTTPClient http;
@@ -129,7 +141,14 @@ HttpResult getJson(const String &path, JsonDocument &doc, uint32_t timeoutMs) {
     String token = settings::get().accessToken;
     if (token.length()) http.addHeader("Authorization", "Bearer " + token);
     http.useHTTP10(true);   // no chunked encoding: parse straight from the socket, no body String
-    r.code = http.GET();
+    if (body) {
+        String payload;
+        serializeJson(*body, payload);
+        http.addHeader("Content-Type", "application/json");
+        r.code = http.POST(payload);
+    } else {
+        r.code = http.GET();
+    }
     if (r.code < 0) {
         r.message = HTTPClient::errorToString(r.code);
         http.end();
@@ -147,6 +166,96 @@ HttpResult getJson(const String &path, JsonDocument &doc, uint32_t timeoutMs) {
         r.message = doc["error"]["message"] | ("HTTP " + String(r.code)).c_str();
     }
     return r;
+}
+
+HttpResult getJson(const String &path, JsonDocument &doc, uint32_t timeoutMs) {
+    return request(path, nullptr, doc, timeoutMs);
+}
+
+// GETs a binary body into a PSRAM buffer the caller frees (heap_caps_free).
+HttpResult getBytes(const String &path, uint8_t *&buf, size_t &len, size_t maxLen, uint32_t timeoutMs) {
+    HttpResult r;
+    buf = nullptr;
+    len = 0;
+    WiFiClient client;
+    HTTPClient http;
+    http.setConnectTimeout(3000);
+    http.setTimeout(timeoutMs);
+    http.useHTTP10(true);
+    if (!http.begin(client, g_baseUrl + path)) {
+        r.code = -100;
+        r.message = "bad companion URL";
+        return r;
+    }
+    String token = settings::get().accessToken;
+    if (token.length()) http.addHeader("Authorization", "Bearer " + token);
+    r.code = http.GET();
+    if (r.code != 200) {
+        r.message = r.code < 0 ? HTTPClient::errorToString(r.code) : "HTTP " + String(r.code);
+        http.end();
+        return r;
+    }
+    int size = http.getSize();   // -1 when the server sends no Content-Length
+    size_t cap = size > 0 ? (size_t)size : maxLen;
+    if (cap > maxLen) {
+        r.code = -102;
+        r.message = "image too large (" + String(size) + " bytes)";
+        http.end();
+        return r;
+    }
+    buf = (uint8_t *)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!buf) {
+        r.code = -103;
+        r.message = "out of memory";
+        http.end();
+        return r;
+    }
+    WiFiClient *stream = http.getStreamPtr();
+    uint32_t deadline = millis() + timeoutMs;
+    while (len < cap && millis() < deadline && (http.connected() || stream->available())) {
+        int n = stream->read(buf + len, cap - len);
+        if (n > 0) len += n;
+        else delay(2);
+    }
+    http.end();
+    if (size > 0 && len != (size_t)size) {
+        r.code = -104;
+        r.message = "image truncated (" + String((unsigned)len) + "/" + String(size) + " bytes)";
+        heap_caps_free(buf);
+        buf = nullptr;
+    }
+    return r;
+}
+
+void setBackdrop(std::shared_ptr<const Backdrop> b) {
+    update([&](Snapshot &s) {
+        s.backdrop = std::move(b);
+        s.backdropSerial++;
+    });
+}
+
+// Fetches the cover small (a blur is wanted anyway) and builds the backdrop.
+void fetchBackdrop(const String &imageKey) {
+    g_imageKey = imageKey;
+    if (!imageKey.length() || !settings::backdrop()) {
+        setBackdrop(nullptr);
+        return;
+    }
+    uint32_t t0 = millis();
+    uint8_t *jpeg = nullptr;
+    size_t len = 0;
+    HttpResult r = getBytes("/api/roon/image/" + imageKey + "?w=80&h=80", jpeg, len, 96 * 1024, 5000);
+    if (r.code != 200 || !jpeg) {
+        Serial.printf("[net] WARNING: cover not loaded: %s\n", r.message.c_str());
+        setBackdrop(nullptr);
+        return;
+    }
+    String err;
+    auto b = backdrop::build(jpeg, len, 800, 480, err);
+    heap_caps_free(jpeg);
+    if (!b) Serial.printf("[net] WARNING: cover not usable: %s\n", err.c_str());
+    else Serial.printf("[net] backdrop ready (%u bytes JPEG, %u ms)\n", (unsigned)len, (unsigned)(millis() - t0));
+    setBackdrop(b);
 }
 
 // Turns a failed call into the status line, and drops a discovered companion after
@@ -221,10 +330,12 @@ bool refreshZones() {
     current = g_snap.zoneId;
     xSemaphoreGive(g_lock);
 
+    auto list = std::make_shared<std::vector<ZoneInfo>>();
     JsonObjectConst chosen, firstPlaying, firstLoaded, first, cur;
     for (JsonObjectConst z : zones) {
         String id = z["zone_id"] | "";
         String state = z["state"] | "";
+        list->push_back({id, z["display_name"] | "", state, z["now_playing_title"] | "", z["now_playing_artist"] | ""});
         if (first.isNull()) first = z;
         if (pinned.length() && id == pinned) chosen = z;
         if (id == current) cur = z;
@@ -252,6 +363,8 @@ bool refreshZones() {
         s.zoneId = id;
         s.zoneName = name;
         s.zonePinned = isPinned;
+        s.zones = list;
+        s.zonesSerial++;
     });
     return true;
 }
@@ -260,6 +373,10 @@ bool refreshZones() {
 
 void clearTrack() {
     g_trackKey = "";
+    if (g_imageKey.length()) {
+        g_imageKey = "";
+        setBackdrop(nullptr);
+    }
     update([](Snapshot &s) {
         s.state = "stopped";
         s.title = s.artist = s.album = "";
@@ -346,6 +463,7 @@ void pollNowPlaying() {
     String artist = np["artist"] | "";
     String album = np["album"] | "";
     String state = np["state"] | "";
+    String imageKey = np["image_key"] | "";
     uint32_t durationMs = (uint32_t)(np["duration_seconds"] | 0) * 1000u;
     int32_t seekMs = (int32_t)(np["seek_position_seconds"] | 0) * 1000;
     String key = zoneId + "\x1f" + title + "\x1f" + artist + "\x1f" + album + "\x1f" + String(durationMs);
@@ -353,6 +471,23 @@ void pollNowPlaying() {
     // Middle of the request round trip: best local time for the reported position.
     uint32_t sampleAt = sentAt + (now - sentAt) / 2;
 
+    std::vector<OutputInfo> outputs;
+    for (JsonObjectConst o : np["outputs"].as<JsonArrayConst>()) {
+        OutputInfo oi;
+        oi.id = o["output_id"] | "";
+        oi.name = o["display_name"] | "";
+        JsonObjectConst v = o["volume"];
+        if (!v.isNull()) {
+            oi.volumeType = v["type"] | "";
+            oi.value = v["value"] | 0.0f;
+            oi.min = v["min"] | 0.0f;
+            oi.max = v["max"] | 0.0f;
+            oi.muted = v["is_muted"] | false;
+        }
+        outputs.push_back(oi);
+    }
+    bool canPlay = np["is_play_allowed"] | false, canPause = np["is_pause_allowed"] | false;
+    bool canNext = np["is_next_allowed"] | false, canPrevious = np["is_previous_allowed"] | false;
     if (newTrack) g_clock.reset();
     g_clock.observe(seekMs, sampleAt, state == "playing", (int32_t)(now - sentAt) / 2 + 10);
     update([&](Snapshot &s) {
@@ -364,6 +499,11 @@ void pollNowPlaying() {
         s.artist = artist;
         s.album = album;
         s.durationMs = durationMs;
+        s.outputs = std::move(outputs);
+        s.canPlay = canPlay;
+        s.canPause = canPause;
+        s.canNext = canNext;
+        s.canPrevious = canPrevious;
         if (newTrack) {
             s.lyricsStatus = LyricsStatus::Loading;
             s.lyrics.reset();
@@ -379,6 +519,10 @@ void pollNowPlaying() {
                       (unsigned)(durationMs / 1000), state.c_str());
         fetchLyrics(zoneId);
     } else {
+        if (imageKey != g_imageKey || settings::backdrop() != g_backdropWanted) {
+            g_backdropWanted = settings::backdrop();
+            fetchBackdrop(imageKey);
+        }
         LyricsStatus ls;
         xSemaphoreTake(g_lock, portMAX_DELAY);
         ls = g_snap.lyricsStatus;
@@ -389,6 +533,60 @@ void pollNowPlaying() {
             fetchLyrics(zoneId);
         }
     }
+}
+
+// ---- User commands ----
+
+void commandFailed(const String &what, const HttpResult &r) {
+    String msg = what + " failed: " + (r.message.length() ? r.message : "HTTP " + String(r.code));
+    Serial.printf("[net] %s\n", msg.c_str());
+    update([&](Snapshot &s) {
+        s.commandError = msg;
+        s.commandErrorAt = millis();
+    });
+}
+
+void runCommand(const Command &c) {
+    String zoneId;
+    std::vector<OutputInfo> outputs;
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    zoneId = g_snap.zoneId;
+    outputs = g_snap.outputs;
+    xSemaphoreGive(g_lock);
+
+    if (c.type == CmdType::Zone) {
+        settings::setZone(String(c.arg));
+        Serial.printf("[net] zone %s\n", c.arg[0] ? c.arg : "auto (follow the playing zone)");
+        g_lastZonesAt = 0;   // re-pick at once
+        return;
+    }
+    if (!g_baseUrl.length() || !zoneId.length()) return;
+    JsonDocument body(psram()), resp(psram());
+    if (c.type == CmdType::Control) {
+        body["action"] = c.arg;
+        body["zone_id"] = zoneId;   // always: never act on the companion's global active zone
+        HttpResult r = request("/api/roon/control", &body, resp, 4000);
+        if (r.code == 200) Serial.printf("[net] control %s ok\n", c.arg);
+        else commandFailed(String("Control ") + c.arg, r);
+    } else {
+        int sent = 0;
+        for (const OutputInfo &o : outputs) {
+            if (!o.volumeType.length()) continue;
+            body.clear();
+            body["output_id"] = o.id;
+            body["how"] = "relative_step";
+            body["value"] = c.direction;
+            HttpResult r = request("/api/roon/volume", &body, resp, 4000);
+            if (r.code != 200) commandFailed("Volume " + o.name, r);
+            sent++;
+        }
+        if (!sent) {
+            HttpResult r;
+            r.message = "this zone has no volume control";
+            commandFailed("Volume", r);
+        }
+    }
+    g_lastNowPlayingAt = 0;   // show the effect right away
 }
 
 // ---- Task ----
@@ -405,7 +603,7 @@ void resetSession() {
 }
 
 void task(void *) {
-    uint32_t lastZones = 0, lastNowPlaying = 0, lastDiscovery = 0;
+    uint32_t lastDiscovery = 0;
     bool wifiStarted = false;
 
     WiFi.persistent(false);   // credentials live in our NVS namespace, not the driver's
@@ -486,18 +684,22 @@ void task(void *) {
             }
             lastDiscovery = now;
             if (!discover()) continue;
-            lastZones = 0;
+            g_lastZonesAt = 0;
         }
 
-        if (!lastZones || now - lastZones > ZONES_PERIOD_MS) {
-            lastZones = now;
+        Command cmd;
+        while (xQueueReceive(g_commands, &cmd, 0) == pdTRUE) runCommand(cmd);
+
+        now = millis();
+        if (!g_lastZonesAt || now - g_lastZonesAt > ZONES_PERIOD_MS) {
+            g_lastZonesAt = now ? now : 1;
             if (!refreshZones()) {
                 delay(200);
                 continue;
             }
         }
-        if (now - lastNowPlaying >= NOW_PLAYING_PERIOD_MS) {
-            lastNowPlaying = now;
+        if (!g_lastNowPlayingAt || now - g_lastNowPlayingAt >= NOW_PLAYING_PERIOD_MS) {
+            g_lastNowPlayingAt = now ? now : 1;
             pollNowPlaying();
         }
         delay(10);
@@ -515,6 +717,7 @@ int32_t Snapshot::positionAt(uint32_t now) const {
 
 void begin() {
     g_lock = xSemaphoreCreateMutex();
+    g_commands = xQueueCreate(8, sizeof(Command));
     uint8_t mac[6] = {0};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);   // eFuse MAC: valid before Wi-Fi starts
     char suffix[5];
@@ -537,5 +740,19 @@ Snapshot snapshot() {
 void openPortal() { g_portalRequested = true; }
 void reconnect() { g_reconnectRequested = true; }
 void pause(bool on) { g_paused = on; }
+
+namespace {
+void enqueue(CmdType type, const char *arg, int8_t direction) {
+    Command c{};
+    c.type = type;
+    c.direction = direction;
+    strlcpy(c.arg, arg ? arg : "", sizeof c.arg);
+    if (xQueueSend(g_commands, &c, 0) != pdTRUE) Serial.println("[net] WARNING: command queue full, command dropped");
+}
+}  // namespace
+
+void control(const char *action) { enqueue(CmdType::Control, action, 0); }
+void volumeStep(int direction) { enqueue(CmdType::Volume, nullptr, direction > 0 ? 1 : -1); }
+void selectZone(const String &zoneId) { enqueue(CmdType::Zone, zoneId.c_str(), 0); }
 
 }  // namespace net

@@ -73,6 +73,12 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
   the per-track `offset_ms` from the companion applies.
 - Lyrics fetched on each new track (the call waits while the companion resolves them: 20 s
   timeout); "not found" is retried up to 3 times, once a minute.
+- Commands (control, volume, zone) go through a FreeRTOS queue to the net task, so a tap never
+  blocks the UI: `POST /api/roon/control {action, zone_id}`, `POST /api/roon/volume {output_id,
+  how: relative_step, value: ±1}` on every output of the zone. A failure shows in red for 5 s.
+- Cover backdrop: on an `image_key` change, `GET /api/roon/image/<key>?w=80&h=80` (~2–5 KB), decoded
+  by TJpgDec, 2 box-blur passes, bilinear scale to cover 800×480, darkened to ~35 %, ordered dither
+  to RGB565 (~0.9 s in the net task, 768 KB PSRAM). A small source is the blur.
 - Every failure becomes the status line (401 → token needed, 503 → Roon Core not connected, transport
   errors by name). A discovered companion is dropped after 6 failures in a row and looked up again.
 

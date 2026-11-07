@@ -11,6 +11,7 @@ Settings g_s;
 Preferences g_prefs;
 SemaphoreHandle_t g_lock = nullptr;
 volatile int32_t g_leadMs = 250;
+volatile bool g_backdrop = true;
 
 void putString(const char *key, const String &value) {
     g_prefs.begin(NS, false);
@@ -35,6 +36,8 @@ void begin() {
     g_s.apPass = read("ap_pass");
     g_s.leadMs = g_prefs.isKey("lead") ? g_prefs.getInt("lead", 250) : 250;
     g_leadMs = g_s.leadMs;
+    g_s.backdrop = g_prefs.isKey("backdrop") ? g_prefs.getBool("backdrop", true) : true;
+    g_backdrop = g_s.backdrop;
     if (g_s.apPass.length() < 8) {
         // Setup AP password: random once per device, then stable so a reboot during
         // setup does not invalidate the network the phone has already joined.
@@ -98,6 +101,18 @@ void setLead(int32_t ms) {
 }
 
 int32_t leadMs() { return g_leadMs; }
+
+void setBackdrop(bool on) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.backdrop = on;
+    g_backdrop = on;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putBool("backdrop", on);
+    g_prefs.end();
+}
+
+bool backdrop() { return g_backdrop; }
 
 void forgetWifi() { setWifi("", ""); }
 

@@ -27,12 +27,16 @@
 - [ ] Vincent's eye check on the real LCD after these fixes (the framebuffer is right; the panel itself is unverified)
 - [ ] Flash budget: the image is at 85 % of an OTA slot (Wi-Fi + HTTP + web server ≈ 900 KB)
 
-## Phase 2 — lyrics and controls UI
+## Phase 2 — lyrics and controls UI (in progress)
 
-- Lyrics stage: current line large, neighbours dimmed, smooth scroll, per-track offset respected
-- Now playing bar: cover (JPEG at exact size), title/artist, progress
-- Controls: play/pause, prev/next, volume (db / incremental / null), zone picker
-- Screen dimming / sleep when nothing plays
+- [x] Lyrics stage: current line large, neighbours dimmed, per-track offset + display lead
+- [x] Controls bar on tap (auto-hides after 6 s): play/pause, prev/next, volume −/+ (number, dB,
+      incremental; hidden when the zone has none), zone picker with "follow the playing zone"
+- [x] Cover as a blurred, darkened full-screen backdrop (`backdrop on|off`)
+- [ ] Smooth scroll between lyric lines
+- [ ] Cover thumbnail next to the title (exact-size JPEG)
+- [ ] Screen dimming / sleep when nothing plays
+- [ ] Watch: flickering dots on the LCD (fixed by fewer redraws + 20-line bounce buffers? confirm by eye)
 
 ## Phase 3 — polish
 

@@ -13,6 +13,7 @@ struct Settings {
     String zoneId;         // pinned zone; empty = follow the playing zone
     String apPass;         // setup AP password, generated once per device
     int32_t leadMs = 250;  // show each lyric line this much before its timestamp
+    bool backdrop = true;  // cover art as the screen background
 };
 
 void begin();                 // loads from NVS
@@ -24,6 +25,8 @@ void setToken(const String &token);
 void setZone(const String &zoneId);
 void setLead(int32_t ms);
 int32_t leadMs();              // cheap, lock-free (read every frame by the UI)
+void setBackdrop(bool on);
+bool backdrop();
 void forgetWifi();
 void eraseAll();
 

@@ -41,6 +41,9 @@
 #define LV_TINY_TTF_CACHE_GLYPH_CNT 256
 #define LV_TINY_TTF_CACHE_KERNING_CNT 256
 
+// TJpgDec for the cover backdrop (src/app/backdrop.cpp decodes with it directly).
+#define LV_USE_TJPGD 1
+
 // Setup screen: QR codes to join the panel's access point and open its page.
 #define LV_USE_QRCODE 1
 

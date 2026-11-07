@@ -5,7 +5,9 @@
 #include <Arduino.h>
 
 #include <memory>
+#include <vector>
 
+#include "../app/backdrop.h"
 #include "../app/lyrics.h"
 
 namespace net {
@@ -21,6 +23,17 @@ enum class Phase : uint8_t {
 };
 
 enum class LyricsStatus : uint8_t { None, Loading, Found, NotFound, Instrumental, Error };
+
+struct ZoneInfo {
+    String id, name, state, title, artist;
+};
+
+struct OutputInfo {
+    String id, name;
+    String volumeType;        // "number" | "db" | "incremental" | "" (no volume control)
+    float value = 0, min = 0, max = 0;
+    bool muted = false;
+};
 
 struct Snapshot {
     Phase phase = Phase::WifiConnecting;
@@ -39,6 +52,18 @@ struct Snapshot {
     String state;             // "playing" | "paused" | "loading" | "stopped"
     String title, artist, album;
     uint32_t durationMs = 0;
+    bool canPlay = false, canPause = false, canNext = false, canPrevious = false;
+    std::vector<OutputInfo> outputs;                    // of the followed zone
+    std::shared_ptr<const std::vector<ZoneInfo>> zones;  // every zone, refreshed every 5 s
+    uint32_t zonesSerial = 0;
+
+    // Cover backdrop (null = plain background). `backdropSerial` changes with it.
+    std::shared_ptr<const Backdrop> backdrop;
+    uint32_t backdropSerial = 0;
+
+    // Last failed user command (control, volume), shown for a few seconds.
+    String commandError;
+    uint32_t commandErrorAt = 0;
 
     // Position model: positionMs was true at local time positionAtMs (millis()).
     int32_t positionMs = 0;
@@ -64,5 +89,11 @@ Snapshot snapshot();         // copy under the lock
 void openPortal();           // start the setup portal even with Wi-Fi configured
 void reconnect();            // re-read settings (Wi-Fi, companion, zone) and start over
 void pause(bool on);         // hold all network calls (used while dumping a screenshot)
+
+// User commands, queued to the net task (never blocks the UI). Always sent with the
+// followed zone_id; never POST /api/roon/active-zone (global to the companion).
+void control(const char *action);   // "playpause" | "next" | "previous" | "play" | "pause"
+void volumeStep(int direction);      // +1 / -1 on every output of the zone
+void selectZone(const String &zoneId);   // pin a zone; empty = follow the playing zone
 
 }  // namespace net

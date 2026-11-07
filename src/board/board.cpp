@@ -31,8 +31,9 @@ constexpr int DRAW_BUF_LINES = 24;
 
 // Bounce buffers: the RGB DMA reads from internal SRAM, refilled from the PSRAM
 // framebuffer by the CPU. Avoids the image drifting when Wi-Fi/flash load PSRAM.
-// Must divide 800*480: 10 lines = 8000 px → 48 refills per frame.
-constexpr int BOUNCE_BUF_PX = LCD_H_RES * 10;
+// Must divide 800*480: 20 lines = 16000 px → 24 refills per frame (2 x 32 KB internal RAM).
+// 10 lines left too little slack while LVGL flushes into PSRAM: stray dots near redrawn labels.
+constexpr int BOUNCE_BUF_PX = LCD_H_RES * 20;
 
 constexpr int BACKLIGHT_PWM_HZ = 5000;
 constexpr int BACKLIGHT_PWM_BITS = 8;
