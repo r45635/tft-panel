@@ -45,7 +45,10 @@ The local upload page exercises the same install and rollback path as a GitHub u
    `never got healthy` and the panel boots the previous image, without the "first boot" line.
    Verified 2026-11-07.
 
-The GitHub download path (TLS stream + SHA-256) is only exercised by a real release.
+The GitHub download path (TLS stream + SHA-256) needs a real release: build with an older
+version, `TFT_FW_VERSION=v0.1.0-test pio run -t upload`, then console `ota check` and
+`ota install`. Verified 2026-11-07 with v0.1.1 (the first real release, v0.1.0, had a broken
+check: always test a release this way before announcing it).
 
 ## Rules
 
