@@ -7,6 +7,7 @@
 #include "app/bringup_screen.h"
 #include "app/fonts.h"
 #include "app/ui.h"
+#include "version.h"
 #include "board/board.h"
 #include "board/board_pins.h"
 #include "net/net.h"
@@ -22,7 +23,7 @@ void printStatus() {
     net::Snapshot s = net::snapshot();
     settings::Settings st = settings::get();
     const board::Info &info = board::info();
-    Serial.printf("[status] %s\n", s.status.c_str());
+    Serial.printf("[status] firmware %s, %s\n", FW_VERSION, s.status.c_str());
     Serial.printf("[status] wifi ssid=\"%s\" ip=%s portal=%d ap=\"%s\"\n", st.wifiSsid.c_str(), s.staIp.c_str(),
                   s.portalActive, s.apSsid.c_str());
     Serial.printf("[status] companion=%s (%s) token=%s\n", s.companion.c_str(),
@@ -179,7 +180,7 @@ void pollSerial() {
 void setup() {
     Serial.begin(115200);
     delay(300);
-    Serial.println("\n[tft-panel] boot");
+    Serial.printf("\n[tft-panel] boot, firmware %s\n", FW_VERSION);
 
     g_ok = board::begin();
     const board::Info &info = board::info();

@@ -17,3 +17,6 @@ secrets.h
 /dependencies.lock
 /managed_components/
 /sdkconfig.*
+
+# Firmware version, generated at build time by tools/version.py
+/src/generated/

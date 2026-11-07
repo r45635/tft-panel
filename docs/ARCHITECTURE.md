@@ -116,6 +116,14 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
   pioarduino hybrid compile): twice the PSRAM burst per cache miss. Measured on a lyrics slide
   (760×340 px over the backdrop): 110 → 88 ms per frame, flush 30 → 20 ms. The rest is PSRAM
   bandwidth shared with the RGB scan-out (~25 MB/s): ~11 fps for full-stage animations.
+- **Partition table is final** (`partitions.csv`): two 1984 KB app slots for OTA with rollback,
+  64 KB coredump, no filesystem. OTA can never change it; a new layout means a USB flash for
+  every user, so it was fixed before the first release.
+- **Firmware version** from `git describe` (`tools/version.py` writes `src/generated/version.cpp`,
+  not in git; only that file recompiles). Releases are tags `vX.Y.Z`; an untagged build is
+  `v0.0.0-g<sha>`.
+- **TLS buffers in PSRAM** (`CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`) and the common CA subset, for the
+  HTTPS update check without eating the internal RAM Wi-Fi needs.
 - **Own minimal GT911 / PCA9557 drivers** (~100 lines) instead of Elecrow's bundled libraries.
 - PCLK starts at 16 MHz (≈ 33 fps); Elecrow runs 15–24 MHz.
 - **Fonts: Noto Sans TTF rendered at run time by LVGL `tiny_ttf`**, not `lv_font_conv` bitmaps.
