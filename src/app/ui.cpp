@@ -7,6 +7,7 @@
 
 #include "../net/net.h"
 #include "../net/settings.h"
+#include "../board/board.h"
 #include "fonts.h"
 
 #include <vector>
@@ -26,15 +27,19 @@ constexpr int CURRENT_ROW = 2;
 
 lv_obj_t *g_scr = nullptr;
 lv_obj_t *g_bg = nullptr;                      // cover backdrop, behind everything
-std::shared_ptr<const Backdrop> g_shownBackdrop;
-uint32_t g_seenBackdropSerial = UINT32_MAX;
+lv_obj_t *g_thumb = nullptr;                   // cover thumbnail left of the title
+std::shared_ptr<const Picture> g_shownBackdrop, g_shownThumb;
+uint32_t g_seenCoverSerial = UINT32_MAX;
+constexpr int TRACK_X = 24, TRACK_W = 752;     // title/artist box without a thumbnail
+constexpr int THUMB_GAP = 14;
 
 // Header
 lv_obj_t *g_zone = nullptr, *g_status = nullptr;
 // Track
 lv_obj_t *g_title = nullptr, *g_artist = nullptr;
 // Lyrics stage
-lv_obj_t *g_stage = nullptr;
+lv_obj_t *g_stage = nullptr;     // fixed box, clips the sliding rows
+lv_obj_t *g_rowsBox = nullptr;   // flex column of rows, translated while sliding
 lv_obj_t *g_rows[LYRIC_ROWS] = {};
 lv_obj_t *g_message = nullptr;   // centred message when there is nothing to sing
 // Progress
@@ -51,6 +56,22 @@ lv_obj_t *g_picker = nullptr, *g_pickerList = nullptr;
 std::vector<String> g_pickerIds;
 uint32_t g_controlsShownAt = 0;
 bool g_errorShown = false;
+
+// Smooth scroll: the stage slides up from where the next line was to its new place.
+constexpr uint32_t SCROLL_MS = 320;
+uint32_t g_scrollFrames = 0, g_scrollStartedAt = 0;
+int32_t g_scrollFrom = 0;
+
+// Screen sleep: dims after a minute without playback, backlight off after settings::sleepMin().
+// A touch wakes it; the touch that wakes a dark screen does nothing else.
+enum class Screen : uint8_t { On, Dimmed, Off };
+constexpr uint32_t DIM_AFTER_MS = 60 * 1000;
+constexpr uint8_t BRIGHT_ON = 100, BRIGHT_DIM = 12;
+Screen g_screen = Screen::On;
+uint32_t g_activeAt = 0;
+int32_t g_backlight = 100;        // current level, animated
+bool g_swallowTouch = false;      // the press that woke a dark screen, until its release
+lv_indev_t *g_hookedIndev = nullptr;
 
 bool g_demo = false;
 uint32_t g_seenVersion = UINT32_MAX;
@@ -320,29 +341,41 @@ void build() {
     lv_label_set_long_mode(g_status, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_align(g_status, LV_ALIGN_TOP_RIGHT, -24, 12);
 
+    g_thumb = lv_image_create(g_scr);
+    lv_obj_set_pos(g_thumb, TRACK_X, 37);
+    lv_obj_set_size(g_thumb, net::COVER_THUMB_PX, net::COVER_THUMB_PX);
+    lv_image_set_inner_align(g_thumb, LV_IMAGE_ALIGN_CENTER);
+    lv_obj_set_clickable(g_thumb, false);
+    lv_obj_set_hidden(g_thumb, true);
+
     g_title = label(g_scr, fonts::ui20, COL_TEXT);
-    lv_obj_set_width(g_title, 752);
+    lv_obj_set_width(g_title, TRACK_W);
     lv_label_set_long_mode(g_title, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_pos(g_title, 24, 40);
+    lv_obj_set_pos(g_title, TRACK_X, 40);
     g_artist = label(g_scr, fonts::ui16, COL_MID);
-    lv_obj_set_width(g_artist, 752);
+    lv_obj_set_width(g_artist, TRACK_W);
     lv_label_set_long_mode(g_artist, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_pos(g_artist, 24, 68);
+    lv_obj_set_pos(g_artist, TRACK_X, 68);
 
     g_stage = lv_obj_create(g_scr);
     lv_obj_remove_style_all(g_stage);
     lv_obj_set_size(g_stage, 760, 340);
     lv_obj_set_pos(g_stage, 20, 98);
     lv_obj_set_scrollable(g_stage, false);
-    lv_obj_set_flex_flow(g_stage, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(g_stage, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(g_stage, 10, 0);
+    g_rowsBox = lv_obj_create(g_stage);
+    lv_obj_remove_style_all(g_rowsBox);
+    lv_obj_set_size(g_rowsBox, lv_pct(100), lv_pct(100));
+    lv_obj_set_scrollable(g_rowsBox, false);
+    lv_obj_set_clickable(g_rowsBox, false);
+    lv_obj_set_flex_flow(g_rowsBox, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(g_rowsBox, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(g_rowsBox, 10, 0);
     // Fixed budget so the stage never overflows: neighbours on one line, the current line on
     // at most two; longer text ends with "…". 4 x 41 + 2 x 60 + gaps fits the 340 px stage.
     for (int i = 0; i < LYRIC_ROWS; i++) {
         bool cur = i == CURRENT_ROW;
         const lv_font_t *font = cur ? fonts::lyricsCurrent : fonts::lyricsOther;
-        lv_obj_t *l = label(g_stage, font, cur ? COL_TEXT : COL_DIM);
+        lv_obj_t *l = label(g_rowsBox, font, cur ? COL_TEXT : COL_DIM);
         int32_t lh = lv_font_get_line_height(font);
         lv_obj_set_width(l, 760);
         lv_obj_set_height(l, LV_SIZE_CONTENT);
@@ -393,26 +426,47 @@ void showMessage(const String &msg, uint32_t colour) {
     setText(g_message, msg.c_str());
 }
 
-void applyBackdrop() {
-    if (g_s.backdropSerial == g_seenBackdropSerial) return;
-    g_seenBackdropSerial = g_s.backdropSerial;
-    std::shared_ptr<const Backdrop> old = g_shownBackdrop;
-    g_shownBackdrop = g_s.backdrop;
-    if (g_shownBackdrop) {
-        lv_image_set_src(g_bg, &g_shownBackdrop->dsc);
-        setHidden(g_bg, false);
+// Swaps an image's source; the old buffer is freed with the last shared_ptr, so LVGL
+// must not keep a cached reference to it.
+void swapPicture(lv_obj_t *img, std::shared_ptr<const Picture> &shown, const std::shared_ptr<const Picture> &next) {
+    if (shown == next) return;
+    std::shared_ptr<const Picture> old = shown;
+    shown = next;
+    if (shown) {
+        lv_image_set_src(img, &shown->dsc);
+        setHidden(img, false);
     } else {
-        setHidden(g_bg, true);
-        lv_image_set_src(g_bg, nullptr);
+        setHidden(img, true);
+        lv_image_set_src(img, nullptr);
     }
-    // The old buffer is freed with `old`: make sure LVGL holds no cached reference to it.
     if (old) lv_image_cache_drop(&old->dsc);
 }
 
+void placeTrackText(bool withThumb) {
+    int x = withThumb ? TRACK_X + net::COVER_THUMB_PX + THUMB_GAP : TRACK_X;
+    if (lv_obj_get_x(g_title) == x) return;
+    int w = TRACK_W - (x - TRACK_X);
+    lv_obj_set_pos(g_title, x, 40);
+    lv_obj_set_width(g_title, w);
+    lv_obj_set_pos(g_artist, x, 68);
+    lv_obj_set_width(g_artist, w);
+}
+
+void applyCover(bool track) {
+    if (g_s.coverSerial != g_seenCoverSerial) {
+        g_seenCoverSerial = g_s.coverSerial;
+        swapPicture(g_bg, g_shownBackdrop, g_s.backdrop);
+        swapPicture(g_thumb, g_shownThumb, g_s.thumb);
+    }
+    bool thumb = track && g_shownThumb;
+    setHidden(g_thumb, !thumb);
+    placeTrackText(thumb);
+}
+
 void applySnapshot() {
-    applyBackdrop();
     // Setup overlay
     bool setup = g_s.portalActive;
+    if (setup) applyCover(false);
     setHidden(g_setup, !setup);
     if (setup) {
         String wifi = "WIFI:T:WPA;S:" + qrEscape(g_s.apSsid) + ";P:" + qrEscape(g_s.apPass) + ";;";
@@ -441,6 +495,7 @@ void applySnapshot() {
     updateControls();
 
     bool track = g_s.phase == net::Phase::Playing || (g_s.title.length() && bad);
+    applyCover(track);
     setText(g_title, track ? g_s.title.c_str() : "");
     setText(g_artist, track ? (g_s.artist + (g_s.album.length() ? "  -  " + g_s.album : "")).c_str() : "");
     setHidden(g_bar, !track);
@@ -468,6 +523,25 @@ void applySnapshot() {
     }
 }
 
+int32_t rowCentre(lv_obj_t *row) { return lv_obj_get_y(row) + lv_obj_get_height(row) / 2; }
+
+void scrollExec(void *obj, int32_t v) {
+    lv_obj_set_style_translate_y((lv_obj_t *)obj, v, 0);
+    // The incoming last line fades in as it slides into the clipped stage.
+    lv_opa_t opa = g_scrollFrom > 0 ? (lv_opa_t)(255 - 255 * v / g_scrollFrom) : LV_OPA_COVER;
+    lv_obj_set_style_opa(g_rows[LYRIC_ROWS - 1], opa, 0);
+    g_scrollFrames++;
+}
+
+void scrollDone(lv_anim_t *) {
+    static uint8_t logged = 0;
+    if (logged < 3) {   // a few samples of the achieved frame rate, for tuning
+        logged++;
+        uint32_t ms = millis() - g_scrollStartedAt;
+        Serial.printf("[ui] scroll: %u steps in %u ms\n", (unsigned)g_scrollFrames, (unsigned)ms);
+    }
+}
+
 void tickLyrics(uint32_t now) {
     if (g_s.portalActive || g_s.lyricsStatus != net::LyricsStatus::Found || !g_s.lyrics) return;
     const lyrics::Lyrics &l = *g_s.lyrics;
@@ -481,8 +555,40 @@ void tickLyrics(uint32_t now) {
         if (index >= (int)l.lines.size()) index = l.lines.size() - 1;
     }
     if (index == g_shownIndex) return;
+    // One line forward: slide. A seek, a new track or going back: jump.
+    bool slide = settings::scroll() && g_shownIndex != INT32_MIN && index == g_shownIndex + 1;
+    int32_t before = 0;
+    if (slide) {
+        lv_obj_update_layout(g_stage);
+        before = rowCentre(g_rows[CURRENT_ROW + 1]);   // where the new current line is now
+    }
     g_shownIndex = index;
     setRows(index);
+    if (!slide) {
+        lv_anim_delete(g_rowsBox, scrollExec);
+        if (lv_obj_get_style_translate_y(g_rowsBox, LV_PART_MAIN) != 0) scrollExec(g_rowsBox, 0);
+        return;
+    }
+    lv_obj_update_layout(g_stage);
+    int32_t from = before - rowCentre(g_rows[CURRENT_ROW]) + lv_obj_get_style_translate_y(g_rowsBox, LV_PART_MAIN);
+    lv_anim_delete(g_rowsBox, scrollExec);
+    if (from <= 0) {
+        scrollExec(g_rowsBox, 0);
+        return;
+    }
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, g_rowsBox);
+    lv_anim_set_exec_cb(&a, scrollExec);
+    lv_anim_set_values(&a, from, 0);
+    lv_anim_set_duration(&a, SCROLL_MS);
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+    lv_anim_set_completed_cb(&a, scrollDone);
+    g_scrollFrom = from;
+    scrollExec(g_rowsBox, from);
+    g_scrollFrames = 0;
+    g_scrollStartedAt = millis();
+    lv_anim_start(&a);
 }
 
 void tickProgress(uint32_t now) {
@@ -497,11 +603,76 @@ void tickProgress(uint32_t now) {
     setText(g_total, b);
 }
 
+void backlightExec(void *, int32_t v) {
+    g_backlight = v;
+    board::setBacklight((uint8_t)v);
+}
+
+void fadeBacklight(int32_t to, uint32_t ms) {
+    lv_anim_delete(&g_backlight, backlightExec);
+    if (g_backlight == to) return;
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, &g_backlight);
+    lv_anim_set_exec_cb(&a, backlightExec);
+    lv_anim_set_values(&a, g_backlight, to);
+    lv_anim_set_duration(&a, ms);
+    lv_anim_start(&a);
+}
+
+// Every touch keeps the screen awake. The one that lands on a dark screen only wakes it:
+// the indev sees the event before any object, and stops it there until the release.
+void onIndevEvent(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    g_activeAt = millis();
+    if (code == LV_EVENT_PRESSED && g_screen == Screen::Off) g_swallowTouch = true;
+    if (g_swallowTouch) {
+        lv_indev_stop_processing(lv_indev_active());
+        if (code == LV_EVENT_RELEASED) g_swallowTouch = false;
+    }
+}
+
+void hookTouch() {
+    if (g_hookedIndev) return;
+    lv_indev_t *indev = lv_indev_get_next(nullptr);   // touch may come up late (console touchdiag)
+    if (!indev) return;
+    g_hookedIndev = indev;
+    for (lv_event_code_t c : {LV_EVENT_PRESSED, LV_EVENT_RELEASED, LV_EVENT_CLICKED, LV_EVENT_SHORT_CLICKED,
+                              LV_EVENT_LONG_PRESSED, LV_EVENT_LONG_PRESSED_REPEAT})
+        lv_indev_add_event_cb(indev, onIndevEvent, c, nullptr);
+}
+
+void tickSleep(uint32_t now) {
+    hookTouch();
+    bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch;
+    if (busy) g_activeAt = now;
+    uint32_t idle = now - g_activeAt;
+    uint32_t offAfter = (uint32_t)settings::sleepMin() * 60000u;
+    Screen want = Screen::On;
+    if (idle >= DIM_AFTER_MS) want = Screen::Dimmed;
+    // Without touch nothing could wake it but playback: dim only.
+    if (offAfter && idle >= offAfter && g_hookedIndev) want = Screen::Off;
+    if (want == g_screen) return;
+    Serial.printf("[ui] screen %s\n", want == Screen::On ? "on" : want == Screen::Dimmed ? "dimmed" : "off");
+    if (want == Screen::Off) {
+        showControls(false);
+        closePicker();
+    }
+    g_screen = want;
+    fadeBacklight(want == Screen::On ? BRIGHT_ON : want == Screen::Dimmed ? BRIGHT_DIM : 0,
+                  want == Screen::On ? 250 : 1500);
+}
+
 }  // namespace
+
+const char *screenState() {
+    return g_screen == Screen::On ? "on" : g_screen == Screen::Dimmed ? "dimmed" : "off";
+}
 
 void show() {
     build();
     lv_screen_load(g_scr);
+    g_activeAt = millis();
 }
 
 void setDemo(bool on) {
@@ -531,6 +702,8 @@ void setDemo(bool on) {
 }
 
 void tick() {
+    uint32_t now = millis();
+    tickSleep(now);
     if (g_demo) return;
     uint32_t v = net::version();
     if (v != g_seenVersion) {
@@ -538,7 +711,6 @@ void tick() {
         g_s = net::snapshot();
         applySnapshot();
     }
-    uint32_t now = millis();
     if (!isHidden(g_controls) && isHidden(g_picker) && now - g_controlsShownAt > CONTROLS_HIDE_MS)
         showControls(false);
     if (g_errorShown && now - g_s.commandErrorAt >= COMMAND_ERROR_MS) applySnapshot();

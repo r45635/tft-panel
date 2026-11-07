@@ -10,4 +10,7 @@ void tick();   // call from loop() before lv_timer_handler()
 // checks and documentation screenshots without real, copyrighted lyrics. false = live.
 void setDemo(bool on);
 
+// "on", "dimmed" or "off" (backlight, for the console status).
+const char *screenState();
+
 }  // namespace ui

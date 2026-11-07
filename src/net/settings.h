@@ -14,6 +14,8 @@ struct Settings {
     String apPass;         // setup AP password, generated once per device
     int32_t leadMs = 250;  // show each lyric line this much before its timestamp
     bool backdrop = true;  // cover art as the screen background
+    bool scroll = true;    // animate lyric lines sliding up
+    int32_t sleepMin = 10; // nothing playing this long → backlight off (0 = never; dims after 1 min)
 };
 
 void begin();                 // loads from NVS
@@ -27,6 +29,10 @@ void setLead(int32_t ms);
 int32_t leadMs();              // cheap, lock-free (read every frame by the UI)
 void setBackdrop(bool on);
 bool backdrop();
+void setScroll(bool on);
+bool scroll();
+void setSleepMin(int32_t minutes);
+int32_t sleepMin();
 void forgetWifi();
 void eraseAll();
 

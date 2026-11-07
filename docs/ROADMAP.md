@@ -33,9 +33,9 @@
 - [x] Controls bar on tap (auto-hides after 6 s): play/pause, prev/next, volume −/+ (number, dB,
       incremental; hidden when the zone has none), zone picker with "follow the playing zone"
 - [x] Cover as a blurred, darkened full-screen backdrop (`backdrop on|off`)
-- [ ] Smooth scroll between lyric lines
-- [ ] Cover thumbnail next to the title (exact-size JPEG)
-- [ ] Screen dimming / sleep when nothing plays
+- [x] Smooth scroll between lyric lines (`scroll on|off`) — to check by eye on the LCD
+- [x] Cover thumbnail next to the title (one 56 px fetch feeds thumbnail and backdrop)
+- [x] Screen dimming / sleep when nothing plays (`sleep <min>|off`, a touch wakes it)
 - [ ] Watch: flickering dots on the LCD (fixed by fewer redraws + 20-line bounce buffers? confirm by eye)
 
 ## Phase 3 — polish

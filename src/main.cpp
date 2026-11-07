@@ -33,6 +33,8 @@ void printStatus() {
     Serial.printf("[status] lyrics status=%d lines=%u synced=%d offset=%d lead=%d source=%s clock window=%d ms\n",
                   (int)s.lyricsStatus, s.lyrics ? (unsigned)s.lyrics->lines.size() : 0u, s.lyrics ? s.lyrics->synced : 0,
                   (int)s.offsetMs, (int)settings::leadMs(), s.lyricsSource.c_str(), (int)s.positionUncertaintyMs);
+    Serial.printf("[status] screen %s, backdrop=%d scroll=%d sleep=%d min\n", ui::screenState(), settings::backdrop(),
+                  settings::scroll(), (int)settings::sleepMin());
     Serial.printf("[status] touch=%d heap int %u KB (min %u) psram %u KB\n", info.touch,
                   (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
                   (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024),
@@ -80,7 +82,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -123,6 +125,13 @@ void handleCommand(String line) {
     } else if (cmd == "backdrop" && arg.length()) {
         settings::setBackdrop(arg != "off");
         Serial.printf("[cmd] cover backdrop %s\n", settings::backdrop() ? "on" : "off");
+    } else if (cmd == "scroll" && arg.length()) {
+        settings::setScroll(arg != "off");
+        Serial.printf("[cmd] lyrics scroll %s\n", settings::scroll() ? "on" : "off");
+    } else if (cmd == "sleep" && arg.length()) {
+        settings::setSleepMin(arg == "off" ? 0 : arg.toInt());
+        if (settings::sleepMin()) Serial.printf("[cmd] backlight off after %d min without playback\n", (int)settings::sleepMin());
+        else Serial.println("[cmd] backlight never turns off (still dims after 1 min)");
     } else if (cmd == "demo") {
         ui::setDemo(arg != "off");
         Serial.printf("[cmd] demo %s\n", arg == "off" ? "off" : "on (\"demo off\" to go back)");
@@ -181,7 +190,7 @@ void setup() {
     net::begin();
     ui::show();
     lv_refr_now(board::display());   // first frame into the framebuffer…
-    board::setBacklight(100);         // …then light it (Elecrow: backlight last)
+    board::setBacklight(100);         // …then light it (Elecrow: backlight last); ui owns it from here
     Serial.println("[tft-panel] ui shown; type 'help' on this console for commands");
 }
 

@@ -12,6 +12,8 @@ Preferences g_prefs;
 SemaphoreHandle_t g_lock = nullptr;
 volatile int32_t g_leadMs = 250;
 volatile bool g_backdrop = true;
+volatile bool g_scroll = true;
+volatile int32_t g_sleepMin = 10;
 
 void putString(const char *key, const String &value) {
     g_prefs.begin(NS, false);
@@ -38,6 +40,10 @@ void begin() {
     g_leadMs = g_s.leadMs;
     g_s.backdrop = g_prefs.isKey("backdrop") ? g_prefs.getBool("backdrop", true) : true;
     g_backdrop = g_s.backdrop;
+    g_s.scroll = g_prefs.isKey("scroll") ? g_prefs.getBool("scroll", true) : true;
+    g_scroll = g_s.scroll;
+    g_s.sleepMin = g_prefs.isKey("sleep") ? g_prefs.getInt("sleep", 10) : 10;
+    g_sleepMin = g_s.sleepMin;
     if (g_s.apPass.length() < 8) {
         // Setup AP password: random once per device, then stable so a reboot during
         // setup does not invalidate the network the phone has already joined.
@@ -114,6 +120,32 @@ void setBackdrop(bool on) {
 
 bool backdrop() { return g_backdrop; }
 
+void setScroll(bool on) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.scroll = on;
+    g_scroll = on;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putBool("scroll", on);
+    g_prefs.end();
+}
+
+bool scroll() { return g_scroll; }
+
+void setSleepMin(int32_t minutes) {
+    if (minutes < 0) minutes = 0;
+    if (minutes > 24 * 60) minutes = 24 * 60;
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.sleepMin = minutes;
+    g_sleepMin = minutes;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putInt("sleep", minutes);
+    g_prefs.end();
+}
+
+int32_t sleepMin() { return g_sleepMin; }
+
 void forgetWifi() { setWifi("", ""); }
 
 void eraseAll() {
@@ -126,6 +158,9 @@ void eraseAll() {
     g_s = Settings();
     g_s.apPass = apPass;
     g_leadMs = g_s.leadMs;
+    g_backdrop = g_s.backdrop;
+    g_scroll = g_s.scroll;
+    g_sleepMin = g_s.sleepMin;
     xSemaphoreGive(g_lock);
 }
 

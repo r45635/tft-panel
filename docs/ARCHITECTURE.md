@@ -76,9 +76,18 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
 - Commands (control, volume, zone) go through a FreeRTOS queue to the net task, so a tap never
   blocks the UI: `POST /api/roon/control {action, zone_id}`, `POST /api/roon/volume {output_id,
   how: relative_step, value: ±1}` on every output of the zone. A failure shows in red for 5 s.
-- Cover backdrop: on an `image_key` change, `GET /api/roon/image/<key>?w=80&h=80` (~2–5 KB), decoded
-  by TJpgDec, 2 box-blur passes, bilinear scale to cover 800×480, darkened to ~35 %, ordered dither
-  to RGB565 (~0.9 s in the net task, 768 KB PSRAM). A small source is the blur.
+- Cover (`src/app/cover.*`): on an `image_key` change, one `GET /api/roon/image/<key>?w=56&h=56`
+  (~2 KB; the companion fits it, so a non-square cover comes back e.g. 56×51), decoded by TJpgDec.
+  It is shown as is as the thumbnail left of the title, and, unless `backdrop off`, also becomes the
+  backdrop: 2 box-blur passes, bilinear scale to cover 800×480, darkened to ~35 %, ordered dither to
+  RGB565 (~0.4 s in the net task, 768 KB PSRAM). A small source is the blur.
+- Lyrics slide up when the next line comes (320 ms ease-out, `scroll on|off`): the rows sit in a
+  box translated inside a fixed, clipping stage; the incoming last line fades in. Seeks, track
+  changes and going back jump.
+- Screen sleep (UI, not board): without playback for 1 min the backlight fades to 12 %, after
+  `sleep <min>` (default 10, `off` = never) it goes off — never during setup, the zone picker or
+  `demo`, and never off when there is no touch to wake it. A touch wakes it; the touch that wakes
+  a dark screen is swallowed at the input device (`lv_indev_stop_processing`) so it presses nothing.
 - Every failure becomes the status line (401 → token needed, 503 → Roon Core not connected, transport
   errors by name). A discovered companion is dropped after 6 failures in a row and looked up again.
 

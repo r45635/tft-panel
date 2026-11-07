@@ -7,10 +7,13 @@
 #include <memory>
 #include <vector>
 
-#include "../app/backdrop.h"
+#include "../app/cover.h"
 #include "../app/lyrics.h"
 
 namespace net {
+
+// Cover thumbnail size (px, square box) — also the size fetched from the companion.
+constexpr int COVER_THUMB_PX = 56;
 
 enum class Phase : uint8_t {
     Setup,            // no Wi-Fi configured: setup portal only
@@ -57,9 +60,10 @@ struct Snapshot {
     std::shared_ptr<const std::vector<ZoneInfo>> zones;  // every zone, refreshed every 5 s
     uint32_t zonesSerial = 0;
 
-    // Cover backdrop (null = plain background). `backdropSerial` changes with it.
-    std::shared_ptr<const Backdrop> backdrop;
-    uint32_t backdropSerial = 0;
+    // Track cover: thumbnail and backdrop (null = none / plain background).
+    // `coverSerial` changes with either.
+    std::shared_ptr<const Picture> thumb, backdrop;
+    uint32_t coverSerial = 0;
 
     // Last failed user command (control, volume), shown for a few seconds.
     String commandError;

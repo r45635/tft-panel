@@ -227,35 +227,40 @@ HttpResult getBytes(const String &path, uint8_t *&buf, size_t &len, size_t maxLe
     return r;
 }
 
-void setBackdrop(std::shared_ptr<const Backdrop> b) {
+void setCover(cover::Cover c) {
     update([&](Snapshot &s) {
-        s.backdrop = std::move(b);
-        s.backdropSerial++;
+        s.thumb = std::move(c.thumb);
+        s.backdrop = std::move(c.backdrop);
+        s.coverSerial++;
     });
 }
 
-// Fetches the cover small (a blur is wanted anyway) and builds the backdrop.
-void fetchBackdrop(const String &imageKey) {
+// One small cover fetch feeds both the thumbnail (shown at that size) and the backdrop
+// (blurred anyway, so a bigger source would only cost decode time).
+void fetchCover(const String &imageKey) {
     g_imageKey = imageKey;
-    if (!imageKey.length() || !settings::backdrop()) {
-        setBackdrop(nullptr);
+    if (!imageKey.length()) {
+        setCover({});
         return;
     }
     uint32_t t0 = millis();
     uint8_t *jpeg = nullptr;
     size_t len = 0;
-    HttpResult r = getBytes("/api/roon/image/" + imageKey + "?w=80&h=80", jpeg, len, 96 * 1024, 5000);
+    String q = "?w=" + String(COVER_THUMB_PX) + "&h=" + String(COVER_THUMB_PX);
+    HttpResult r = getBytes("/api/roon/image/" + imageKey + q, jpeg, len, 96 * 1024, 5000);
     if (r.code != 200 || !jpeg) {
         Serial.printf("[net] WARNING: cover not loaded: %s\n", r.message.c_str());
-        setBackdrop(nullptr);
+        setCover({});
         return;
     }
     String err;
-    auto b = backdrop::build(jpeg, len, 800, 480, err);
+    cover::Cover c;
+    bool ok = cover::build(jpeg, len, COVER_THUMB_PX, settings::backdrop(), 800, 480, c, err);
     heap_caps_free(jpeg);
-    if (!b) Serial.printf("[net] WARNING: cover not usable: %s\n", err.c_str());
-    else Serial.printf("[net] backdrop ready (%u bytes JPEG, %u ms)\n", (unsigned)len, (unsigned)(millis() - t0));
-    setBackdrop(b);
+    if (!ok) Serial.printf("[net] WARNING: cover not usable: %s\n", err.c_str());
+    else Serial.printf("[net] cover ready (%u bytes JPEG, thumb %dx%d, backdrop %s, %u ms)\n", (unsigned)len,
+                       c.thumb->w, c.thumb->h, c.backdrop ? "yes" : "off", (unsigned)(millis() - t0));
+    setCover(std::move(c));
 }
 
 // Turns a failed call into the status line, and drops a discovered companion after
@@ -375,7 +380,7 @@ void clearTrack() {
     g_trackKey = "";
     if (g_imageKey.length()) {
         g_imageKey = "";
-        setBackdrop(nullptr);
+        setCover({});
     }
     update([](Snapshot &s) {
         s.state = "stopped";
@@ -521,7 +526,7 @@ void pollNowPlaying() {
     } else {
         if (imageKey != g_imageKey || settings::backdrop() != g_backdropWanted) {
             g_backdropWanted = settings::backdrop();
-            fetchBackdrop(imageKey);
+            fetchCover(imageKey);
         }
         LyricsStatus ls;
         xSemaphoreTake(g_lock, portMAX_DELAY);

@@ -19,9 +19,10 @@ From an agent shell (no TTY), read the serial log with pyserial from PlatformIO'
 reset with `rts=True` → `False` (`dtr=False`), then read for a few seconds.
 Changing `PLATFORMIO_BUILD_FLAGS` rebuilds the whole framework (~3 min).
 Serial console (115200, type `help`): `status`, `portal`, `companion <url>|auto`, `zone <id>|auto`,
-`token`, `lead <ms>`, `forget-wifi`, `erase-all`, `bringup` (colour bars + touch tracker), `restart`,
+`token`, `lead <ms>`, `backdrop on|off`, `scroll on|off`, `sleep <min>|off`, `forget-wifi`, `erase-all`, `bringup` (colour bars + touch tracker), `restart`,
 `screenshot` → `tools/screenshot.py <log> out.png` (shows lyrics: keep it out of the repo);
-`demo` freezes the screen on invented lyrics — use it for layout checks and doc screenshots.
+`demo` freezes the screen on invented lyrics — use it for layout checks and doc screenshots
+(the real cover thumbnail and backdrop stay on screen: cover art is copyrighted too).
 `touchdiag` replays the touch reset variants live and attaches the touch if the GT911 answers.
 `backdrop off` before `screenshot` makes it fast (a dithered backdrop does not compress: ~3 min at 115200).
 Fonts: `tools/fonts/build_fonts.sh` rebuilds `assets/fonts/` (never `npx` a converter: run-time tiny_ttf).
