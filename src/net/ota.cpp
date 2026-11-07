@@ -127,8 +127,8 @@ void check() {
         if (name == shaName) sha = a["browser_download_url"] | "";
     }
     bool newer = isNewer(tag, FW_VERSION) && bin.length() && sha.length();
-    g_binUrl = bin;
-    g_shaUrl = sha;
+    g_binUrl = newer ? bin : String();   // install() only ever takes a newer release
+    g_shaUrl = newer ? sha : String();
     Serial.printf("[ota] latest release %s, running %s: %s\n", tag.c_str(), FW_VERSION,
                   newer ? "update available" : "up to date");
     update([&](Status &s) {
@@ -166,8 +166,8 @@ bool fetchSha(uint8_t out[32]) {
 }
 
 void install() {
-    if (!g_binUrl.length()) {
-        fail("no update to install");
+    if (!g_binUrl.length() || status().state != State::Available) {
+        fail("no newer release to install");
         return;
     }
     uint8_t want[32];
