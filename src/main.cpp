@@ -181,11 +181,11 @@ void handleCommand(String line) {
         settings::eraseAll();
         Serial.println("[cmd] settings erased, restarting");
         delay(200);
-        ESP.restart();
+        board::restart();
     } else if (cmd == "bringup") {
         g_bringup = true;
         bringup::show();
-    } else if (cmd == "restart") ESP.restart();
+    } else if (cmd == "restart") board::restart();
     else help();
 }
 

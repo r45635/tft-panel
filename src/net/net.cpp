@@ -7,6 +7,7 @@
 #include <esp_mac.h>
 #include <esp_sntp.h>
 
+#include "../board/board.h"
 #include "ota.h"
 #include "portal.h"
 #include "web_update.h"
@@ -690,7 +691,7 @@ void task(void *) {
         portal::loop();
         if (portal::savedAndRestartPending()) {
             delay(1500);   // let the confirmation page reach the phone
-            ESP.restart();
+            board::restart();
         }
         if (g_portalRequested) {
             g_portalRequested = false;

@@ -1,5 +1,6 @@
 #include "board.h"
 
+#include <esp_ota_ops.h>
 #include <esp_rom_sys.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -190,6 +191,19 @@ const char *reasonName(uint32_t r) {
 }
 }  // namespace
 
+bool s_cleanResetDeferred = false;
+
+void restart() {
+    if (s_cleanResetMagic != CLEAN_RESET_MAGIC) s_resetBefore = ESP_RST_SW;
+    s_cleanResetMagic = CLEAN_RESET_MAGIC;
+    Serial.flush();
+    esp_rom_software_reset_system();
+    for (;;) {
+    }
+}
+
+bool cleanResetDeferred() { return s_cleanResetDeferred; }
+
 void cleanResetIfNeeded() {
     if (s_cleanResetMagic == CLEAN_RESET_MAGIC) {   // second pass: the system reset is done
         s_cleanResetMagic = 0;
@@ -200,11 +214,20 @@ void cleanResetIfNeeded() {
     bool cpuOnly = r == ESP_RST_SW || r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT ||
                    r == ESP_RST_WDT;
     if (!cpuOnly) return;
-    s_cleanResetMagic = CLEAN_RESET_MAGIC;
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    esp_ota_img_states_t st;
+    if (running && esp_ota_get_state_partition(running, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY) {
+        // Booted by an older firmware's CPU-only restart right after an update: resetting now
+        // would count as a failed boot. Reset once the app has confirmed the image.
+        s_cleanResetDeferred = true;
+        Serial.printf("[board] %s before an unconfirmed update: full reset deferred until it is confirmed\n",
+                      reasonName(r));
+        return;
+    }
     s_resetBefore = r;
+    s_cleanResetMagic = CLEAN_RESET_MAGIC;
     Serial.printf("[board] %s left the display peripherals running: full system reset\n", reasonName(r));
-    Serial.flush();
-    esp_rom_software_reset_system();
+    restart();
 }
 
 bool begin() {

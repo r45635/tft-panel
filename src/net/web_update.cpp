@@ -4,6 +4,7 @@
 #include <Update.h>
 #include <WebServer.h>
 
+#include "../board/board.h"
 #include "../version.h"
 
 namespace webupdate {
@@ -75,7 +76,7 @@ void handleUploadDone() {
                                           "by itself if this one does not start properly.");
         Serial.println("[web] firmware uploaded and verified, restarting");
         delay(1000);
-        ESP.restart();
+        board::restart();
     }
     g_server->send(g_uploadError.startsWith("Wrong") ? 403 : 400, "text/plain",
                    g_uploadError.length() ? g_uploadError : String("No firmware received."));

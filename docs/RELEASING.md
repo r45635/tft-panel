@@ -19,7 +19,10 @@ tag. It then:
      `firmware.factory.bin`), for the web installer;
 3. pushes the tag and creates the GitHub release with these assets;
 4. force-pushes an orphan `gh-pages` commit with `index.html` (from `tools/web-installer/`),
-   `manifest.json` and the factory image — latest version only, so binaries never pile up in git.
+   `manifest.json`, bootloader, partition table, `boot_app0` and the app — latest version only,
+   so binaries never pile up in git. Four parts rather than the merged factory image: the merged
+   image fills the NVS area (0x9000) with 0xFF and would wipe a reinstalled panel's Wi-Fi and
+   settings (the installer's own "erase" choice still wipes everything for a fresh start).
 
 GitHub Pages serves `gh-pages` at <https://r45635.github.io/tft-panel/>. ESP Web Tools needs the
 image on the same origin (release assets have no CORS headers), hence the copy there. It flashes

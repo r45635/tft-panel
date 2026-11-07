@@ -22,7 +22,15 @@ struct Info {
 // Call first in setup(). After a CPU-only reset (esp_restart after an OTA, rollback, panic,
 // watchdog) the LCD_CAM/GDMA and I2C peripherals keep running from before: the image comes up
 // shifted and touch is dead until a real reset. This does one full system reset in that case.
+// Exception: a freshly installed image that has not been confirmed yet ("pending verify")
+// must not be reset again or the bootloader rolls it back; then the reset is deferred and
+// cleanResetDeferred() is true until the app confirms the image and calls restart().
 void cleanResetIfNeeded();
+bool cleanResetDeferred();
+
+// The only way to restart on purpose: a full system reset (clean display and touch), marked
+// so that the next boot does not reset again.
+[[noreturn]] void restart();
 
 // Initialises everything except the backlight. Returns false on a fatal error
 // (no PSRAM, panel not created); `info().error` says why. Touch failure is not

@@ -99,6 +99,10 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   normal. An EN reset fixed it. `board::cleanResetIfNeeded()` (first call in `setup()`) turns every
   CPU-only reset (software restart, OTA, rollback, panic, watchdogs) into one full system reset
   (`esp_rom_software_reset_system`, `rst:0x3`), with an RTC_NOINIT guard against loops.
+  🪤 Not while the running image is still "pending verify": the bootloader counts that reset as a
+  failed boot and rolls the update back (v0.1.2 could never install over the air because of it).
+  Then the reset waits until the app confirms the image. Intentional restarts all go through
+  `board::restart()` (a marked system reset), so updates from v0.1.3 on boot clean at once.
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.
 
 ## Touch diagnostic

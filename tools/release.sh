@@ -49,14 +49,24 @@ gh release create "$tag" --repo "$repo" --title "TFT Panel $tag" --notes "$notes
 # Web installer: an orphan gh-pages commit holding only the latest version (no binary history).
 site="$(mktemp -d)"
 sed "s/{{VERSION}}/$tag/g" tools/web-installer/index.html > "$site/index.html"
-cp "$out/tft-panel-$tag-factory.bin" "$site/"
+# Four parts, not the merged factory image: the merged one fills the gap over NVS (0x9000) with
+# 0xFF, which would wipe the Wi-Fi and settings of a panel that is only being reinstalled.
+cp .pio/build/crowpanel7/bootloader.bin "$site/bootloader.bin"
+cp .pio/build/crowpanel7/partitions.bin "$site/partitions.bin"
+cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" "$site/boot_app0.bin"
+cp "$out/tft-panel-$tag.bin" "$site/"
 cat > "$site/manifest.json" <<EOF
 {
   "name": "TFT Panel",
   "version": "$tag",
   "new_install_prompt_erase": true,
   "builds": [
-    { "chipFamily": "ESP32-S3", "parts": [{ "path": "tft-panel-$tag-factory.bin", "offset": 0 }] }
+    { "chipFamily": "ESP32-S3", "parts": [
+      { "path": "bootloader.bin", "offset": 0 },
+      { "path": "partitions.bin", "offset": 32768 },
+      { "path": "boot_app0.bin", "offset": 57344 },
+      { "path": "tft-panel-$tag.bin", "offset": 65536 }
+    ] }
   ]
 }
 EOF

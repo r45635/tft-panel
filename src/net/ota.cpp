@@ -9,6 +9,7 @@
 #include <esp_timer.h>
 #include <mbedtls/sha256.h>
 
+#include "../board/board.h"
 #include "../version.h"
 
 // Defer Arduino's automatic "image valid" at boot: we decide in markHealthy().
@@ -252,7 +253,7 @@ void install() {
         s.percent = 100;
     });
     delay(1500);
-    ESP.restart();
+    board::restart();
 }
 
 }  // namespace
@@ -312,6 +313,10 @@ void markHealthy() {
     if (g_deadline) esp_timer_stop(g_deadline);
     esp_ota_mark_app_valid_cancel_rollback();
     Serial.printf("[ota] %s confirmed working, rollback cancelled\n", FW_VERSION);
+    if (board::cleanResetDeferred()) {   // started by an older firmware's CPU-only restart
+        Serial.println("[ota] full reset now that the update is confirmed (clean display and touch)");
+        board::restart();
+    }
 }
 
 void requestCheck() { g_checkRequested = true; }
