@@ -10,7 +10,7 @@ extern const uint8_t noto600_end[] asm("_binary_assets_fonts_NotoSans_600_ttf_en
 
 namespace fonts {
 
-const lv_font_t *lyricsCurrent = &lv_font_montserrat_48;
+const lv_font_t *lyricsCurrent = &lv_font_montserrat_28;
 const lv_font_t *lyricsOther = &lv_font_montserrat_28;
 const lv_font_t *ui20 = &lv_font_montserrat_20;
 const lv_font_t *ui16 = &lv_font_montserrat_14;
@@ -34,7 +34,7 @@ const lv_font_t *make(const uint8_t *start, const uint8_t *end, int32_t px, cons
 
 bool begin() {
     bool ok = true;
-    lyricsCurrent = make(noto600_start, noto600_end, 44, &lv_font_montserrat_48, &lv_font_montserrat_48, ok);
+    lyricsCurrent = make(noto600_start, noto600_end, 44, &lv_font_montserrat_28, &lv_font_montserrat_28, ok);
     lyricsOther = make(noto400_start, noto400_end, 30, &lv_font_montserrat_28, &lv_font_montserrat_28, ok);
     ui20 = make(noto400_start, noto400_end, 20, &lv_font_montserrat_20, &lv_font_montserrat_20, ok);
     ui16 = make(noto400_start, noto400_end, 16, &lv_font_montserrat_14, &lv_font_montserrat_14, ok);

@@ -8,6 +8,7 @@
 #include "app/fonts.h"
 #include "app/ui.h"
 #include "version.h"
+#include "net/ota.h"
 #include "board/board.h"
 #include "board/board_pins.h"
 #include "net/net.h"
@@ -23,7 +24,10 @@ void printStatus() {
     net::Snapshot s = net::snapshot();
     settings::Settings st = settings::get();
     const board::Info &info = board::info();
-    Serial.printf("[status] firmware %s, %s\n", FW_VERSION, s.status.c_str());
+    ota::Status o = ota::status();
+    Serial.printf("[status] firmware %s (update: %s%s%s%s), %s\n", FW_VERSION, ota::stateName(o.state),
+                  o.latest.length() ? ", latest " : "", o.latest.c_str(),
+                  o.error.length() ? (", " + o.error).c_str() : "", s.status.c_str());
     Serial.printf("[status] wifi ssid=\"%s\" ip=%s portal=%d ap=\"%s\"\n", st.wifiSsid.c_str(), s.staIp.c_str(),
                   s.portalActive, s.apSsid.c_str());
     Serial.printf("[status] companion=%s (%s) token=%s\n", s.companion.c_str(),
@@ -84,7 +88,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -134,6 +138,10 @@ void handleCommand(String line) {
         settings::setSleepMin(arg == "off" ? 0 : arg.toInt());
         if (settings::sleepMin()) Serial.printf("[cmd] backlight off after %d min without playback\n", (int)settings::sleepMin());
         else Serial.println("[cmd] backlight never turns off (still dims after 1 min)");
+    } else if (cmd == "ota" && (arg == "check" || arg == "install")) {
+        if (arg == "check") ota::requestCheck();
+        else ota::requestInstall();
+        Serial.printf("[cmd] ota %s requested\n", arg.c_str());
     } else if (cmd == "view" && arg.length()) {
         ui::setView(arg == "cover");
         Serial.printf("[cmd] view %s\n", arg == "cover" ? "cover" : "lyrics");

@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <esp_mac.h>
 
+#include "ota.h"
 #include "portal.h"
 #include "position_clock.h"
 #include "settings.h"
@@ -697,6 +698,7 @@ void task(void *) {
             Serial.printf("[net] WARNING: internal RAM low: %u KB free (min %u KB)\n", (unsigned)(freeInternal / 1024),
                           (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
         }
+        ota::tick(true);   // update check (boot + daily) and a confirmed install; no companion needed
         if (!g_baseUrl.length()) {
             if (now - lastDiscovery < DISCOVERY_PERIOD_MS && lastDiscovery) {
                 delay(20);
@@ -717,6 +719,7 @@ void task(void *) {
                 delay(200);
                 continue;
             }
+            ota::markHealthy();   // Wi-Fi + companion answered: a freshly installed image is good
         }
         if (!g_lastNowPlayingAt || now - g_lastNowPlayingAt >= NOW_PLAYING_PERIOD_MS) {
             g_lastNowPlayingAt = now ? now : 1;
@@ -736,6 +739,7 @@ int32_t Snapshot::positionAt(uint32_t now) const {
 }
 
 void begin() {
+    ota::begin();
     g_lock = xSemaphoreCreateMutex();
     g_commands = xQueueCreate(8, sizeof(Command));
     uint8_t mac[6] = {0};

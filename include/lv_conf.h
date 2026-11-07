@@ -31,7 +31,7 @@
 #define LV_FONT_MONTSERRAT_14 1
 #define LV_FONT_MONTSERRAT_20 1
 #define LV_FONT_MONTSERRAT_28 1
-#define LV_FONT_MONTSERRAT_48 1
+#define LV_FONT_MONTSERRAT_48 0   /* 97 KB of flash; only a symbol fallback, 28 does it */
 #define LV_FONT_DEFAULT &lv_font_montserrat_20
 
 // Run-time TTF rendering for the embedded Noto Sans (src/app/fonts.cpp). Glyph and

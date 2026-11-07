@@ -7,9 +7,11 @@
 #include "src/misc/cache/instance/lv_image_cache.h"   // lv_image_cache_drop (not in lvgl.h)
 
 #include "../net/net.h"
+#include "../net/ota.h"
 #include "../net/settings.h"
 #include "../board/board.h"
 #include "fonts.h"
+#include "../version.h"
 
 #include <vector>
 
@@ -90,6 +92,14 @@ uint32_t g_activeAt = 0;
 int32_t g_backlight = 100;        // current level, animated
 bool g_swallowTouch = false;      // the press that woke a dark screen, until its release
 lv_indev_t *g_hookedIndev = nullptr;
+
+// Firmware update: badge in the header when a release is available, confirmation dialog,
+// full-screen progress while it installs.
+lv_obj_t *g_otaBadge = nullptr, *g_otaBadgeLabel = nullptr;
+lv_obj_t *g_otaConfirm = nullptr, *g_otaConfirmText = nullptr;
+lv_obj_t *g_otaProgress = nullptr, *g_otaProgressText = nullptr, *g_otaBar = nullptr, *g_otaClose = nullptr;
+uint32_t g_seenOtaVersion = UINT32_MAX;
+ota::Status g_ota;
 
 bool g_demo = false;
 uint32_t g_seenVersion = UINT32_MAX;
@@ -472,6 +482,101 @@ void onGesture(lv_event_t *) {
     chooseView((View)(((int)g_view + step) % VIEW_COUNT));
 }
 
+lv_obj_t *textButton(lv_obj_t *parent, const char *text, uint32_t bg, void (*cb)(lv_event_t *)) {
+    lv_obj_t *b = lv_button_create(parent);
+    lv_obj_set_style_radius(b, 28, 0);
+    lv_obj_set_style_shadow_width(b, 0, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(bg), 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
+    lv_obj_set_style_pad_hor(b, 28, 0);
+    lv_obj_set_style_pad_ver(b, 14, 0);
+    lv_obj_t *l = label(b, fonts::ui20, COL_TEXT);
+    setText(l, text);
+    lv_obj_center(l);
+    lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
+    return b;
+}
+
+lv_obj_t *fullScreen(lv_opa_t opa) {
+    lv_obj_t *o = lv_obj_create(g_scr);
+    lv_obj_remove_style_all(o);
+    lv_obj_set_size(o, 800, 480);
+    lv_obj_set_style_bg_color(o, lv_color_hex(COL_BG), 0);
+    lv_obj_set_style_bg_opa(o, opa, 0);
+    lv_obj_set_scrollable(o, false);
+    lv_obj_set_clickable(o, true);   // modal: nothing underneath gets the touch
+    lv_obj_set_hidden(o, true);
+    return o;
+}
+
+void buildOta() {
+    g_otaBadge = lv_button_create(g_scr);
+    lv_obj_set_height(g_otaBadge, 30);
+    lv_obj_set_style_radius(g_otaBadge, 15, 0);
+    lv_obj_set_style_shadow_width(g_otaBadge, 0, 0);
+    lv_obj_set_style_pad_hor(g_otaBadge, 14, 0);
+    lv_obj_set_style_pad_ver(g_otaBadge, 0, 0);
+    lv_obj_set_style_bg_color(g_otaBadge, lv_color_hex(COL_ACCENT), 0);
+    lv_obj_set_pos(g_otaBadge, 430, 7);
+    g_otaBadgeLabel = label(g_otaBadge, fonts::ui16, 0x06121A);
+    lv_obj_center(g_otaBadgeLabel);
+    lv_obj_add_event_cb(g_otaBadge, [](lv_event_t *) { setHidden(g_otaConfirm, false); }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_set_hidden(g_otaBadge, true);
+
+    g_otaConfirm = fullScreen(LV_OPA_90);
+    g_otaConfirmText = label(g_otaConfirm, fonts::ui20, COL_TEXT);
+    lv_obj_set_width(g_otaConfirmText, 620);
+    lv_label_set_long_mode(g_otaConfirmText, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_style_text_align(g_otaConfirmText, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(g_otaConfirmText, LV_ALIGN_CENTER, 0, -60);
+    lv_obj_t *install = textButton(g_otaConfirm, "Install now", 0x1F6F9E, [](lv_event_t *) {
+        setHidden(g_otaConfirm, true);
+        ota::requestInstall();
+    });
+    lv_obj_align(install, LV_ALIGN_CENTER, -110, 90);
+    lv_obj_t *later = textButton(g_otaConfirm, "Later", 0x1C232B, [](lv_event_t *) { setHidden(g_otaConfirm, true); });
+    lv_obj_align(later, LV_ALIGN_CENTER, 110, 90);
+
+    g_otaProgress = fullScreen(LV_OPA_COVER);
+    g_otaProgressText = label(g_otaProgress, fonts::lyricsOther, COL_TEXT);
+    lv_obj_set_width(g_otaProgressText, 680);
+    lv_label_set_long_mode(g_otaProgressText, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_style_text_align(g_otaProgressText, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(g_otaProgressText, LV_ALIGN_CENTER, 0, -50);
+    g_otaBar = progressBar(g_otaProgress);
+    lv_bar_set_range(g_otaBar, 0, 100);
+    lv_obj_set_size(g_otaBar, 520, 8);
+    lv_obj_align(g_otaBar, LV_ALIGN_CENTER, 0, 40);
+    g_otaClose = textButton(g_otaProgress, "Close", 0x1C232B, [](lv_event_t *) { setHidden(g_otaProgress, true); });
+    lv_obj_align(g_otaClose, LV_ALIGN_CENTER, 0, 120);
+}
+
+void applyOta() {
+    bool available = g_ota.state == ota::State::Available;
+    setHidden(g_otaBadge, !available || g_s.portalActive);
+    if (available) {
+        setText(g_otaBadgeLabel, (String(LV_SYMBOL_DOWNLOAD " Update ") + g_ota.latest).c_str());
+        setText(g_otaConfirmText, ("Install TFT Panel " + g_ota.latest + "?\n\nIt downloads in about a minute, then the panel "
+                                   "restarts. If the new version does not start properly, the panel goes back to " +
+                                   String(FW_VERSION) + " by itself.").c_str());
+    }
+    bool busy = g_ota.state == ota::State::Downloading || g_ota.state == ota::State::Installed;
+    bool failedNow = g_ota.state == ota::State::Failed && !isHidden(g_otaProgress);
+    if (busy) {
+        setHidden(g_otaProgress, false);
+        setHidden(g_otaClose, true);
+        setHidden(g_otaBar, false);
+        setText(g_otaProgressText, g_ota.state == ota::State::Installed
+                                       ? ("Installed " + g_ota.latest + ", restarting...").c_str()
+                                       : ("Updating to " + g_ota.latest + "...  " + String(g_ota.percent) + " %").c_str());
+        lv_bar_set_value(g_otaBar, g_ota.percent, LV_ANIM_OFF);
+    } else if (failedNow) {
+        setHidden(g_otaBar, true);
+        setHidden(g_otaClose, false);
+        setText(g_otaProgressText, ("Update failed: " + g_ota.error + "\n\nStill running " + String(FW_VERSION) + ".").c_str());
+    }
+}
+
 void build() {
     g_scr = lv_obj_create(nullptr);
     lv_obj_set_style_bg_color(g_scr, lv_color_hex(COL_BG), 0);
@@ -569,6 +674,7 @@ void build() {
 
     buildSetup();
     buildControls();
+    buildOta();
     for (lv_obj_t *o : {g_stage, g_setup}) lv_obj_set_clickable(o, false);
     lv_obj_add_event_cb(g_scr, onScreenTap, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(g_scr, onGesture, LV_EVENT_GESTURE, nullptr);
@@ -837,7 +943,8 @@ void hookTouch() {
 
 void tickSleep(uint32_t now) {
     hookTouch();
-    bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch;
+    bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch ||
+                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress);
     if (busy) g_activeAt = now;
     uint32_t idle = now - g_activeAt;
     uint32_t offAfter = (uint32_t)settings::sleepMin() * 60000u;
@@ -916,6 +1023,13 @@ void tick() {
         g_seenVersion = v;
         g_s = net::snapshot();
         applySnapshot();
+        g_seenOtaVersion = UINT32_MAX;   // badge visibility depends on the portal state
+    }
+    uint32_t ov = ota::version();
+    if (ov != g_seenOtaVersion) {
+        g_seenOtaVersion = ov;
+        g_ota = ota::status();
+        applyOta();
     }
     if (!isHidden(g_controls) && isHidden(g_picker) && now - g_controlsShownAt > CONTROLS_HIDE_MS)
         showControls(false);
