@@ -102,6 +102,33 @@ void boxBlur(Rgb &rgb) {
     heap_caps_free(tmp);
 }
 
+// Area-average copy fitting in box x box (aspect kept); a plain copy when already small.
+bool downsample(const Rgb &src, int box, Rgb &out) {
+    float s = std::max(1.0f, std::max((float)src.w / box, (float)src.h / box));
+    out.w = std::max(1, (int)(src.w / s));
+    out.h = std::max(1, (int)(src.h / s));
+    out.px = (uint8_t *)psramAlloc((size_t)out.w * out.h * 3);
+    if (!out.px) return false;
+    for (int y = 0; y < out.h; y++) {
+        int y0 = y * src.h / out.h, y1 = std::max(y0 + 1, (y + 1) * src.h / out.h);
+        for (int x = 0; x < out.w; x++) {
+            int x0 = x * src.w / out.w, x1 = std::max(x0 + 1, (x + 1) * src.w / out.w);
+            int sum[3] = {0, 0, 0}, n = 0;
+            for (int yy = y0; yy < y1; yy++)
+                for (int xx = x0; xx < x1; xx++) {
+                    const uint8_t *p = src.px + ((size_t)yy * src.w + xx) * 3;
+                    sum[0] += p[0];
+                    sum[1] += p[1];
+                    sum[2] += p[2];
+                    n++;
+                }
+            uint8_t *o = out.px + ((size_t)y * out.w + x) * 3;
+            for (int c = 0; c < 3; c++) o[c] = sum[c] / n;
+        }
+    }
+    return true;
+}
+
 std::shared_ptr<Picture> newPicture(int w, int h) {
     auto p = std::make_shared<Picture>();
     p->pixels = (uint16_t *)psramAlloc((size_t)w * h * 2);
@@ -166,32 +193,46 @@ Picture::~Picture() {
 
 namespace cover {
 
-bool build(const uint8_t *jpeg, size_t len, int thumbBox, bool withBackdrop, int outW, int outH,
+bool build(const uint8_t *jpeg, size_t len, bool withBig, int thumbBox, bool withBackdrop, int outW, int outH,
            Cover &out, String &error) {
     out = Cover();
     Rgb rgb;
     if (!decode(jpeg, len, rgb, error)) return false;
 
-    // Thumbnail: fit the box, never upscale (the companion already sends it at that size).
-    float s = std::max(1.0f, std::max((float)rgb.w / thumbBox, (float)rgb.h / thumbBox));
-    auto thumb = newPicture(std::max(1, (int)(rgb.w / s)), std::max(1, (int)(rgb.h / s)));
+    if (withBig) {
+        auto big = newPicture(rgb.w, rgb.h);
+        if (!big) {
+            error = "out of memory (big cover)";
+            return false;
+        }
+        resample(rgb, *big, 1.0f, 0, 0, 256);
+        out.big = big;
+    }
+
+    // Thumbnail and backdrop from a small area-average copy: same look from any source size.
+    Rgb small;
+    if (!downsample(rgb, thumbBox, small)) {
+        error = "out of memory (thumbnail)";
+        return false;
+    }
+    auto thumb = newPicture(small.w, small.h);
     if (!thumb) {
         error = "out of memory (thumbnail)";
         return false;
     }
-    resample(rgb, *thumb, s, 0, 0, 256);
+    resample(small, *thumb, 1.0f, 0, 0, 256);
     out.thumb = thumb;
     if (!withBackdrop) return true;
 
-    for (int i = 0; i < BLUR_PASSES; i++) boxBlur(rgb);
+    for (int i = 0; i < BLUR_PASSES; i++) boxBlur(small);
     auto bd = newPicture(outW, outH);
     if (!bd) {
         error = "out of memory (backdrop)";
         return false;
     }
     // Scale to cover: crop the overflow, centred.
-    s = std::min((float)rgb.w / outW, (float)rgb.h / outH);
-    resample(rgb, *bd, s, (rgb.w - outW * s) / 2, (rgb.h - outH * s) / 2, DARKEN);
+    float s = std::min((float)small.w / outW, (float)small.h / outH);
+    resample(small, *bd, s, (small.w - outW * s) / 2, (small.h - outH * s) / 2, DARKEN);
     out.backdrop = bd;
     return true;
 }

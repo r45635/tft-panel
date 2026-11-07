@@ -14,6 +14,9 @@ namespace net {
 
 // Cover thumbnail size (px, square box) — also the size fetched from the companion.
 constexpr int COVER_THUMB_PX = 56;
+// Big cover on the cover view (px, square box), fetched once per track; thumbnail and
+// backdrop are derived from it.
+constexpr int COVER_BIG_PX = 384;
 
 enum class Phase : uint8_t {
     Setup,            // no Wi-Fi configured: setup portal only
@@ -62,7 +65,7 @@ struct Snapshot {
 
     // Track cover: thumbnail and backdrop (null = none / plain background).
     // `coverSerial` changes with either.
-    std::shared_ptr<const Picture> thumb, backdrop;
+    std::shared_ptr<const Picture> bigCover, thumb, backdrop;
     uint32_t coverSerial = 0;
 
     // Last failed user command (control, volume), shown for a few seconds.

@@ -13,4 +13,9 @@ void setDemo(bool on);
 // "on", "dimmed" or "off" (backlight, for the console status).
 const char *screenState();
 
+// Shows the lyrics view (false) or the cover view (true) and saves it as the chosen view,
+// like a swipe. viewName(): the view on screen, "lyrics" or "cover".
+void setView(bool cover);
+const char *viewName();
+
 }  // namespace ui

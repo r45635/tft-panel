@@ -35,7 +35,10 @@
 - [x] Cover as a blurred, darkened full-screen backdrop (`backdrop on|off`)
 - [x] Smooth scroll between lyric lines (`scroll on|off`) — to check by eye on the LCD
 - [x] Cover thumbnail next to the title (one 56 px fetch feeds thumbnail and backdrop)
-- [x] Screen dimming / sleep when nothing plays (`sleep <min>|off`, a touch wakes it)
+- [x] Screen dimming / sleep when nothing plays (`sleep <min>|off`, a touch wakes it) — dim, off and
+      wake checked on the board with Vincent
+- [x] Cover view: big cover + large title/artist + current lyric line, circular swipe between
+      views, saved choice, automatic when a track has no lyrics
 - [x] Flickering dots on the LCD: gone (fewer redraws, 20-line bounce buffers, 64-byte cache lines) — confirmed by eye
 
 ## Phase 3 — polish

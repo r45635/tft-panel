@@ -229,14 +229,31 @@ HttpResult getBytes(const String &path, uint8_t *&buf, size_t &len, size_t maxLe
 
 void setCover(cover::Cover c) {
     update([&](Snapshot &s) {
+        s.bigCover = std::move(c.big);
         s.thumb = std::move(c.thumb);
         s.backdrop = std::move(c.backdrop);
         s.coverSerial++;
     });
 }
 
-// One small cover fetch feeds both the thumbnail (shown at that size) and the backdrop
-// (blurred anyway, so a bigger source would only cost decode time).
+// Fetches the cover at `px` and builds the pictures. false with `why` on failure.
+bool loadCover(const String &imageKey, int px, bool withBig, cover::Cover &c, size_t &len, String &why) {
+    uint8_t *jpeg = nullptr;
+    len = 0;
+    String q = "?w=" + String(px) + "&h=" + String(px);
+    HttpResult r = getBytes("/api/roon/image/" + imageKey + q, jpeg, len, 256 * 1024, 5000);
+    if (r.code != 200 || !jpeg) {
+        why = "not loaded: " + r.message;
+        return false;
+    }
+    bool ok = cover::build(jpeg, len, withBig, COVER_THUMB_PX, settings::backdrop(), 800, 480, c, why);
+    heap_caps_free(jpeg);
+    if (!ok) why = "not usable: " + why;
+    return ok;
+}
+
+// One fetch at the big size feeds the cover view, the thumbnail and the backdrop. If the big
+// one fails (e.g. a progressive JPEG), the small one still gives thumbnail and backdrop.
 void fetchCover(const String &imageKey) {
     g_imageKey = imageKey;
     if (!imageKey.length()) {
@@ -244,22 +261,20 @@ void fetchCover(const String &imageKey) {
         return;
     }
     uint32_t t0 = millis();
-    uint8_t *jpeg = nullptr;
-    size_t len = 0;
-    String q = "?w=" + String(COVER_THUMB_PX) + "&h=" + String(COVER_THUMB_PX);
-    HttpResult r = getBytes("/api/roon/image/" + imageKey + q, jpeg, len, 96 * 1024, 5000);
-    if (r.code != 200 || !jpeg) {
-        Serial.printf("[net] WARNING: cover not loaded: %s\n", r.message.c_str());
-        setCover({});
-        return;
-    }
-    String err;
     cover::Cover c;
-    bool ok = cover::build(jpeg, len, COVER_THUMB_PX, settings::backdrop(), 800, 480, c, err);
-    heap_caps_free(jpeg);
-    if (!ok) Serial.printf("[net] WARNING: cover not usable: %s\n", err.c_str());
-    else Serial.printf("[net] cover ready (%u bytes JPEG, thumb %dx%d, backdrop %s, %u ms)\n", (unsigned)len,
-                       c.thumb->w, c.thumb->h, c.backdrop ? "yes" : "off", (unsigned)(millis() - t0));
+    size_t len = 0;
+    String why;
+    if (!loadCover(imageKey, COVER_BIG_PX, true, c, len, why)) {
+        Serial.printf("[net] WARNING: big cover %s, trying the small one\n", why.c_str());
+        if (!loadCover(imageKey, COVER_THUMB_PX, false, c, len, why)) {
+            Serial.printf("[net] WARNING: cover %s\n", why.c_str());
+            setCover({});
+            return;
+        }
+    }
+    Serial.printf("[net] cover ready (%u bytes JPEG, big %dx%d, thumb %dx%d, backdrop %s, %u ms)\n", (unsigned)len,
+                  c.big ? c.big->w : 0, c.big ? c.big->h : 0, c.thumb->w, c.thumb->h, c.backdrop ? "yes" : "off",
+                  (unsigned)(millis() - t0));
     setCover(std::move(c));
 }
 

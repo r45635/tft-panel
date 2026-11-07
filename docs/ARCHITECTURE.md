@@ -76,11 +76,19 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
 - Commands (control, volume, zone) go through a FreeRTOS queue to the net task, so a tap never
   blocks the UI: `POST /api/roon/control {action, zone_id}`, `POST /api/roon/volume {output_id,
   how: relative_step, value: ±1}` on every output of the zone. A failure shows in red for 5 s.
-- Cover (`src/app/cover.*`): on an `image_key` change, one `GET /api/roon/image/<key>?w=56&h=56`
-  (~2 KB; the companion fits it, so a non-square cover comes back e.g. 56×51), decoded by TJpgDec.
-  It is shown as is as the thumbnail left of the title, and, unless `backdrop off`, also becomes the
-  backdrop: 2 box-blur passes, bilinear scale to cover 800×480, darkened to ~35 %, ordered dither to
-  RGB565 (~0.4 s in the net task, 768 KB PSRAM). A small source is the blur.
+- Cover (`src/app/cover.*`): on an `image_key` change, one `GET /api/roon/image/<key>?w=384&h=384`
+  (20–90 KB; the companion fits it, so a non-square cover comes back e.g. 384×350), decoded by
+  TJpgDec into the cover view's picture. An area-average copy ≤ 56 px gives the thumbnail left of
+  the title and, unless `backdrop off`, the backdrop: 2 box-blur passes, bilinear scale to cover
+  800×480, darkened to ~35 %, ordered dither to RGB565. ~1–1.5 s in the net task; ~300 KB + 768 KB
+  PSRAM. If the big JPEG cannot be decoded (progressive), the 56 px one still gives thumbnail and backdrop.
+- Two views, switched by a horizontal swipe that wraps around (left = next, right = previous),
+  instantly — a full-screen frame costs ~130 ms, an animated wipe would get 3–4 frames. Lyrics view;
+  cover view (384 px cover, title 44 px, artist 30 px, album, current lyric line, progress). Two dots
+  at the top show the page. The chosen view is saved in NVS (`view lyrics|cover` on the console);
+  a track without lyrics shows the cover view unless the user swiped during that track; no track →
+  lyrics view (it carries the status message). `lv_indev_wait_release` after a swipe: the finger's
+  release never clicks the screen or a button it started on.
 - Lyrics slide up when the next line comes (320 ms ease-out, `scroll on|off`): the rows sit in a
   box translated inside a fixed, clipping stage; the incoming last line fades in. Seeks, track
   changes and going back jump.

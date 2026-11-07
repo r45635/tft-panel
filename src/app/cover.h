@@ -19,13 +19,16 @@ struct Picture {
 namespace cover {
 
 struct Cover {
+    std::shared_ptr<const Picture> big;        // as decoded (the companion fits it to the box asked)
     std::shared_ptr<const Picture> thumb;      // fits in thumbBox x thumbBox, aspect kept
     std::shared_ptr<const Picture> backdrop;   // null unless asked for
 };
 
-// Decodes `jpeg` (baseline JPEG, up to 512x512) and builds the pictures.
+// Decodes `jpeg` (baseline JPEG, up to 512x512) and builds the pictures: `big` only when
+// `withBig` (the source as is), the thumbnail and backdrop from a ≤ thumbBox area-average
+// copy so they look the same whatever the source size.
 // Returns false with `error` set on failure (progressive JPEG, out of memory…).
-bool build(const uint8_t *jpeg, size_t len, int thumbBox, bool withBackdrop, int outW, int outH,
+bool build(const uint8_t *jpeg, size_t len, bool withBig, int thumbBox, bool withBackdrop, int outW, int outH,
            Cover &out, String &error);
 
 }  // namespace cover

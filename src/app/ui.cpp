@@ -45,6 +45,18 @@ lv_obj_t *g_rows[LYRIC_ROWS] = {};
 lv_obj_t *g_message = nullptr;   // centred message when there is nothing to sing
 // Progress
 lv_obj_t *g_bar = nullptr, *g_elapsed = nullptr, *g_total = nullptr;
+// Two views, switched by a horizontal swipe (instantly: a full-screen frame costs ~130 ms,
+// an animated wipe would only get 3-4 frames). Lyrics view = everything above in a
+// transparent container; cover view = big cover, large title/artist, current lyric line.
+enum class View : uint8_t { Lyrics, Cover };
+constexpr int VIEW_COUNT = 2;   // swipes wrap around: left = next, right = previous
+lv_obj_t *g_lyricsView = nullptr, *g_coverView = nullptr;
+lv_obj_t *g_bigCover = nullptr, *g_cvTitle = nullptr, *g_cvArtist = nullptr, *g_cvAlbum = nullptr;
+lv_obj_t *g_cvLyric = nullptr, *g_cvBar = nullptr, *g_cvElapsed = nullptr, *g_cvTotal = nullptr;
+lv_obj_t *g_pageDots[VIEW_COUNT] = {};
+std::shared_ptr<const Picture> g_shownBig;
+View g_view = View::Lyrics;
+String g_viewOverrideTrack;   // the user swiped during this track: no automatic view on it
 // Setup overlay
 lv_obj_t *g_setup = nullptr, *g_qrWifi = nullptr, *g_qrUrl = nullptr, *g_setupText = nullptr;
 // Controls bar (shown on a tap, hides itself) and zone picker
@@ -324,6 +336,132 @@ void updateControls() {
     setText(g_volLabel, buf);
 }
 
+constexpr int CV_COVER_X = 40, CV_COVER_Y = 56;
+constexpr int CV_COL_X = CV_COVER_X + net::COVER_BIG_PX + 32, CV_COL_W = 800 - 24 - CV_COL_X;
+
+lv_obj_t *boundedLabel(lv_obj_t *parent, const lv_font_t *font, uint32_t colour, int maxLines) {
+    lv_obj_t *l = label(parent, font, colour);
+    lv_obj_set_width(l, CV_COL_W);
+    lv_obj_set_style_max_height(l, maxLines * lv_font_get_line_height(font), 0);
+    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
+    return l;
+}
+
+lv_obj_t *progressBar(lv_obj_t *parent) {
+    lv_obj_t *b = lv_bar_create(parent);
+    lv_bar_set_range(b, 0, 1000);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x2A323C), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
+    return b;
+}
+
+void buildCoverView() {
+    g_bigCover = lv_image_create(g_coverView);
+    lv_obj_set_pos(g_bigCover, CV_COVER_X, CV_COVER_Y);
+    lv_obj_set_size(g_bigCover, net::COVER_BIG_PX, net::COVER_BIG_PX);
+    lv_image_set_inner_align(g_bigCover, LV_IMAGE_ALIGN_CENTER);
+    lv_obj_set_clickable(g_bigCover, false);
+    lv_obj_set_hidden(g_bigCover, true);
+
+    // Right column, top to bottom in a flex column so wrapped titles push the rest down.
+    // Budget (348 px): title 2 x 60 + artist 2 x 41 + album 27 + lyric 2 x 27 + gaps fits.
+    int barY = CV_COVER_Y + net::COVER_BIG_PX - 26;
+    lv_obj_t *col = lv_obj_create(g_coverView);
+    lv_obj_remove_style_all(col);
+    lv_obj_set_pos(col, CV_COL_X, CV_COVER_Y);
+    lv_obj_set_size(col, CV_COL_W, barY - 10 - CV_COVER_Y);
+    lv_obj_set_scrollable(col, false);
+    lv_obj_set_clickable(col, false);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(col, 10, 0);
+    g_cvTitle = boundedLabel(col, fonts::lyricsCurrent, COL_TEXT, 2);
+    g_cvArtist = boundedLabel(col, fonts::lyricsOther, COL_MID, 2);
+    g_cvAlbum = boundedLabel(col, fonts::ui20, COL_DIM, 1);
+    lv_obj_t *gap = lv_obj_create(col);   // breathing space before the lyric line
+    lv_obj_remove_style_all(gap);
+    lv_obj_set_size(gap, 1, 12);
+    g_cvLyric = boundedLabel(col, fonts::ui20, COL_MID, 2);
+
+    g_cvBar = progressBar(g_coverView);
+    lv_obj_set_size(g_cvBar, CV_COL_W, 4);
+    lv_obj_set_pos(g_cvBar, CV_COL_X, barY);
+    g_cvElapsed = label(g_coverView, fonts::ui16, COL_DIM);
+    lv_obj_set_pos(g_cvElapsed, CV_COL_X, barY + 10);
+    g_cvTotal = label(g_coverView, fonts::ui16, COL_DIM);
+    lv_obj_set_width(g_cvTotal, 80);
+    lv_obj_set_style_text_align(g_cvTotal, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_pos(g_cvTotal, CV_COL_X + CV_COL_W - 80, barY + 10);
+}
+
+void buildPageDots() {
+    for (int i = 0; i < VIEW_COUNT; i++) {
+        lv_obj_t *d = lv_obj_create(g_scr);
+        lv_obj_remove_style_all(d);
+        lv_obj_set_size(d, 8, 8);
+        lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(d, lv_color_hex(COL_DIM), 0);
+        lv_obj_set_pos(d, 400 - VIEW_COUNT * 7 + 3 + i * 14, 18);
+        lv_obj_set_clickable(d, false);
+        g_pageDots[i] = d;
+    }
+}
+
+void showView(View v) {
+    g_view = v;
+    setHidden(g_lyricsView, v != View::Lyrics);
+    setHidden(g_coverView, v != View::Cover);
+    for (int i = 0; i < VIEW_COUNT; i++) {
+        lv_color_t c = lv_color_hex(i == (int)v ? COL_TEXT : COL_DIM);
+        if (!lv_color_eq(lv_obj_get_style_bg_color(g_pageDots[i], LV_PART_MAIN), c))
+            lv_obj_set_style_bg_color(g_pageDots[i], c, 0);
+    }
+    g_lastProgress = 0;   // refresh the visible bar now
+}
+
+String trackKey() { return g_s.title + "\n" + g_s.artist; }
+
+bool hasTrack() {
+    bool bad = g_s.phase == net::Phase::WifiFailed || g_s.phase == net::Phase::CompanionError;
+    return g_s.phase == net::Phase::Playing || (g_s.title.length() && bad);
+}
+
+// The saved view, except: no track → lyrics view (it carries the status message); a track
+// without lyrics → cover view, unless the user swiped during this track.
+View wantedView() {
+    if (!hasTrack()) return View::Lyrics;
+    View base = settings::view() ? View::Cover : View::Lyrics;
+    bool noLyrics = g_s.lyricsStatus == net::LyricsStatus::NotFound ||
+                    g_s.lyricsStatus == net::LyricsStatus::Instrumental ||
+                    g_s.lyricsStatus == net::LyricsStatus::Error;
+    if (base == View::Lyrics && noLyrics && g_viewOverrideTrack != trackKey()) return View::Cover;
+    return base;
+}
+
+void applyView() {
+    if (g_demo) return;
+    View v = wantedView();
+    if (v != g_view) showView(v);
+}
+
+void chooseView(View v) {
+    settings::setView(v == View::Cover ? 1 : 0);
+    g_viewOverrideTrack = trackKey();
+    showView(v);
+}
+
+void onGesture(lv_event_t *) {
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev || g_s.portalActive || !isHidden(g_picker)) return;
+    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    if (dir != LV_DIR_LEFT && dir != LV_DIR_RIGHT) return;
+    // No click at the end of a swipe, on the screen or on a button the finger started on.
+    lv_indev_wait_release(indev);
+    if (!hasTrack() && !g_demo) return;
+    int step = dir == LV_DIR_LEFT ? 1 : VIEW_COUNT - 1;
+    chooseView((View)(((int)g_view + step) % VIEW_COUNT));
+}
+
 void build() {
     g_scr = lv_obj_create(nullptr);
     lv_obj_set_style_bg_color(g_scr, lv_color_hex(COL_BG), 0);
@@ -344,23 +482,33 @@ void build() {
     lv_label_set_long_mode(g_status, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_align(g_status, LV_ALIGN_TOP_RIGHT, -24, 12);
 
-    g_thumb = lv_image_create(g_scr);
+    auto viewBox = []() {
+        lv_obj_t *v = lv_obj_create(g_scr);
+        lv_obj_remove_style_all(v);
+        lv_obj_set_size(v, 800, 480);
+        lv_obj_set_scrollable(v, false);
+        lv_obj_set_clickable(v, false);   // taps and swipes reach the screen
+        return v;
+    };
+    g_lyricsView = viewBox();
+
+    g_thumb = lv_image_create(g_lyricsView);
     lv_obj_set_pos(g_thumb, TRACK_X, 37);
     lv_obj_set_size(g_thumb, net::COVER_THUMB_PX, net::COVER_THUMB_PX);
     lv_image_set_inner_align(g_thumb, LV_IMAGE_ALIGN_CENTER);
     lv_obj_set_clickable(g_thumb, false);
     lv_obj_set_hidden(g_thumb, true);
 
-    g_title = label(g_scr, fonts::ui20, COL_TEXT);
+    g_title = label(g_lyricsView, fonts::ui20, COL_TEXT);
     lv_obj_set_width(g_title, TRACK_W);
     lv_label_set_long_mode(g_title, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_pos(g_title, TRACK_X, 40);
-    g_artist = label(g_scr, fonts::ui16, COL_MID);
+    g_artist = label(g_lyricsView, fonts::ui16, COL_MID);
     lv_obj_set_width(g_artist, TRACK_W);
     lv_label_set_long_mode(g_artist, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_pos(g_artist, TRACK_X, 68);
 
-    g_stage = lv_obj_create(g_scr);
+    g_stage = lv_obj_create(g_lyricsView);
     lv_obj_remove_style_all(g_stage);
     lv_obj_set_size(g_stage, 760, 340);
     lv_obj_set_pos(g_stage, 20, 98);
@@ -388,27 +536,33 @@ void build() {
         g_rows[i] = l;
     }
 
-    g_message = label(g_scr, fonts::lyricsOther, COL_MID);
+    g_message = label(g_lyricsView, fonts::lyricsOther, COL_MID);
     lv_obj_set_width(g_message, 700);
     lv_label_set_long_mode(g_message, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_style_text_align(g_message, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(g_message, LV_ALIGN_CENTER, 0, 10);
 
-    g_bar = lv_bar_create(g_scr);
+    g_bar = lv_bar_create(g_lyricsView);
     lv_obj_set_size(g_bar, 640, 4);
     lv_obj_align(g_bar, LV_ALIGN_BOTTOM_MID, 0, -20);
     lv_bar_set_range(g_bar, 0, 1000);
     lv_obj_set_style_bg_color(g_bar, lv_color_hex(0x2A323C), LV_PART_MAIN);
     lv_obj_set_style_bg_color(g_bar, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
-    g_elapsed = label(g_scr, fonts::ui16, COL_DIM);
+    g_elapsed = label(g_lyricsView, fonts::ui16, COL_DIM);
     lv_obj_align(g_elapsed, LV_ALIGN_BOTTOM_LEFT, 24, -10);
-    g_total = label(g_scr, fonts::ui16, COL_DIM);
+    g_total = label(g_lyricsView, fonts::ui16, COL_DIM);
     lv_obj_align(g_total, LV_ALIGN_BOTTOM_RIGHT, -24, -10);
+
+    g_coverView = viewBox();
+    buildCoverView();
+    buildPageDots();
 
     buildSetup();
     buildControls();
     for (lv_obj_t *o : {g_stage, g_setup}) lv_obj_set_clickable(o, false);
     lv_obj_add_event_cb(g_scr, onScreenTap, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(g_scr, onGesture, LV_EVENT_GESTURE, nullptr);
+    showView(settings::view() ? View::Cover : View::Lyrics);
 }
 
 void setRows(int index) {
@@ -419,6 +573,7 @@ void setRows(int index) {
         if (l && i >= 0 && i < (int)l->lines.size()) text = l->lines[i].text.c_str();
         // Before the first line, show the first lines dimmed below an empty current row.
         setText(g_rows[r], text);
+        if (r == CURRENT_ROW) setText(g_cvLyric, text);
     }
 }
 
@@ -460,6 +615,7 @@ void applyCover(bool track) {
         g_seenCoverSerial = g_s.coverSerial;
         swapPicture(g_bg, g_shownBackdrop, g_s.backdrop);
         swapPicture(g_thumb, g_shownThumb, g_s.thumb);
+        swapPicture(g_bigCover, g_shownBig, g_s.bigCover);
     }
     bool thumb = track && g_shownThumb;
     setHidden(g_thumb, !thumb);
@@ -501,6 +657,11 @@ void applySnapshot() {
     applyCover(track);
     setText(g_title, track ? g_s.title.c_str() : "");
     setText(g_artist, track ? (g_s.artist + (g_s.album.length() ? "  -  " + g_s.album : "")).c_str() : "");
+    setText(g_cvTitle, track ? g_s.title.c_str() : "");
+    setText(g_cvArtist, track ? g_s.artist.c_str() : "");
+    setText(g_cvAlbum, track ? g_s.album.c_str() : "");
+    if (g_s.lyricsStatus != net::LyricsStatus::Found) setText(g_cvLyric, "");
+    applyView();
     setHidden(g_bar, !track);
     setHidden(g_elapsed, !track);
     setHidden(g_total, !track);
@@ -614,12 +775,14 @@ void tickProgress(uint32_t now) {
     if (g_s.portalActive || !g_s.durationMs || now - g_lastProgress < 250) return;
     g_lastProgress = now;
     int32_t pos = g_s.positionAt(now);
-    lv_bar_set_value(g_bar, (int32_t)((int64_t)pos * 1000 / g_s.durationMs), LV_ANIM_OFF);
+    // Only the visible view: hidden widgets would still cost a redraw when shown again anyway.
+    bool cover = g_view == View::Cover;
+    lv_bar_set_value(cover ? g_cvBar : g_bar, (int32_t)((int64_t)pos * 1000 / g_s.durationMs), LV_ANIM_OFF);
     char a[12], b[12];
     fmtTime(a, sizeof a, pos);
     fmtTime(b, sizeof b, g_s.durationMs);
-    setText(g_elapsed, a);
-    setText(g_total, b);
+    setText(cover ? g_cvElapsed : g_elapsed, a);
+    setText(cover ? g_cvTotal : g_total, b);
 }
 
 void backlightExec(void *, int32_t v) {
@@ -636,6 +799,7 @@ void fadeBacklight(int32_t to, uint32_t ms) {
     lv_anim_set_exec_cb(&a, backlightExec);
     lv_anim_set_values(&a, g_backlight, to);
     lv_anim_set_duration(&a, ms);
+    lv_anim_set_completed_cb(&a, [](lv_anim_t *) { Serial.printf("[ui] backlight %d %%\n", (int)g_backlight); });
     lv_anim_start(&a);
 }
 
@@ -684,6 +848,10 @@ void tickSleep(uint32_t now) {
 
 }  // namespace
 
+void setView(bool cover) { chooseView(cover ? View::Cover : View::Lyrics); }
+
+const char *viewName() { return g_view == View::Cover ? "cover" : "lyrics"; }
+
 const char *screenState() {
     return g_screen == Screen::On ? "on" : g_screen == Screen::Dimmed ? "dimmed" : "off";
 }
@@ -720,6 +888,13 @@ void setDemo(bool on) {
     lv_bar_set_value(g_bar, 420, LV_ANIM_OFF);
     setText(g_elapsed, "1:38");
     setText(g_total, "3:54");
+    setText(g_cvTitle, "Les Néons d'automne (version longue enregistrée à l'aube)");
+    setText(g_cvArtist, "Jean‐Luc Démo & l'Orchestre de la Côte");
+    setText(g_cvAlbum, "Démonstration");
+    setText(g_cvLyric, rows[CURRENT_ROW]);
+    lv_bar_set_value(g_cvBar, 420, LV_ANIM_OFF);
+    setText(g_cvElapsed, "1:38");
+    setText(g_cvTotal, "3:54");
 }
 
 void tick() {

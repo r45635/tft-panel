@@ -14,6 +14,7 @@ volatile int32_t g_leadMs = 250;
 volatile bool g_backdrop = true;
 volatile bool g_scroll = true;
 volatile int32_t g_sleepMin = 10;
+volatile uint8_t g_view = 0;
 
 void putString(const char *key, const String &value) {
     g_prefs.begin(NS, false);
@@ -44,6 +45,8 @@ void begin() {
     g_scroll = g_s.scroll;
     g_s.sleepMin = g_prefs.isKey("sleep") ? g_prefs.getInt("sleep", 10) : 10;
     g_sleepMin = g_s.sleepMin;
+    g_s.view = g_prefs.isKey("view") ? g_prefs.getUChar("view", 0) : 0;
+    g_view = g_s.view;
     if (g_s.apPass.length() < 8) {
         // Setup AP password: random once per device, then stable so a reboot during
         // setup does not invalidate the network the phone has already joined.
@@ -146,6 +149,20 @@ void setSleepMin(int32_t minutes) {
 
 int32_t sleepMin() { return g_sleepMin; }
 
+void setView(uint8_t view) {
+    view = view ? 1 : 0;
+    if (view == g_view) return;   // a swipe back and forth should not rewrite flash for nothing
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.view = view;
+    g_view = view;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putUChar("view", view);
+    g_prefs.end();
+}
+
+uint8_t view() { return g_view; }
+
 void forgetWifi() { setWifi("", ""); }
 
 void eraseAll() {
@@ -161,6 +178,7 @@ void eraseAll() {
     g_backdrop = g_s.backdrop;
     g_scroll = g_s.scroll;
     g_sleepMin = g_s.sleepMin;
+    g_view = g_s.view;
     xSemaphoreGive(g_lock);
 }
 

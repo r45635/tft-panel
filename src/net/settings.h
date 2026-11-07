@@ -16,6 +16,7 @@ struct Settings {
     bool backdrop = true;  // cover art as the screen background
     bool scroll = true;    // animate lyric lines sliding up
     int32_t sleepMin = 10; // nothing playing this long → backlight off (0 = never; dims after 1 min)
+    uint8_t view = 0;      // last view chosen by a swipe: 0 = lyrics, 1 = cover
 };
 
 void begin();                 // loads from NVS
@@ -33,6 +34,8 @@ void setScroll(bool on);
 bool scroll();
 void setSleepMin(int32_t minutes);
 int32_t sleepMin();
+void setView(uint8_t view);
+uint8_t view();
 void forgetWifi();
 void eraseAll();
 
