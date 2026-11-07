@@ -10,3 +10,10 @@ secrets.h
 
 # Suggestions written by the PlatformIO extension when a file already exists
 *.optional
+
+# pioarduino hybrid framework build (custom_sdkconfig) generates these in the project root
+/.dummy/
+/CMakeLists.txt
+/dependencies.lock
+/managed_components/
+/sdkconfig.*

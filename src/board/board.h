@@ -38,6 +38,9 @@ const uint16_t *frameBuffer();
 // input if the GT911 answers. Call from the LVGL thread.
 void touchDiag();
 
+// Cumulative flush count and time (µs) spent copying into the framebuffer, for profiling.
+void flushStats(uint32_t &count, uint32_t &us);
+
 // 0..100 %. 0 turns the backlight off.
 void setBacklight(uint8_t percent);
 

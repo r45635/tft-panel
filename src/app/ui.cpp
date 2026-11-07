@@ -1,6 +1,7 @@
 #include "ui.h"
 
 #include <Arduino.h>
+#include <esp_timer.h>
 #include <lvgl.h>
 
 #include "src/misc/cache/instance/lv_image_cache.h"   // lv_image_cache_drop (not in lvgl.h)
@@ -58,7 +59,9 @@ uint32_t g_controlsShownAt = 0;
 bool g_errorShown = false;
 
 // Smooth scroll: the stage slides up from where the next line was to its new place.
-constexpr uint32_t SCROLL_MS = 320;
+// A full-stage frame costs ~88 ms (render ~68 + flush ~20, PSRAM-bound): ~11 fps. A longer
+// slide gives smaller steps rather than more frames per second.
+constexpr uint32_t SCROLL_MS = 400;
 uint32_t g_scrollFrames = 0, g_scrollStartedAt = 0;
 int32_t g_scrollFrom = 0;
 
@@ -533,13 +536,27 @@ void scrollExec(void *obj, int32_t v) {
     g_scrollFrames++;
 }
 
+// Profiling of the slides: frames, refresh time (render + flush), flush time.
+uint32_t g_refrUs = 0, g_refrCount = 0, g_flushCount0 = 0, g_flushUs0 = 0;
+int64_t g_refrStart = 0;
+
+void onRefr(lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_REFR_START) g_refrStart = esp_timer_get_time();
+    else if (g_refrStart) {
+        g_refrUs += (uint32_t)(esp_timer_get_time() - g_refrStart);
+        g_refrCount++;
+    }
+}
+
 void scrollDone(lv_anim_t *) {
     static uint8_t logged = 0;
-    if (logged < 3) {   // a few samples of the achieved frame rate, for tuning
-        logged++;
-        uint32_t ms = millis() - g_scrollStartedAt;
-        Serial.printf("[ui] scroll: %u steps in %u ms\n", (unsigned)g_scrollFrames, (unsigned)ms);
-    }
+    if (logged >= 3) return;   // a few samples per boot, for tuning
+    logged++;
+    uint32_t ms = millis() - g_scrollStartedAt, fc, fus;
+    board::flushStats(fc, fus);
+    Serial.printf("[ui] scroll: %u steps in %u ms, %u refreshes %u ms, %u flushes %u ms\n", (unsigned)g_scrollFrames,
+                  (unsigned)ms, (unsigned)g_refrCount, (unsigned)(g_refrUs / 1000), (unsigned)(fc - g_flushCount0),
+                  (unsigned)((fus - g_flushUs0) / 1000));
 }
 
 void tickLyrics(uint32_t now) {
@@ -588,6 +605,8 @@ void tickLyrics(uint32_t now) {
     scrollExec(g_rowsBox, from);
     g_scrollFrames = 0;
     g_scrollStartedAt = millis();
+    g_refrUs = g_refrCount = 0;
+    board::flushStats(g_flushCount0, g_flushUs0);
     lv_anim_start(&a);
 }
 
@@ -673,6 +692,8 @@ void show() {
     build();
     lv_screen_load(g_scr);
     g_activeAt = millis();
+    lv_display_add_event_cb(board::display(), onRefr, LV_EVENT_REFR_START, nullptr);
+    lv_display_add_event_cb(board::display(), onRefr, LV_EVENT_REFR_READY, nullptr);
 }
 
 void setDemo(bool on) {

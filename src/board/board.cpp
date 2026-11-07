@@ -1,5 +1,7 @@
 #include "board.h"
 
+#include <esp_timer.h>
+
 #include <Wire.h>
 #include <esp_flash.h>
 #include <esp_heap_caps.h>
@@ -25,9 +27,11 @@ lv_indev_t *g_indev = nullptr;
 volatile bool g_touchDown = false;
 volatile uint16_t g_touchX = 0, g_touchY = 0;
 
-// LVGL renders into two small internal-RAM strips; flush copies them into the
-// PSRAM framebuffer owned by the RGB driver.
-constexpr int DRAW_BUF_LINES = 24;
+// LVGL renders into one internal-RAM strip; flush copies it into the PSRAM framebuffer
+// owned by the RGB driver. The flush is a synchronous CPU copy, so a second strip would
+// buy no overlap: one 48-line strip (same RAM as 2 x 24) halves the passes over the text,
+// which dominate a full-stage redraw (profiled: ~105 ms render vs ~30 ms flush at 24 lines).
+constexpr int DRAW_BUF_LINES = 48;
 
 // Bounce buffers: the RGB DMA reads from internal SRAM, refilled from the PSRAM
 // framebuffer by the CPU. Avoids the image drifting when Wi-Fi/flash load PSRAM.
@@ -109,9 +113,14 @@ bool createPanel() {
     return true;
 }
 
+volatile uint32_t g_flushCount = 0, g_flushUs = 0;
+
 void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
     // Synchronous CPU copy into the PSRAM framebuffer (num_fbs = 1).
+    int64_t t0 = esp_timer_get_time();
     esp_lcd_panel_draw_bitmap(g_panel, area->x1, area->y1, area->x2 + 1, area->y2 + 1, px);
+    g_flushUs += (uint32_t)(esp_timer_get_time() - t0);
+    g_flushCount++;
     lv_display_flush_ready(disp);
 }
 
@@ -141,15 +150,14 @@ bool createLvgl() {
 
     const size_t bufBytes = LCD_H_RES * DRAW_BUF_LINES * sizeof(uint16_t);
     void *buf1 = heap_caps_malloc(bufBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    void *buf2 = heap_caps_malloc(bufBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (!buf1 || !buf2) {
+    if (!buf1) {
         g_info.error = "LVGL draw buffers: out of internal RAM";
         return false;
     }
 
     g_disp = lv_display_create(LCD_H_RES, LCD_V_RES);
     lv_display_set_color_format(g_disp, LV_COLOR_FORMAT_RGB565);
-    lv_display_set_buffers(g_disp, buf1, buf2, bufBytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_buffers(g_disp, buf1, nullptr, bufBytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(g_disp, flushCb);
 
     if (g_info.touch) {
@@ -340,6 +348,11 @@ const uint16_t *frameBuffer() {
     void *fb = nullptr;
     if (!g_panel || esp_lcd_rgb_panel_get_frame_buffer(g_panel, 1, &fb) != ESP_OK) return nullptr;
     return (const uint16_t *)fb;
+}
+
+void flushStats(uint32_t &count, uint32_t &us) {
+    count = g_flushCount;
+    us = g_flushUs;
 }
 
 bool lastTouch(uint16_t &x, uint16_t &y) {

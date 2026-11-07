@@ -9,7 +9,7 @@ bring-up log), `docs/ROADMAP.md` (current phase).
 ## Commands
 
 ```bash
-pio run                                              # build (first build ~6 min, then ~30 s)
+pio run                                              # build (first build ~6 min + framework rebuild ~2 min, then ~30 s)
 pio run -t upload --upload-port /dev/cu.usbserial-*  # flash; 921600 fails on this board, 460800 works
 pio device monitor                                   # 115200, exception decoder on
 PLATFORMIO_BUILD_FLAGS="-DTOUCH_DIAG" pio run -t upload   # touch reset diagnostic at boot
@@ -18,6 +18,12 @@ PLATFORMIO_BUILD_FLAGS="-DTOUCH_DIAG" pio run -t upload   # touch reset diagnost
 From an agent shell (no TTY), read the serial log with pyserial from PlatformIO's Python:
 reset with `rts=True` → `False` (`dtr=False`), then read for a few seconds.
 Changing `PLATFORMIO_BUILD_FLAGS` rebuilds the whole framework (~3 min).
+`custom_sdkconfig` (64-byte cache lines) makes pioarduino rebuild the IDF libraries into the
+**global** `~/.platformio/packages/framework-arduinoespressif32-libs`. 🪤 With pioarduino 55.03.312-1 its
+second stage runs PlatformIO 6.2.0.post1 from `~/.platformio/penv`, which the platform rejects
+("needs >=6.2.0") and **uninstalls the platform**. Fix: reinstall it
+(`pio pkg install -e crowpanel7 -p <platform URL from platformio.ini>`), then `pio run` again —
+the rebuilt libraries are kept and the build goes through.
 Serial console (115200, type `help`): `status`, `portal`, `companion <url>|auto`, `zone <id>|auto`,
 `token`, `lead <ms>`, `backdrop on|off`, `scroll on|off`, `sleep <min>|off`, `forget-wifi`, `erase-all`, `bringup` (colour bars + touch tracker), `restart`,
 `screenshot` → `tools/screenshot.py <log> out.png` (shows lyrics: keep it out of the repo);

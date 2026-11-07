@@ -98,9 +98,14 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
   Mac: Docker on macOS has no USB passthrough, so it cannot flash or read the serial port.
 - **`esp_lcd` RGB panel directly, not LovyanGFX**: IDF 5's bounce buffers keep the RGB DMA reading
   internal SRAM, which avoids the image drifting when Wi-Fi or flash access loads PSRAM.
-- **LVGL 9.6**, partial rendering into two 24-line internal-RAM strips, copied into a single PSRAM
-  framebuffer. Possible tearing on large animations; double framebuffer + vsync swap is the next
-  step if lyrics scrolling shows it.
+- **LVGL 9.6**, partial rendering into one 48-line internal-RAM strip, copied into a single PSRAM
+  framebuffer. The flush is a synchronous CPU copy, so a second strip bought nothing; one strip of
+  twice the height halves the passes over the text. Double framebuffer + vsync swap remains the
+  step if tearing shows.
+- **Framework rebuilt with 64-byte data cache lines** (`custom_sdkconfig` in `platformio.ini`,
+  pioarduino hybrid compile): twice the PSRAM burst per cache miss. Measured on a lyrics slide
+  (760×340 px over the backdrop): 110 → 88 ms per frame, flush 30 → 20 ms. The rest is PSRAM
+  bandwidth shared with the RGB scan-out (~25 MB/s): ~11 fps for full-stage animations.
 - **Own minimal GT911 / PCA9557 drivers** (~100 lines) instead of Elecrow's bundled libraries.
 - PCLK starts at 16 MHz (≈ 33 fps); Elecrow runs 15–24 MHz.
 - **Fonts: Noto Sans TTF rendered at run time by LVGL `tiny_ttf`**, not `lv_font_conv` bitmaps.

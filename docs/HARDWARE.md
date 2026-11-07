@@ -87,6 +87,10 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   embedded Noto Sans (tiny_ttf, `src/app/fonts.cpp`); Montserrat only supplies the LVGL symbols.
 - 🪤 LVGL 9.6 deprecates `lv_obj_add_flag/remove_flag` for common flags (runtime warning): use
   `lv_obj_set_hidden/clickable/scrollable`.
+- 🪤 **Full-stage redraws are PSRAM-bound**: ~88 ms per 760×340 frame with the backdrop (render
+  ~68 ms: backdrop read + text; flush ~20 ms); ~70 ms without it (measured with 32-byte lines). The RGB scan-out reads the
+  framebuffer continuously from the same PSRAM. Profile with the `[ui] scroll:` log line (first 3
+  slides per boot: steps, refresh and flush time).
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.
 
 ## Touch diagnostic
