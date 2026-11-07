@@ -98,6 +98,9 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
   `sleep <min>` (default 10, `off` = never) it goes off — never during setup, the zone picker or
   `demo`, and never off when there is no touch to wake it. A touch wakes it; the touch that wakes
   a dark screen is swallowed at the input device (`lv_indev_stop_processing`) so it presses nothing.
+- Idle clock: SNTP (`pool.ntp.org`) starts once Wi-Fi is up; the time zone is a POSIX TZ string
+  applied by the UI (`settingsui::applyTz`). While the screen is dimmed and nothing plays, a
+  128 px clock with the date (and the paused track) covers the screen, redrawn once a minute.
 - Settings screen (`src/app/settings_screen.*`, gear button in the controls bar): brightness,
   screen-off delay, lyrics lead, backdrop / scroll / clock switches, time zone, zone, forget
   Wi-Fi, firmware version + check/install, about (IP, companion, free RAM). Every change is saved

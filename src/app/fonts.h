@@ -12,5 +12,6 @@ extern const lv_font_t *lyricsCurrent;   // 44 px semibold
 extern const lv_font_t *lyricsOther;     // 30 px regular
 extern const lv_font_t *ui20;
 extern const lv_font_t *ui16;
+extern const lv_font_t *clock;           // 128 px semibold, digits for the idle clock
 
 }  // namespace fonts

@@ -42,6 +42,13 @@ void printStatus() {
     Serial.printf("[status] screen %s, view %s (saved %s), backdrop=%d scroll=%d sleep=%d min\n", ui::screenState(),
                   ui::viewName(), settings::view() ? "cover" : "lyrics", settings::backdrop(), settings::scroll(),
                   (int)settings::sleepMin());
+    time_t now = time(nullptr);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    char when[32];
+    strftime(when, sizeof when, "%Y-%m-%d %H:%M:%S", &lt);
+    Serial.printf("[status] local time %s (%s), clock %s\n", lt.tm_year + 1900 >= 2025 ? when : "not set yet",
+                  settings::tz().c_str(), settings::clock() ? "on" : "off");
     Serial.printf("[status] touch=%d heap int %u KB (min %u) psram %u KB\n", info.touch,
                   (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
                   (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024),

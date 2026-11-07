@@ -5,6 +5,7 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <esp_mac.h>
+#include <esp_sntp.h>
 
 #include "ota.h"
 #include "portal.h"
@@ -688,6 +689,11 @@ void task(void *) {
             Serial.printf("[net] Wi-Fi up, ip %s, rssi %d dBm\n", ip.c_str(), WiFi.RSSI());
             update([&](Snapshot &s) { s.staIp = ip; });
             closePortal();
+            if (!esp_sntp_enabled()) {   // wall clock for the idle screen; TZ is set by the UI
+                esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+                esp_sntp_setservername(0, "pool.ntp.org");
+                esp_sntp_init();
+            }
         }
 
         uint32_t now = millis();

@@ -14,6 +14,7 @@ const lv_font_t *lyricsCurrent = &lv_font_montserrat_28;
 const lv_font_t *lyricsOther = &lv_font_montserrat_28;
 const lv_font_t *ui20 = &lv_font_montserrat_20;
 const lv_font_t *ui16 = &lv_font_montserrat_14;
+const lv_font_t *clock = &lv_font_montserrat_28;
 
 namespace {
 
@@ -38,6 +39,7 @@ bool begin() {
     lyricsOther = make(noto400_start, noto400_end, 30, &lv_font_montserrat_28, &lv_font_montserrat_28, ok);
     ui20 = make(noto400_start, noto400_end, 20, &lv_font_montserrat_20, &lv_font_montserrat_20, ok);
     ui16 = make(noto400_start, noto400_end, 16, &lv_font_montserrat_14, &lv_font_montserrat_14, ok);
+    clock = make(noto600_start, noto600_end, 128, &lv_font_montserrat_28, &lv_font_montserrat_28, ok);
     return ok;
 }
 

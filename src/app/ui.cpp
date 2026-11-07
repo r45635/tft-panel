@@ -102,6 +102,11 @@ lv_obj_t *g_otaProgress = nullptr, *g_otaProgressText = nullptr, *g_otaBar = nul
 uint32_t g_seenOtaVersion = UINT32_MAX;
 ota::Status g_ota;
 
+// Idle clock: over everything but the update screens, while the screen is dimmed and nothing
+// plays (settings::clock()). Redrawn once a minute.
+lv_obj_t *g_clock = nullptr, *g_clockTime = nullptr, *g_clockDate = nullptr, *g_clockTrack = nullptr;
+int g_clockMinute = -1;
+
 bool g_demo = false;
 uint32_t g_seenVersion = UINT32_MAX;
 net::Snapshot g_s;
@@ -517,6 +522,26 @@ lv_obj_t *fullScreen(lv_opa_t opa) {
     return o;
 }
 
+void buildClock() {
+    g_clock = lv_obj_create(g_scr);
+    lv_obj_remove_style_all(g_clock);
+    lv_obj_set_size(g_clock, 800, 480);
+    lv_obj_set_style_bg_color(g_clock, lv_color_hex(0x05070A), 0);
+    lv_obj_set_style_bg_opa(g_clock, LV_OPA_80, 0);
+    lv_obj_set_scrollable(g_clock, false);
+    lv_obj_set_clickable(g_clock, false);   // a tap goes through: it wakes the screen as usual
+    g_clockTime = label(g_clock, fonts::clock, COL_TEXT);
+    lv_obj_align(g_clockTime, LV_ALIGN_CENTER, 0, -40);
+    g_clockDate = label(g_clock, fonts::lyricsOther, COL_MID);
+    lv_obj_align(g_clockDate, LV_ALIGN_CENTER, 0, 70);
+    g_clockTrack = label(g_clock, fonts::ui20, COL_DIM);
+    lv_obj_set_width(g_clockTrack, 700);
+    lv_label_set_long_mode(g_clockTrack, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_style_text_align(g_clockTrack, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(g_clockTrack, LV_ALIGN_BOTTOM_MID, 0, -36);
+    lv_obj_set_hidden(g_clock, true);
+}
+
 void buildOta() {
     g_otaBadge = lv_button_create(g_scr);
     lv_obj_set_height(g_otaBadge, 30);
@@ -691,6 +716,7 @@ void build() {
         []() { onZone(nullptr); },
         []() { setHidden(g_otaConfirm, false); },
     });
+    buildClock();
     buildOta();
     for (lv_obj_t *o : {g_stage, g_setup}) lv_obj_set_clickable(o, false);
     lv_obj_add_event_cb(g_scr, onScreenTap, LV_EVENT_CLICKED, nullptr);
@@ -958,6 +984,34 @@ void hookTouch() {
         lv_indev_add_event_cb(indev, onIndevEvent, c, nullptr);
 }
 
+void tickClock() {
+    time_t t = time(nullptr);
+    struct tm lt;
+    localtime_r(&t, &lt);
+    bool timeKnown = lt.tm_year + 1900 >= 2025;   // SNTP has answered
+    bool show = settings::clock() && timeKnown && g_screen == Screen::Dimmed && !g_s.playing() && !g_demo &&
+                !g_s.portalActive;
+    setHidden(g_clock, !show);
+    if (!show) {
+        g_clockMinute = -1;
+        return;
+    }
+    if (lt.tm_min == g_clockMinute) return;
+    g_clockMinute = lt.tm_min;
+    char buf[48];
+    strftime(buf, sizeof buf, "%H:%M", &lt);
+    setText(g_clockTime, buf);
+    static const char *days[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+    static const char *months[] = {"January", "February", "March", "April", "May", "June", "July",
+                                   "August", "September", "October", "November", "December"};
+    snprintf(buf, sizeof buf, "%s %d %s", days[lt.tm_wday], lt.tm_mday, months[lt.tm_mon]);
+    setText(g_clockDate, buf);
+    String track = g_s.title.length() ? (g_s.state == "paused" ? "Paused  -  " : "") + g_s.title +
+                                            (g_s.artist.length() ? "  -  " + g_s.artist : "")
+                                      : String();
+    setText(g_clockTrack, track.c_str());
+}
+
 void tickSleep(uint32_t now) {
     hookTouch();
     bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch ||
@@ -977,6 +1031,7 @@ void tickSleep(uint32_t now) {
         settingsui::close();
     }
     g_screen = want;
+    tickClock();   // show / hide the idle clock with the dim, not up to a frame later
     fadeBacklight(want == Screen::On ? settings::brightness() : want == Screen::Dimmed ? BRIGHT_DIM : 0,
                   want == Screen::On ? 250 : 1500);
 }
@@ -1037,6 +1092,11 @@ void setDemo(bool on) {
 void tick() {
     uint32_t now = millis();
     tickSleep(now);
+    static uint32_t lastClock = 0;
+    if (now - lastClock >= 500) {
+        lastClock = now;
+        tickClock();
+    }
     if (g_demo) return;
     uint32_t v = net::version();
     if (v != g_seenVersion) {
