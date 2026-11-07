@@ -834,14 +834,25 @@ void applyOta() {
     bool busy = g_ota.state == ota::State::Downloading || g_ota.state == ota::State::Installed;
     bool failedNow = g_ota.state == ota::State::Failed && !isHidden(g_otaProgress);
     if (busy) {
-        setHidden(g_otaProgress, false);
-        setHidden(g_otaClose, true);
-        setHidden(g_otaBar, false);
-        setText(g_otaProgressText, g_ota.state == ota::State::Installed
-                                       ? ("Installed " + g_ota.latest + ", restarting...").c_str()
-                                       : ("Updating to " + g_ota.latest + "...  " + String(g_ota.percent) + " %").c_str());
-        lv_bar_set_value(g_otaBar, g_ota.percent, LV_ANIM_OFF);
+        if (!board::staticScreenActive()) {
+            // Draw the update screen once, then freeze it in internal RAM: flash writes stall
+            // PSRAM and would make the live image jerk (board::staticScreenBegin).
+            setHidden(g_otaProgress, false);
+            setHidden(g_otaClose, true);
+            setHidden(g_otaBar, false);
+            setText(g_otaProgressText, ("Updating to " + g_ota.latest + "\nDo not unplug the panel").c_str());
+            lv_bar_set_value(g_otaBar, 0, LV_ANIM_OFF);
+            lv_refr_now(nullptr);
+            lv_area_t t, b;
+            lv_obj_get_coords(g_otaProgressText, &t);
+            lv_obj_get_coords(g_otaBar, &b);
+            lv_color_t acc = lv_color_hex(COL_ACCENT);
+            board::staticScreenBegin(board::StaticScreen{t.y1 - 4, t.y2 + 5, b.x1, b.x2 + 1, b.y1, b.y2 + 1,
+                                                         lv_color_to_u16(acc)});
+        }
+        board::staticScreenProgress(g_ota.percent);
     } else if (failedNow) {
+        board::staticScreenEnd();
         setHidden(g_otaBar, true);
         setHidden(g_otaClose, false);
         setText(g_otaProgressText, ("Update failed: " + g_ota.error + "\n\nStill running " + String(FW_VERSION) + ".").c_str());

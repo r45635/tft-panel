@@ -25,7 +25,7 @@ second stage runs PlatformIO 6.2.0.post1 from `~/.platformio/penv`, which the pl
 (`pio pkg install -e crowpanel7 -p <platform URL from platformio.ini>`), then `pio run` again —
 the rebuilt libraries are kept and the build goes through.
 Serial console (115200, type `help`): `status`, `portal`, `companion <url>|auto`, `zone <id>|auto`,
-`token`, `lead <ms>`, `backdrop on|off`, `scroll on|off`, `sleep <min>|off`, `view lyrics|cover`, `ota check|install`, `settings [close]`, `tz <POSIX>|default`, `warmth <0-100>`, `backlight <0-100>`, `forget-wifi`, `erase-all`, `bringup` (colour bars + touch tracker), `restart`,
+`token`, `lead <ms>`, `backdrop on|off`, `scroll on|off`, `sleep <min>|off`, `view lyrics|cover`, `ota check|install`, `settings [close]`, `tz <POSIX>|default`, `warmth <0-100>`, `colours`, `backlight <0-100>`, `forget-wifi`, `erase-all`, `bringup` (colour bars + touch tracker), `restart`,
 `screenshot` → `tools/screenshot.py <log> out.png` (shows lyrics: keep it out of the repo);
 `demo` freezes the screen on invented lyrics — use it for layout checks and doc screenshots
 (the real cover thumbnail and backdrop stay on screen: cover art is copyrighted too).

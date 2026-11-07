@@ -20,6 +20,7 @@ void build(lv_obj_t *scr, const Hooks &hooks);
 void open();
 void close();
 bool isOpen();
+void showColourTest();   // the colour test card (also from the console: colours)
 
 // Live values (Wi-Fi, firmware, about); cheap when nothing changed.
 void refresh(const net::Snapshot &s, const ota::Status &o);

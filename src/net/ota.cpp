@@ -41,6 +41,14 @@ void update(F &&fn) {
     xSemaphoreGive(g_lock);
 }
 
+String g_installError;   // last install attempt's failure, shown after the last attempt
+
+// During an install, attempts fail quietly (the screen stays on the update); install() reports.
+void attemptFailed(const String &why) {
+    Serial.printf("[ota] attempt failed: %s\n", why.c_str());
+    g_installError = why;
+}
+
 void fail(const String &why) {
     Serial.printf("[ota] ERROR: %s\n", why.c_str());
     update([&](Status &s) {
@@ -145,12 +153,12 @@ bool fetchSha(uint8_t out[32]) {
     String body = code == 200 ? http.getString() : String();
     http.end();
     if (code != 200) {
-        fail("checksum download: " + (code < 0 ? HTTPClient::errorToString(code) : "HTTP " + String(code)));
+        attemptFailed("checksum download: " + (code < 0 ? HTTPClient::errorToString(code) : "HTTP " + String(code)));
         return false;
     }
     body.trim();
     if (body.length() < 64) {
-        fail("checksum file malformed");
+        attemptFailed("checksum file malformed");
         return false;
     }
     for (int i = 0; i < 32; i++) {
@@ -158,25 +166,41 @@ bool fetchSha(uint8_t out[32]) {
         char *end;
         out[i] = (uint8_t)strtoul(hex, &end, 16);
         if (*end) {
-            fail("checksum file malformed");
+            attemptFailed("checksum file malformed");
             return false;
         }
     }
     return true;
 }
 
+bool installOnce(bool &retryable);
+
+// A CDN stall or a Wi-Fi hiccup should not need the user to start over: up to 3 attempts.
 void install() {
     if (!g_binUrl.length() || status().state != State::Available) {
         fail("no newer release to install");
         return;
     }
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        bool retryable = false;
+        if (installOnce(retryable)) return;
+        if (!retryable || attempt == 3) break;
+        Serial.printf("[ota] retrying (%d/3)\n", attempt + 1);
+        delay(2000);
+    }
+    fail(g_installError);
+}
+
+// false on failure (already reported); `retryable` for transport errors, not for a bad image.
+bool installOnce(bool &retryable) {
     uint8_t want[32];
     update([](Status &s) {
         s.state = State::Downloading;
         s.percent = 0;
         s.error = "";
     });
-    if (!fetchSha(want)) return;
+    retryable = true;
+    if (!fetchSha(want)) return false;
 
     NetworkClientSecure client;
     HTTPClient http;
@@ -184,14 +208,16 @@ void install() {
     int code = http.GET();
     if (code != 200) {
         http.end();
-        fail("download: " + (code < 0 ? HTTPClient::errorToString(code) : "HTTP " + String(code)));
-        return;
+        attemptFailed("download: " + (code < 0 ? HTTPClient::errorToString(code) : "HTTP " + String(code)));
+        return false;
     }
     int size = http.getSize();
+    // The UI freezes the update screen in internal RAM before the first flash write.
+    for (uint32_t t0 = millis(); !board::staticScreenActive() && millis() - t0 < 2000;) delay(20);
     if (size <= 0 || !Update.begin(size, U_FLASH)) {
         http.end();
-        fail(size <= 0 ? "download: unknown size" : String("cannot start update: ") + Update.errorString());
-        return;
+        attemptFailed(size <= 0 ? "download: unknown size" : String("cannot start update: ") + Update.errorString());
+        return false;
     }
     Serial.printf("[ota] installing %s (%d bytes)\n", g_status.latest.c_str(), size);
     mbedtls_sha256_context sha;
@@ -205,7 +231,7 @@ void install() {
     while (ok && done < size) {
         size_t avail = stream->available();
         if (!avail) {
-            if (!http.connected() || millis() - lastData > 15000) {
+            if (!http.connected() || millis() - lastData > 30000) {
                 ok = false;
                 break;
             }
@@ -234,18 +260,18 @@ void install() {
     mbedtls_sha256_free(&sha);
     if (!ok || done != size) {
         Update.abort();
-        fail(String("download interrupted at ") + done + "/" + size + " bytes" +
-             (Update.hasError() ? String(" (") + Update.errorString() + ")" : ""));
-        return;
+        attemptFailed(String("download interrupted at ") + done + "/" + size + " bytes");
+        return false;
     }
     if (memcmp(got, want, 32) != 0) {
         Update.abort();
-        fail("checksum mismatch: download corrupted, nothing installed");
-        return;
+        attemptFailed("checksum mismatch: download corrupted, nothing installed");
+        return false;   // retryable: a corrupted transfer can succeed the next time
     }
     if (!Update.end(true)) {
-        fail(String("cannot finish update: ") + Update.errorString());
-        return;
+        retryable = false;
+        attemptFailed(String("cannot finish update: ") + Update.errorString());
+        return false;
     }
     Serial.printf("[ota] %s installed and verified, restarting\n", g_status.latest.c_str());
     update([](Status &s) {
@@ -254,6 +280,7 @@ void install() {
     });
     delay(1500);
     board::restart();
+    return true;
 }
 
 }  // namespace

@@ -39,9 +39,10 @@ void printStatus() {
     Serial.printf("[status] lyrics status=%d lines=%u synced=%d offset=%d lead=%d source=%s clock window=%d ms\n",
                   (int)s.lyricsStatus, s.lyrics ? (unsigned)s.lyrics->lines.size() : 0u, s.lyrics ? s.lyrics->synced : 0,
                   (int)s.offsetMs, (int)settings::leadMs(), s.lyricsSource.c_str(), (int)s.positionUncertaintyMs);
-    Serial.printf("[status] screen %s, view %s (saved %s), backdrop=%d scroll=%d sleep=%d min\n", ui::screenState(),
-                  ui::viewName(), settings::view() ? "cover" : "lyrics", settings::backdrop(), settings::scroll(),
-                  (int)settings::sleepMin());
+    Serial.printf("[status] screen %s, view %s (saved %s), backdrop=%d scroll=%d sleep=%d min, brightness %d %%, "
+                  "warmth %d %%\n", ui::screenState(), ui::viewName(), settings::view() ? "cover" : "lyrics",
+                  settings::backdrop(), settings::scroll(), (int)settings::sleepMin(), (int)settings::brightness(),
+                  (int)settings::warmth());
     time_t now = time(nullptr);
     struct tm lt;
     localtime_r(&now, &lt);
@@ -96,7 +97,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -163,6 +164,8 @@ void handleCommand(String line) {
     } else if (cmd == "view" && arg.length()) {
         ui::setView(arg == "cover");
         Serial.printf("[cmd] view %s\n", arg == "cover" ? "cover" : "lyrics");
+    } else if (cmd == "colours") {
+        settingsui::showColourTest();
     } else if (cmd == "warmth" && arg.length()) {
         settings::setWarmth((uint8_t)constrain(arg.toInt(), 0, 100));
         board::setWarmth(settings::warmth());

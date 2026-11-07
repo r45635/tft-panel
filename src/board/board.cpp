@@ -2,6 +2,8 @@
 
 #include <esp_ota_ops.h>
 #include <esp_rom_sys.h>
+#include <esp32s3/rom/cache.h>
+#include <algorithm>
 #include <esp_system.h>
 #include <esp_timer.h>
 
@@ -75,6 +77,49 @@ bool resetTouchViaExpander() {
     return ok;
 }
 
+// ---- Framebuffer and bounce-buffer fill ----
+//
+// Flash and PSRAM share the MSPI bus: while flash is erased or written (an update writes 1.8 MB),
+// PSRAM reads stall for milliseconds and a refill from the framebuffer comes too late: the image
+// jerks. So during an update the panel shows a static screen generated here from internal RAM
+// only: background, the message as a 1-bit mask taken from the framebuffer, and a progress bar.
+uint16_t *g_fb = nullptr;
+constexpr int FB_PX = LCD_H_RES * LCD_V_RES;
+
+struct Static {
+    volatile bool on = false;
+    uint8_t *mask = nullptr;   // text rows, 1 bit per pixel
+    int textY0 = 0, textY1 = 0, barX0 = 0, barX1 = 0, barY0 = 0, barY1 = 0;
+    uint16_t bg = 0, fg = 0, barBg = 0, barFg = 0;
+    volatile int barFillX = 0;
+} g_static;
+
+IRAM_ATTR bool bounceFill(esp_lcd_panel_handle_t, void *buf, int pos_px, int len_bytes, void *) {
+    if (!g_static.on) {
+        memcpy(buf, g_fb + pos_px, len_bytes);
+        int next = pos_px + len_bytes / 2;
+        if (next >= FB_PX) next = 0;
+        Cache_Start_DCache_Preload((uint32_t)(g_fb + next), len_bytes, 0);   // as the driver does
+        return false;
+    }
+    uint16_t *o = (uint16_t *)buf;
+    const int y0 = pos_px / LCD_H_RES, rows = len_bytes / 2 / LCD_H_RES;
+    for (int r = 0; r < rows; r++, o += LCD_H_RES) {
+        int y = y0 + r;
+        if (y >= g_static.textY0 && y < g_static.textY1 && g_static.mask) {
+            const uint8_t *m = g_static.mask + (size_t)(y - g_static.textY0) * (LCD_H_RES / 8);
+            for (int x = 0; x < LCD_H_RES; x++) o[x] = (m[x >> 3] >> (7 - (x & 7))) & 1 ? g_static.fg : g_static.bg;
+        } else if (y >= g_static.barY0 && y < g_static.barY1) {
+            int fill = g_static.barFillX;
+            for (int x = 0; x < LCD_H_RES; x++)
+                o[x] = x < g_static.barX0 || x >= g_static.barX1 ? g_static.bg : x < fill ? g_static.barFg : g_static.barBg;
+        } else {
+            for (int x = 0; x < LCD_H_RES; x++) o[x] = g_static.bg;
+        }
+    }
+    return false;
+}
+
 bool createPanel() {
     esp_lcd_rgb_panel_config_t cfg;
     memset(&cfg, 0, sizeof cfg);
@@ -91,7 +136,10 @@ bool createPanel() {
     cfg.timings.flags.pclk_active_neg = 1;
     cfg.data_width = 16;
     cfg.bits_per_pixel = 16;
-    cfg.num_fbs = 1;
+    // We own the framebuffer and fill the bounce buffers ourselves (on_bounce_empty): normally a
+    // copy from it, during an update a static screen generated from internal RAM (see below).
+    cfg.num_fbs = 0;
+    cfg.flags.no_fb = 1;
     cfg.bounce_buffer_size_px = BOUNCE_BUF_PX;
     cfg.dma_burst_size = 64;
     cfg.hsync_gpio_num = LCD_PIN_HSYNC;
@@ -100,11 +148,22 @@ bool createPanel() {
     cfg.pclk_gpio_num = LCD_PIN_PCLK;
     cfg.disp_gpio_num = -1;
     for (int i = 0; i < 16; i++) cfg.data_gpio_nums[i] = LCD_DATA_PINS[i];
-    cfg.flags.fb_in_psram = 1;
-
+    g_fb = (uint16_t *)heap_caps_aligned_calloc(64, 1, (size_t)LCD_H_RES * LCD_V_RES * 2,
+                                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!g_fb) {
+        g_info.error = "framebuffer: out of PSRAM";
+        return false;
+    }
     esp_err_t err = esp_lcd_new_rgb_panel(&cfg, &g_panel);
     if (err != ESP_OK) {
         g_info.error = String("esp_lcd_new_rgb_panel: ") + esp_err_to_name(err);
+        return false;
+    }
+    esp_lcd_rgb_panel_event_callbacks_t cbs = {};
+    cbs.on_bounce_empty = bounceFill;
+    err = esp_lcd_rgb_panel_register_event_callbacks(g_panel, &cbs, nullptr);
+    if (err != ESP_OK) {
+        g_info.error = String("bounce callback: ") + esp_err_to_name(err);
         return false;
     }
     err = esp_lcd_panel_reset(g_panel);
@@ -139,7 +198,9 @@ void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
     // Synchronous CPU copy into the PSRAM framebuffer (num_fbs = 1).
     int64_t t0 = esp_timer_get_time();
     if (g_balanceOn) balance((uint16_t *)px, (size_t)lv_area_get_width(area) * lv_area_get_height(area));
-    esp_lcd_panel_draw_bitmap(g_panel, area->x1, area->y1, area->x2 + 1, area->y2 + 1, px);
+    const int w = lv_area_get_width(area);
+    const uint16_t *src = (const uint16_t *)px;
+    for (int y = area->y1; y <= area->y2; y++, src += w) memcpy(g_fb + y * LCD_H_RES + area->x1, src, w * 2);
     g_flushUs += (uint32_t)(esp_timer_get_time() - t0);
     g_flushCount++;
     lv_display_flush_ready(disp);
@@ -422,9 +483,7 @@ const Info &info() { return g_info; }
 lv_display_t *display() { return g_disp; }
 
 const uint16_t *frameBuffer() {
-    void *fb = nullptr;
-    if (!g_panel || esp_lcd_rgb_panel_get_frame_buffer(g_panel, 1, &fb) != ESP_OK) return nullptr;
-    return (const uint16_t *)fb;
+    return g_fb;
 }
 
 void flushStats(uint32_t &count, uint32_t &us) {
@@ -438,10 +497,66 @@ bool lastTouch(uint16_t &x, uint16_t &y) {
     return g_touchDown;
 }
 
+uint16_t balanced(uint16_t c) { return g_balanceOn ? (c & 0xF800) | g_gbLut[c & 0x07FF] : c; }
+
+uint32_t luma(uint16_t c) { return ((c >> 11) & 0x1F) * 2 + ((c >> 5) & 0x3F) * 2 + (c & 0x1F); }
+
+void staticScreenBegin(const StaticScreen &s) {
+    if (g_static.on || !g_fb) return;
+    int ty0 = std::max(0, s.textY0), ty1 = std::min(LCD_V_RES, s.textY1);
+    size_t maskBytes = (size_t)(ty1 - ty0) * (LCD_H_RES / 8);
+    uint8_t *mask = (uint8_t *)heap_caps_calloc(1, maskBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    // Colours sampled from what is on screen (already white-balanced).
+    uint16_t bg = g_fb[(size_t)std::max(0, ty0 - 2) * LCD_H_RES + 2], fg = bg;
+    uint32_t bgL = luma(bg), fgL = bgL;
+    for (int y = ty0; y < ty1; y++)
+        for (int x = 0; x < LCD_H_RES; x++) {
+            uint16_t c = g_fb[(size_t)y * LCD_H_RES + x];
+            if (luma(c) > fgL) {
+                fgL = luma(c);
+                fg = c;
+            }
+        }
+    uint32_t threshold = (bgL + fgL) / 2;
+    if (mask)
+        for (int y = ty0; y < ty1; y++)
+            for (int x = 0; x < LCD_H_RES; x++)
+                if (luma(g_fb[(size_t)y * LCD_H_RES + x]) > threshold)
+                    mask[(size_t)(y - ty0) * (LCD_H_RES / 8) + (x >> 3)] |= 0x80 >> (x & 7);
+    g_static.mask = mask;
+    g_static.textY0 = ty0;
+    g_static.textY1 = ty1;
+    g_static.barX0 = s.barX0;
+    g_static.barX1 = s.barX1;
+    g_static.barY0 = s.barY0;
+    g_static.barY1 = s.barY1;
+    g_static.bg = bg;
+    g_static.fg = fg;
+    g_static.barBg = g_fb[(size_t)((s.barY0 + s.barY1) / 2) * LCD_H_RES + s.barX1 - 2];
+    g_static.barFg = balanced(s.barFg);
+    g_static.barFillX = s.barX0;
+    g_static.on = true;
+}
+
+void staticScreenProgress(int percent) {
+    percent = percent < 0 ? 0 : percent > 100 ? 100 : percent;
+    g_static.barFillX = g_static.barX0 + (g_static.barX1 - g_static.barX0) * percent / 100;
+}
+
+void staticScreenEnd() {
+    if (!g_static.on) return;
+    g_static.on = false;
+    delay(40);   // let a frame go by before the mask goes away
+    if (g_static.mask) heap_caps_free(g_static.mask);
+    g_static.mask = nullptr;
+}
+
+bool staticScreenActive() { return g_static.on; }
+
 void setWarmth(uint8_t percent) {
     if (percent > 100) percent = 100;
-    // 100 % = blue -30 %, green -8 %: a warm white on this panel. Red stays at full scale.
-    uint32_t gainB = 256 - percent * 77 / 100, gainG = 256 - percent * 20 / 100;
+    // 100 % = blue -45 %, green -12 %: a warm white on this panel. Red stays at full scale.
+    uint32_t gainB = 256 - percent * 115 / 100, gainG = 256 - percent * 31 / 100;
     g_balanceOn = false;   // the flush runs in this same (LVGL) thread: no race on the table
     for (uint32_t v = 0; v < 2048; v++) {
         uint32_t g = (v >> 5) & 0x3F, b = v & 0x1F;

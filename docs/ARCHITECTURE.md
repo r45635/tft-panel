@@ -108,7 +108,8 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
 - Firmware updates (`src/net/ota.*`, net task): 30 s after boot and every 24 h, HTTPS GET of
   GitHub's `releases/latest` (built-in CA bundle, TLS in PSRAM). A newer `vX.Y.Z` tag with
   assets `tft-panel-<tag>.bin` + `.sha256` shows a header badge; a tap opens a confirmation,
-  then the image streams into the other app slot while it is hashed, and only a matching
+  then the image streams into the other app slot while it is hashed (up to 3 attempts on a
+  transport error, the update screen frozen in internal RAM meanwhile), and only a matching
   SHA-256 is committed. The new image boots "pending verify": it is confirmed once Wi-Fi is up
   and the companion answered, otherwise after 3 min the bootloader goes back to the previous
   one. Console: `ota check|install`.

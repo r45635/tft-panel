@@ -54,7 +54,20 @@ void touchDiag();
 // Cumulative flush count and time (µs) spent copying into the framebuffer, for profiling.
 void flushStats(uint32_t &count, uint32_t &us);
 
-// Colour warmth 0..100 %: 0 = the panel's own (cool, bluish) white, 100 = blue -30 %.
+// Static screen for firmware updates: while flash is written, PSRAM stalls and a refill from
+// the framebuffer would jerk the image, so the panel shows what is on screen now, kept in
+// internal RAM: text rows [textY0, textY1) as a 1-bit mask (sampled colours), plus a progress
+// bar drawn live in [barX0, barX1) x [barY0, barY1) with `barFg` (RGB565, before white balance).
+struct StaticScreen {
+    int textY0, textY1, barX0, barX1, barY0, barY1;
+    uint16_t barFg;
+};
+void staticScreenBegin(const StaticScreen &s);   // call after the screen has been drawn
+void staticScreenProgress(int percent);
+void staticScreenEnd();
+bool staticScreenActive();
+
+// Colour warmth 0..100 %: 0 = the panel's own (cool, bluish) white, 100 = blue -45 %.
 void setWarmth(uint8_t percent);
 
 // 0..100 %. 0 turns the backlight off.

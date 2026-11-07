@@ -35,6 +35,10 @@ lv_obj_t *g_fwButton = nullptr, *g_fwButtonLabel = nullptr, *g_about = nullptr;
 lv_obj_t *g_brightness = nullptr, *g_warmth = nullptr, *g_sleep = nullptr, *g_tz = nullptr;
 lv_obj_t *g_swBackdrop = nullptr, *g_swScroll = nullptr, *g_swClock = nullptr;
 bool g_updateAvailable = false;
+lv_obj_t *g_colourTest = nullptr, *g_ctSlider = nullptr, *g_ctValue = nullptr;
+
+lv_obj_t *patch(lv_obj_t *parent, int x, int y, int w, int h, uint32_t colour, const char *name);
+void buildColourTest();
 
 lv_obj_t *label(lv_obj_t *parent, const lv_font_t *font, uint32_t colour, const char *text = "") {
     lv_obj_t *l = lv_label_create(parent);
@@ -241,6 +245,15 @@ void buildRows() {
         applyTz();
     });
 
+    r = row("Colour test", nullptr, &sub);
+    lv_label_set_text(sub, "White, greys and colours, to set the warmth by eye.");
+    button(r, "Show", [](lv_event_t *) {
+        if (!g_colourTest) buildColourTest();
+        lv_slider_set_value(g_ctSlider, settings::warmth(), LV_ANIM_OFF);
+        lv_label_set_text_fmt(g_ctValue, "Warmth %d %%", (int)settings::warmth());
+        lv_obj_set_hidden(g_colourTest, false);
+    });
+
     r = row("Zone", nullptr, &sub);
     lv_label_set_text(sub, "Which Roon zone the panel follows.");
     button(r, "Choose", [](lv_event_t *) {
@@ -262,6 +275,66 @@ void buildRows() {
     }, &g_fwButtonLabel);
 
     r = row("About", nullptr, &g_about);
+}
+
+lv_obj_t *patch(lv_obj_t *parent, int x, int y, int w, int h, uint32_t colour, const char *name) {
+    lv_obj_t *o = lv_obj_create(parent);
+    lv_obj_remove_style_all(o);
+    lv_obj_set_pos(o, x, y);
+    lv_obj_set_size(o, w, h);
+    lv_obj_set_style_bg_color(o, lv_color_hex(colour), 0);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+    lv_obj_set_clickable(o, false);
+    if (name) {
+        uint32_t r = (colour >> 16) & 0xFF, g = (colour >> 8) & 0xFF, b = colour & 0xFF;
+        lv_obj_t *l = label(o, fonts::ui16, r * 3 + g * 6 + b > 1200 ? 0x000000 : 0xFFFFFF, name);
+        lv_obj_align(l, LV_ALIGN_BOTTOM_LEFT, 6, -4);
+    }
+    return o;
+}
+
+// Full-screen test card: a big white, greys, primaries and a skin tone, with the warmth slider.
+void buildColourTest() {
+    g_colourTest = lv_obj_create(lv_obj_get_parent(g_root));
+    lv_obj_remove_style_all(g_colourTest);
+    lv_obj_set_size(g_colourTest, 800, 480);
+    lv_obj_set_style_bg_color(g_colourTest, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(g_colourTest, LV_OPA_COVER, 0);
+    lv_obj_set_scrollable(g_colourTest, false);
+    lv_obj_set_clickable(g_colourTest, true);
+    patch(g_colourTest, 0, 0, 400, 200, 0xFFFFFF, "White");
+    patch(g_colourTest, 400, 0, 134, 200, 0xC0C0C0, "75 %");
+    patch(g_colourTest, 534, 0, 133, 200, 0x808080, "50 %");
+    patch(g_colourTest, 667, 0, 133, 200, 0x404040, "25 %");
+    static const struct { uint32_t c; const char *n; } row2[] = {
+        {0xFF0000, "Red"}, {0x00FF00, "Green"}, {0x0000FF, "Blue"}, {0xFFFF00, "Yellow"},
+        {0x00FFFF, "Cyan"}, {0xFF00FF, "Magenta"}, {0xE0AC8A, "Skin"}, {0x8A9A5B, "Olive"}};
+    for (int i = 0; i < 8; i++) patch(g_colourTest, i * 100, 200, 100, 120, row2[i].c, row2[i].n);
+    lv_obj_t *grad = patch(g_colourTest, 0, 320, 800, 50, 0x000000, nullptr);
+    lv_obj_set_style_bg_grad_color(grad, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_grad_dir(grad, LV_GRAD_DIR_HOR, 0);
+
+    g_ctValue = label(g_colourTest, fonts::ui20, COL_TEXT, "");
+    lv_obj_set_pos(g_ctValue, 24, 400);
+    g_ctSlider = lv_slider_create(g_colourTest);
+    lv_obj_set_size(g_ctSlider, 420, 16);
+    lv_obj_set_pos(g_ctSlider, 190, 406);
+    lv_slider_set_range(g_ctSlider, 0, 100);
+    lv_obj_set_style_bg_color(g_ctSlider, lv_color_hex(0xFFB060), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(g_ctSlider, lv_color_hex(COL_TEXT), LV_PART_KNOB);
+    lv_obj_set_style_pad_all(g_ctSlider, 8, LV_PART_KNOB);
+    lv_obj_add_event_cb(g_ctSlider, [](lv_event_t *) {
+        int v = lv_slider_get_value(g_ctSlider);
+        board::setWarmth(v);
+        lv_label_set_text_fmt(g_ctValue, "Warmth %d %%", v);
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+    lv_obj_add_event_cb(g_ctSlider, [](lv_event_t *) {
+        settings::setWarmth(lv_slider_get_value(g_ctSlider));
+        lv_slider_set_value(g_warmth, settings::warmth(), LV_ANIM_OFF);
+    }, LV_EVENT_RELEASED, nullptr);
+    lv_obj_t *done = button(g_colourTest, "Done", [](lv_event_t *) { lv_obj_set_hidden(g_colourTest, true); });
+    lv_obj_align(done, LV_ALIGN_BOTTOM_RIGHT, -20, -24);
+    lv_obj_set_hidden(g_colourTest, true);
 }
 
 }  // namespace
@@ -316,9 +389,17 @@ void open() {
 
 void close() {
     if (g_root) lv_obj_set_hidden(g_root, true);
+    if (g_colourTest) lv_obj_set_hidden(g_colourTest, true);
 }
 
-bool isOpen() { return g_root && !lv_obj_is_hidden(g_root); }
+bool isOpen() { return (g_root && !lv_obj_is_hidden(g_root)) || (g_colourTest && !lv_obj_is_hidden(g_colourTest)); }
+
+void showColourTest() {
+    if (!g_colourTest) buildColourTest();
+    lv_slider_set_value(g_ctSlider, settings::warmth(), LV_ANIM_OFF);
+    lv_label_set_text_fmt(g_ctValue, "Warmth %d %%", (int)settings::warmth());
+    lv_obj_set_hidden(g_colourTest, false);
+}
 
 void refresh(const net::Snapshot &s, const ota::Status &o) {
     if (!isOpen()) return;

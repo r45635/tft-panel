@@ -17,7 +17,7 @@ volatile int32_t g_sleepMin = 10;
 volatile uint8_t g_view = 0;
 volatile uint8_t g_brightness = 100;
 volatile bool g_clock = true;
-volatile uint8_t g_warmth = 40;
+volatile uint8_t g_warmth = 75;
 
 void putString(const char *key, const String &value) {
     g_prefs.begin(NS, false);
@@ -54,7 +54,7 @@ void begin() {
     g_brightness = g_s.brightness;
     g_s.clock = g_prefs.isKey("clock") ? g_prefs.getBool("clock", true) : true;
     g_clock = g_s.clock;
-    g_s.warmth = g_prefs.isKey("warmth") ? g_prefs.getUChar("warmth", 40) : 40;
+    g_s.warmth = g_prefs.isKey("warmth") ? g_prefs.getUChar("warmth", 75) : 75;
     g_warmth = g_s.warmth;
     g_s.tz = read("tz");
     if (g_s.apPass.length() < 8) {

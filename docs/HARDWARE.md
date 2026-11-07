@@ -109,8 +109,16 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   20-line shift could stay. Fix: `CONFIG_SPIRAM_XIP_FROM_PSRAM` (code + rodata copied to PSRAM at
   boot, ~1.8 MB) + `CONFIG_LCD_RGB_ISR_IRAM_SAFE`: 20 NVS writes in 20 s, image steady, rendering
   not slower. Works with the v0.1.x bootloader (OTA never replaces it).
+- 🪤 **Jerky image while an update is written** even with XIP from PSRAM: flash and PSRAM share the
+  MSPI bus, so a sector erase stalls PSRAM reads for milliseconds. During an install the panel now
+  shows a static screen generated in the bounce-buffer callback from internal RAM only (1-bit text
+  mask + live progress bar; `board::staticScreen*`): Vincent saw it steady. The driver runs in
+  `no_fb` mode; we own the framebuffer and copy from it in `on_bounce_empty` otherwise.
 - The panel's white is cool (bluish), seen by Vincent with neutral UI colours. `board::setWarmth()`
   scales green/blue in the flush through a 4 KB G+B table (~5 ms per full-stage frame, O2 + IRAM).
+  On the colour test card (Settings, console `colours`) Vincent picked 76 % (blue -34 %, green -9 %):
+  default 75 %. Screenshots read the corrected framebuffer, so they look yellowish (`warmth 0` for
+  documentation captures).
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.
 
 ## Touch diagnostic
