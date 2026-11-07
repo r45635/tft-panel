@@ -1,5 +1,7 @@
 #include "board.h"
 
+#include <esp_rom_sys.h>
+#include <esp_system.h>
 #include <esp_timer.h>
 
 #include <Wire.h>
@@ -170,6 +172,40 @@ bool createLvgl() {
 }
 
 }  // namespace
+
+namespace {
+constexpr uint32_t CLEAN_RESET_MAGIC = 0x7F7C1EA2;
+RTC_NOINIT_ATTR uint32_t s_cleanResetMagic;   // survives a system reset, not a power cycle
+RTC_NOINIT_ATTR uint32_t s_resetBefore;
+
+const char *reasonName(uint32_t r) {
+    switch ((esp_reset_reason_t)r) {
+        case ESP_RST_SW: return "software restart";
+        case ESP_RST_PANIC: return "crash (panic)";
+        case ESP_RST_INT_WDT: return "interrupt watchdog";
+        case ESP_RST_TASK_WDT: return "task watchdog";
+        case ESP_RST_WDT: return "watchdog";
+        default: return "other";
+    }
+}
+}  // namespace
+
+void cleanResetIfNeeded() {
+    if (s_cleanResetMagic == CLEAN_RESET_MAGIC) {   // second pass: the system reset is done
+        s_cleanResetMagic = 0;
+        Serial.printf("[board] full system reset done (the previous reset was a %s)\n", reasonName(s_resetBefore));
+        return;
+    }
+    esp_reset_reason_t r = esp_reset_reason();
+    bool cpuOnly = r == ESP_RST_SW || r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT ||
+                   r == ESP_RST_WDT;
+    if (!cpuOnly) return;
+    s_cleanResetMagic = CLEAN_RESET_MAGIC;
+    s_resetBefore = r;
+    Serial.printf("[board] %s left the display peripherals running: full system reset\n", reasonName(r));
+    Serial.flush();
+    esp_rom_software_reset_system();
+}
 
 bool begin() {
     // GPIO38 goes to the J4/J7 headers: keep it in a safe state.

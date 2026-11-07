@@ -93,6 +93,12 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   ~68 ms: backdrop read + text; flush ~20 ms); ~70 ms without it (measured with 32-byte lines). The RGB scan-out reads the
   framebuffer continuously from the same PSRAM. Profile with the `[ui] scroll:` log line (first 3
   slides per boot: steps, refresh and flush time).
+- 🪤 **A software restart leaves the display broken** (found 2026-11-07 on the first OTA): `esp_restart()`
+  is a CPU-only reset (`rst:0xc RTC_SW_CPU_RST`); LCD_CAM / GDMA / I2C keep their state, so the image
+  came up partly off-frame and touch was dead, while the framebuffer was perfect and the boot log
+  normal. An EN reset fixed it. `board::cleanResetIfNeeded()` (first call in `setup()`) turns every
+  CPU-only reset (software restart, OTA, rollback, panic, watchdogs) into one full system reset
+  (`esp_rom_software_reset_system`, `rst:0x3`), with an RTC_NOINIT guard against loops.
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.
 
 ## Touch diagnostic

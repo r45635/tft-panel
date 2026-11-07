@@ -19,6 +19,11 @@ struct Info {
     String error;          // empty when everything came up
 };
 
+// Call first in setup(). After a CPU-only reset (esp_restart after an OTA, rollback, panic,
+// watchdog) the LCD_CAM/GDMA and I2C peripherals keep running from before: the image comes up
+// shifted and touch is dead until a real reset. This does one full system reset in that case.
+void cleanResetIfNeeded();
+
 // Initialises everything except the backlight. Returns false on a fatal error
 // (no PSRAM, panel not created); `info().error` says why. Touch failure is not
 // fatal: the screen still works and the error is reported.

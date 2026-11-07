@@ -208,6 +208,7 @@ void setup() {
     delay(300);
     Serial.printf("\n[tft-panel] boot, firmware %s\n", FW_VERSION);
 
+    board::cleanResetIfNeeded();   // before touching the display: see board.h
     g_ok = board::begin();
     const board::Info &info = board::info();
     Serial.printf("[tft-panel] psram=%u flash=%u i2c=[%s] pca9557=%d touch=%d addr=0x%02X id=%s fw=0x%04X res=%ux%u\n",
