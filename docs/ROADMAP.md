@@ -5,7 +5,7 @@
 - [x] Toolchain: PlatformIO + pioarduino 55.03.312-1, LVGL 9.6.0, builds and flashes (460800 baud)
 - [x] PSRAM 8 MB / flash 4 MB detected, RGB panel + bounce buffers created, LVGL running
 - [x] PCA9557 found at 0x18, touch reset sequence applied
-- [ ] **GT911 not answering** — TP-RESET and TP-INT behave like an open net: check the touch flex (docs/HARDWARE.md)
+- [x] GT911 touch: answered once the touch flex was seated (id 911, fw 0x1060, 0x5D)
 - [ ] Visual check: colour bars in R/G/B order, gradient smooth, no drift or flicker
 - [ ] Touch mapping (dot follows the finger, axes not mirrored), backlight slider (PWM 5 kHz)
 

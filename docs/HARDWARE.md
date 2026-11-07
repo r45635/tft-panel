@@ -51,9 +51,15 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   not connected or held in reset. Elecrow forum users with the same board see 0x5D in a plain scan
   (their issues were higher up, e.g. 400 kHz in LovyanGFX), we never do. Remaining test: Elecrow's V3.0
   factory demo (`factory_firmare/hmi7.0-factory-firmware-3.0`, NVS at the same 0x9000) with a finger.
+- **2026-11-07, touch fixed** — Vincent reseated the touch flex: GT911 answers at 0x5D from boot,
+  `touchdiag` finds it at once. Our reset sequence was right all along.
 
 ## Pitfalls
 
+- ✅ **Root cause (2026-11-07): the touch flex was not seated** in its latch connector (top centre, back of
+  the board, thin black flex — not the wide orange LCD flex J2). After reseating: PCA9557 input reads
+  **0xFF** (IO0 high, pulled up from the flex), GT911 at **0x5D** at boot, id `911`, fw `0x1060`, 800×480.
+  Diagnostic rule: **IO0 = 0 while released ⇒ check the touch flex first.**
 - If the flex is seated and the GT911 still never answers: give TP-RESET a high level — 10 kΩ from
   the TP-RESET net to 3V3, or fit **R40 (0 Ω)** to tie it to EN. With R40 fitted, the firmware must
   stop pulling IO0 low (it would reset the ESP32).
