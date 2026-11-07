@@ -18,11 +18,14 @@ PLATFORMIO_BUILD_FLAGS="-DTOUCH_DIAG" pio run -t upload   # touch reset diagnost
 From an agent shell (no TTY), read the serial log with pyserial from PlatformIO's Python:
 reset with `rts=True` → `False` (`dtr=False`), then read for a few seconds.
 Changing `PLATFORMIO_BUILD_FLAGS` rebuilds the whole framework (~3 min).
+Serial console (115200, type `help`): `status`, `portal`, `companion <url>|auto`, `zone <id>|auto`,
+`token`, `forget-wifi`, `erase-all`, `bringup` (colour bars + touch tracker), `restart`.
+Fonts: `tools/fonts/build_fonts.sh` rebuilds `assets/fonts/` (never `npx` a converter: run-time tiny_ttf).
 
 ## Rules
 
 - Companion API: always send `zone_id`; **never** `POST /api/roon/active-zone` (global).
-- Never put Wi-Fi credentials, tokens or a companion address in the repo — NVS / ignored `secrets.h` only.
+- Never put Wi-Fi credentials, tokens or a companion address in the repo — NVS only (setup portal or console).
 - Never "Roon" in the product name. Never commit screenshots showing real lyrics (copyright).
 - Pin versions (platform, libraries). Keep `src/board/` free of app logic.
 - English for code, comments, docs and commits. No assistant attribution in commits.

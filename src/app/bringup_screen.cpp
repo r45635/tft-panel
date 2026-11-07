@@ -54,7 +54,8 @@ void backlightChanged(lv_event_t *e) {
 
 void show() {
     const board::Info &info = board::info();
-    lv_obj_t *scr = lv_screen_active();
+    lv_obj_t *scr = lv_obj_create(nullptr);
+    lv_screen_load(scr);
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x101418), 0);
     lv_obj_set_style_text_color(scr, lv_color_hex(0xE8ECF0), 0);
     lv_obj_set_scrollable(scr, false);

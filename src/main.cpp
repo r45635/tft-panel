@@ -1,12 +1,104 @@
 // TFT Panel — touch display client of the TextFromTrack Companion.
-// Phase 0: hardware bring-up (display, touch, backlight).
+// Phase 1: Wi-Fi setup portal, companion discovery, synced lyrics.
 #include <Arduino.h>
 #include <lvgl.h>
 
 #include "app/bringup_screen.h"
+#include "app/fonts.h"
+#include "app/ui.h"
 #include "board/board.h"
+#include "net/net.h"
+#include "net/settings.h"
 
-static bool g_ok = false;
+namespace {
+
+bool g_ok = false;
+bool g_bringup = false;
+String g_line;
+
+void printStatus() {
+    net::Snapshot s = net::snapshot();
+    settings::Settings st = settings::get();
+    const board::Info &info = board::info();
+    Serial.printf("[status] %s\n", s.status.c_str());
+    Serial.printf("[status] wifi ssid=\"%s\" ip=%s portal=%d ap=\"%s\"\n", st.wifiSsid.c_str(), s.staIp.c_str(),
+                  s.portalActive, s.apSsid.c_str());
+    Serial.printf("[status] companion=%s (%s) token=%s\n", s.companion.c_str(),
+                  st.companionUrl.length() ? "manual" : "mDNS", st.accessToken.length() ? "set" : "none");
+    Serial.printf("[status] zone=\"%s\" %s state=%s track=\"%s - %s\" pos=%d/%u ms\n", s.zoneName.c_str(),
+                  s.zonePinned ? "pinned" : "auto", s.state.c_str(), s.artist.c_str(), s.title.c_str(),
+                  (int)s.positionAt(millis()), (unsigned)s.durationMs);
+    Serial.printf("[status] lyrics status=%d lines=%u synced=%d offset=%d source=%s\n", (int)s.lyricsStatus,
+                  s.lyrics ? (unsigned)s.lyrics->lines.size() : 0u, s.lyrics ? s.lyrics->synced : 0,
+                  (int)s.offsetMs, s.lyricsSource.c_str());
+    Serial.printf("[status] touch=%d heap int %u KB (min %u) psram %u KB\n", info.touch,
+                  (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
+                  (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024),
+                  (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
+}
+
+void help() {
+    Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | erase-all | bringup | restart");
+}
+
+// Development console on the USB serial port (115200).
+void handleCommand(String line) {
+    line.trim();
+    if (!line.length()) return;
+    int sp = line.indexOf(' ');
+    String cmd = sp < 0 ? line : line.substring(0, sp);
+    String arg = sp < 0 ? "" : line.substring(sp + 1);
+    arg.trim();
+
+    if (cmd == "status") printStatus();
+    else if (cmd == "portal") net::openPortal();
+    else if (cmd == "wifi" && arg.length()) {
+        // The SSID may not contain spaces here; use the setup portal for those.
+        int s2 = arg.indexOf(' ');
+        settings::setWifi(s2 < 0 ? arg : arg.substring(0, s2), s2 < 0 ? "" : arg.substring(s2 + 1));
+        net::reconnect();
+        Serial.println("[cmd] Wi-Fi saved");
+    } else if (cmd == "forget-wifi") {
+        settings::forgetWifi();
+        net::reconnect();
+        Serial.println("[cmd] Wi-Fi forgotten");
+    } else if (cmd == "companion" && arg.length()) {
+        settings::setCompanion(arg == "auto" ? "" : arg);
+        net::reconnect();
+        Serial.printf("[cmd] companion = %s\n", arg.c_str());
+    } else if (cmd == "token" && arg.length()) {
+        settings::setToken(arg == "none" ? "" : arg);
+        Serial.println("[cmd] token saved");
+    } else if (cmd == "zone" && arg.length()) {
+        settings::setZone(arg == "auto" ? "" : arg);
+        net::reconnect();
+        Serial.printf("[cmd] zone = %s\n", arg.c_str());
+    } else if (cmd == "erase-all") {
+        settings::eraseAll();
+        Serial.println("[cmd] settings erased, restarting");
+        delay(200);
+        ESP.restart();
+    } else if (cmd == "bringup") {
+        g_bringup = true;
+        bringup::show();
+    } else if (cmd == "restart") ESP.restart();
+    else help();
+}
+
+void pollSerial() {
+    while (Serial.available()) {
+        char c = Serial.read();
+        if (c == '\n' || c == '\r') {
+            if (g_line.length()) handleCommand(g_line);
+            g_line = "";
+        } else if (g_line.length() < 200) {
+            g_line += c;
+        }
+    }
+}
+
+}  // namespace
 
 void setup() {
     Serial.begin(115200);
@@ -25,10 +117,13 @@ void setup() {
         return;
     }
 
-    bringup::show();
+    if (!fonts::begin()) Serial.println("[tft-panel] ERROR: TTF fonts unavailable, accents will be missing");
+    settings::begin();
+    net::begin();
+    ui::show();
     lv_refr_now(board::display());   // first frame into the framebuffer…
     board::setBacklight(100);         // …then light it (Elecrow: backlight last)
-    Serial.println("[tft-panel] bring-up screen shown");
+    Serial.println("[tft-panel] ui shown; type 'help' on this console for commands");
 }
 
 void loop() {
@@ -36,7 +131,9 @@ void loop() {
         delay(1000);
         return;
     }
-    bringup::tick();
+    pollSerial();
+    if (g_bringup) bringup::tick();
+    else ui::tick();
     lv_timer_handler();
     delay(5);
 }

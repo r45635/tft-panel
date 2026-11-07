@@ -7,3 +7,6 @@
 # Local secrets / per-device settings never go in the repo
 secrets.h
 *.local.ini
+
+# Suggestions written by the PlatformIO extension when a file already exists
+*.optional

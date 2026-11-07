@@ -8,7 +8,7 @@ It is a companion screen for the
 watches your Roon Core and finds the lyrics; the panel displays them line by line, with the cover,
 and gives you play/pause, skip, volume and zone selection at a touch.
 
-> 🚧 **Early development** — phase 0 (hardware bring-up). Not usable yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> 🚧 **Early development** — phase 1 (Wi-Fi setup, companion discovery, synced lyrics). Not usable yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 - Talks only to **your own** companion on your LAN — no cloud, no account, no lyrics stored on the device.
 - Same open HTTP API as the companion's web player.
@@ -36,6 +36,12 @@ pio run                                   # build
 pio run -t upload                         # flash over USB-C (CH340, 460800 baud)
 pio device monitor                        # serial log, 115200
 ```
+
+## First start
+
+With no Wi-Fi configured, the panel opens its own network `TFT-Panel-XXXX` and shows two QR codes:
+scan the first to join it, the second to open the setup page, then pick your Wi-Fi. The companion is
+found automatically on your network (Bonjour); its address and access token can also be entered there.
 
 ## Documentation
 

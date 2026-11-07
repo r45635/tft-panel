@@ -44,8 +44,32 @@ Rules learned on the watch client:
 | Layer | Path | Role |
 |---|---|---|
 | Board | `src/board/` | pins, PCA9557, GT911, RGB panel (`esp_lcd`), LVGL glue, backlight |
-| App | `src/app/` | screens (bring-up now; lyrics, controls, settings next) |
-| Net (next) | `src/net/` | Wi-Fi, mDNS discovery, companion HTTP client, JSON parsing |
+| Net | `src/net/` | settings (NVS), Wi-Fi + setup portal, mDNS discovery, companion polling |
+| App | `src/app/` | lyrics model (LRC), fonts, screens (setup, now playing; bring-up via `bringup`) |
+
+Threads: the **net task** (core 0, next to the Wi-Fi stack) owns every network call and publishes
+an immutable `net::Snapshot` under a mutex, with a version counter. **LVGL runs only in `loop()`**
+(core 1): `ui::tick()` copies the snapshot when the version moves, then extrapolates the position
+every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot never copies them.
+
+### Setup flow
+
+1. No Wi-Fi stored → soft AP `TFT-Panel-XXXX` (WPA2, password generated once per device and printed
+   on screen) + captive DNS. The screen shows a `WIFI:` QR code and a QR code to `http://192.168.4.1/`.
+2. The page (GET = read only) lists scanned networks; `POST /save` validates and stores Wi-Fi,
+   optional companion address and token, then the panel restarts.
+3. Stored Wi-Fi failing for 60 s → the AP comes back next to the station, so a changed password can be fixed.
+
+### Following the playback
+
+- Zone: the pinned one (`zone <id>` on the console) or, by default, keep the current zone while it
+  plays, else the first playing zone. Never `POST /active-zone`.
+- `now-playing` every 500 ms. Roon gives whole seconds, so the local clock is kept while it stays
+  within `[seek, seek + 1.5 s]`, clamped when it leaves, reset on a new track or a seek.
+- Lyrics fetched on each new track (the call waits while the companion resolves them: 20 s
+  timeout); "not found" is retried up to 3 times, once a minute.
+- Every failure becomes the status line (401 → token needed, 503 → Roon Core not connected, transport
+  errors by name). A discovered companion is dropped after 6 failures in a row and looked up again.
 
 ## Key technical choices
 
@@ -59,5 +83,13 @@ Rules learned on the watch client:
   step if lyrics scrolling shows it.
 - **Own minimal GT911 / PCA9557 drivers** (~100 lines) instead of Elecrow's bundled libraries.
 - PCLK starts at 16 MHz (≈ 33 fps); Elecrow runs 15–24 MHz.
-- 4 MB flash: `min_spiffs.csv` = two 1.9 MB OTA slots. Image at phase 0: 752 KB (38 %).
-  Fonts are the budget to watch.
+- **Fonts: Noto Sans TTF rendered at run time by LVGL `tiny_ttf`**, not `lv_font_conv` bitmaps.
+  Two weights subset to Latin + Latin Extended-A + typographic punctuation weigh 23 KB each, against
+  ~220 KB of bitmaps for four fixed sizes, and any size stays possible. Glyphs are cached (256 per
+  font). Built by `tools/fonts/build_fonts.sh` (pinned google/fonts commit and fonttools), embedded
+  with `board_build.embed_files`. Montserrat stays as the fallback for LVGL symbols. CJK can later come
+  from the microSD card the same way.
+- **ArduinoJson 7.4.2** for the companion's JSON.
+- 4 MB flash: `min_spiffs.csv` = two 1.9 MB OTA slots. Image: 752 KB at phase 0, **1.66 MB (85 %)
+  with Wi-Fi, HTTP, web server and mDNS**. Next cuts if needed: log level, the web server (Improv
+  serial instead), or a single-slot layout with OTA from the companion.

@@ -32,6 +32,12 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   **only 0x18** (PCA9557). **GT911 absent** at 0x5D and 0x14 after every reset variant, at 400 and 100 kHz.
   PCA9557 input register reads **IO0 (TP-RESET) = 0 even when released** — see Pitfalls.
   Open: visual check of the image (colour order, drift) and the touch flex.
+- **2026-11-07, later** — `[diag]` re-run: with IO1 (TP-INT) switched to input it reads back
+  whatever was last driven (1 after high, 0 after low), as does IO0: **both touch lines float**, as
+  if nothing were on the flex side. Elecrow's current V3.0 sketch (`example/…/V3.0/…/crowpanel-esp32-7.0.ino`,
+  2026-06) does **no** reset at all (PCA9557 sequence commented out, `TOUCH_GT911_RST -1`); our
+  "all inputs (released)" step covers that variant too — still no GT911. Next: physical check of the
+  touch FPC. Phase 1 firmware (Wi-Fi AP + setup QR) runs on the board meanwhile.
 
 ## Pitfalls
 
@@ -43,8 +49,8 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   turns **all** expander pins into outputs latched high. We copy the code, not the prose.
 - 🪤 The PCA9557 library header claims address 0x41; the board uses **0x18**.
 - 🪤 GPIO0 is both BOOT strapping and LCD PCLK: never hold BOOT while the display runs.
-- 🪤 LVGL's built-in Montserrat fonts are **ASCII only** — no French accents. Lyrics fonts must be
-  generated (`lv_font_conv`).
+- 🪤 LVGL's built-in Montserrat fonts are **ASCII only** — no French accents. Text goes through the
+  embedded Noto Sans (tiny_ttf, `src/app/fonts.cpp`); Montserrat only supplies the LVGL symbols.
 - 🪤 LVGL 9.6 deprecates `lv_obj_add_flag/remove_flag` for common flags (runtime warning): use
   `lv_obj_set_hidden/clickable/scrollable`.
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.

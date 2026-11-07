@@ -26,12 +26,22 @@
 #define LV_USE_PERF_MONITOR_POS LV_ALIGN_BOTTOM_RIGHT
 
 // Fonts. LVGL's built-in Montserrat is ASCII + symbols only: no accents.
-// Lyrics fonts will be generated with lv_font_conv (see docs/ROADMAP.md).
+// Lyrics use the embedded Noto Sans through tiny_ttf; Montserrat stays for symbols.
 #define LV_FONT_MONTSERRAT_14 1
 #define LV_FONT_MONTSERRAT_20 1
 #define LV_FONT_MONTSERRAT_28 1
 #define LV_FONT_MONTSERRAT_48 1
 #define LV_FONT_DEFAULT &lv_font_montserrat_20
+
+// Run-time TTF rendering for the embedded Noto Sans (src/app/fonts.cpp). Glyph and
+// kerning caches are per font; the bitmaps go to PSRAM through the C allocator.
+#define LV_USE_TINY_TTF 1
+#define LV_TINY_TTF_FILE_SUPPORT 0
+#define LV_TINY_TTF_CACHE_GLYPH_CNT 256
+#define LV_TINY_TTF_CACHE_KERNING_CNT 256
+
+// Setup screen: QR codes to join the panel's access point and open its page.
+#define LV_USE_QRCODE 1
 
 #define LV_BUILD_EXAMPLES 0
 #define LV_BUILD_DEMOS 0
