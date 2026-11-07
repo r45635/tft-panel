@@ -91,7 +91,8 @@ void check() {
     HTTPClient http;
     beginHttps(http, client, LATEST_URL);
     http.addHeader("Accept", "application/vnd.github+json");
-    http.useHTTP10(true);
+    // HTTP/1.1 and the whole body first (~7 KB): with HTTP/1.0 GitHub closes the connection
+    // right after the body and the TLS client dropped its tail (IncompleteInput on the stream).
     int code = http.GET();
     if (code == 404) {   // no release published yet
         http.end();
@@ -109,10 +110,11 @@ void check() {
     filter["tag_name"] = true;
     filter["assets"][0]["name"] = true;
     filter["assets"][0]["browser_download_url"] = true;
-    DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    String body = http.getString();
     http.end();
+    DeserializationError err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
     if (err) {
-        fail(String("update check: bad JSON (") + err.c_str() + ")");
+        fail(String("update check: bad JSON (") + err.c_str() + ", " + body.length() + " bytes)");
         return;
     }
     String tag = doc["tag_name"] | "";
