@@ -1,0 +1,261 @@
+#include "board.h"
+
+#include <Wire.h>
+#include <esp_flash.h>
+#include <esp_heap_caps.h>
+#include <esp_lcd_panel_ops.h>
+#include <esp_lcd_panel_rgb.h>
+
+#include <cstring>
+
+#include "board_pins.h"
+#include "gt911.h"
+#include "pca9557.h"
+
+namespace board {
+namespace {
+
+Info g_info;
+Pca9557 g_pca(Wire, PCA9557_ADDR);
+Gt911 g_touch(Wire);
+esp_lcd_panel_handle_t g_panel = nullptr;
+lv_display_t *g_disp = nullptr;
+lv_indev_t *g_indev = nullptr;
+
+volatile bool g_touchDown = false;
+volatile uint16_t g_touchX = 0, g_touchY = 0;
+
+// LVGL renders into two small internal-RAM strips; flush copies them into the
+// PSRAM framebuffer owned by the RGB driver.
+constexpr int DRAW_BUF_LINES = 24;
+
+// Bounce buffers: the RGB DMA reads from internal SRAM, refilled from the PSRAM
+// framebuffer by the CPU. Avoids the image drifting when Wi-Fi/flash load PSRAM.
+// Must divide 800*480: 10 lines = 8000 px → 48 refills per frame.
+constexpr int BOUNCE_BUF_PX = LCD_H_RES * 10;
+
+constexpr int BACKLIGHT_PWM_HZ = 5000;
+constexpr int BACKLIGHT_PWM_BITS = 8;
+
+void scanI2c() {
+    g_info.i2cDevices = "";
+    for (uint8_t a = 0x08; a < 0x78; a++) {
+        Wire.beginTransmission(a);
+        if (Wire.endTransmission() == 0) {
+            char buf[6];
+            snprintf(buf, sizeof buf, "0x%02X", a);
+            if (g_info.i2cDevices.length()) g_info.i2cDevices += ' ';
+            g_info.i2cDevices += buf;
+        }
+    }
+}
+
+// Elecrow's working V3.0 sequence: all expander pins outputs latched high
+// (IO2 LCD-RESET and IO3 LCD-POWER stay released/on), then pulse TP-RESET (IO0)
+// with TP-INT (IO1) low so the GT911 selects address 0x5D, then release INT.
+bool resetTouchViaExpander() {
+    if (!g_pca.present()) return false;
+    bool ok = g_pca.writeReg(Pca9557::REG_POLARITY, 0x00);
+    ok &= g_pca.setOutputs(0xFF);
+    ok &= g_pca.setDirections(0x00);
+    ok &= g_pca.setPin(PCA9557_IO_TP_RESET, false);
+    ok &= g_pca.setPin(PCA9557_IO_TP_INT, false);
+    delay(20);
+    ok &= g_pca.setPin(PCA9557_IO_TP_RESET, true);
+    delay(100);
+    ok &= g_pca.setPinInput(PCA9557_IO_TP_INT, true);
+    return ok;
+}
+
+bool createPanel() {
+    esp_lcd_rgb_panel_config_t cfg;
+    memset(&cfg, 0, sizeof cfg);
+    cfg.clk_src = LCD_CLK_SRC_DEFAULT;
+    cfg.timings.pclk_hz = LCD_PCLK_HZ;
+    cfg.timings.h_res = LCD_H_RES;
+    cfg.timings.v_res = LCD_V_RES;
+    cfg.timings.hsync_pulse_width = LCD_HSYNC_PULSE_WIDTH;
+    cfg.timings.hsync_back_porch = LCD_HSYNC_BACK_PORCH;
+    cfg.timings.hsync_front_porch = LCD_HSYNC_FRONT_PORCH;
+    cfg.timings.vsync_pulse_width = LCD_VSYNC_PULSE_WIDTH;
+    cfg.timings.vsync_back_porch = LCD_VSYNC_BACK_PORCH;
+    cfg.timings.vsync_front_porch = LCD_VSYNC_FRONT_PORCH;
+    cfg.timings.flags.pclk_active_neg = 1;
+    cfg.data_width = 16;
+    cfg.bits_per_pixel = 16;
+    cfg.num_fbs = 1;
+    cfg.bounce_buffer_size_px = BOUNCE_BUF_PX;
+    cfg.dma_burst_size = 64;
+    cfg.hsync_gpio_num = LCD_PIN_HSYNC;
+    cfg.vsync_gpio_num = LCD_PIN_VSYNC;
+    cfg.de_gpio_num = LCD_PIN_DE;
+    cfg.pclk_gpio_num = LCD_PIN_PCLK;
+    cfg.disp_gpio_num = -1;
+    for (int i = 0; i < 16; i++) cfg.data_gpio_nums[i] = LCD_DATA_PINS[i];
+    cfg.flags.fb_in_psram = 1;
+
+    esp_err_t err = esp_lcd_new_rgb_panel(&cfg, &g_panel);
+    if (err != ESP_OK) {
+        g_info.error = String("esp_lcd_new_rgb_panel: ") + esp_err_to_name(err);
+        return false;
+    }
+    err = esp_lcd_panel_reset(g_panel);
+    if (err == ESP_OK) err = esp_lcd_panel_init(g_panel);
+    if (err != ESP_OK) {
+        g_info.error = String("esp_lcd_panel_init: ") + esp_err_to_name(err);
+        return false;
+    }
+    return true;
+}
+
+void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
+    // Synchronous CPU copy into the PSRAM framebuffer (num_fbs = 1).
+    esp_lcd_panel_draw_bitmap(g_panel, area->x1, area->y1, area->x2 + 1, area->y2 + 1, px);
+    lv_display_flush_ready(disp);
+}
+
+void touchReadCb(lv_indev_t *, lv_indev_data_t *data) {
+    TouchPoint p;
+    int n = g_touch.read(p);
+    if (n > 0) {
+        // Raw GT911 coordinates match the panel orientation on this board
+        // (Elecrow's TAMC rotation + map() cancel out). Verified on the bring-up screen.
+        uint16_t x = p.x < LCD_H_RES ? p.x : LCD_H_RES - 1;
+        uint16_t y = p.y < LCD_V_RES ? p.y : LCD_V_RES - 1;
+        g_touchX = x;
+        g_touchY = y;
+        g_touchDown = true;
+        data->point.x = x;
+        data->point.y = y;
+        data->state = LV_INDEV_STATE_PRESSED;
+    } else {
+        g_touchDown = false;
+        data->state = LV_INDEV_STATE_RELEASED;
+    }
+}
+
+bool createLvgl() {
+    lv_init();
+    lv_tick_set_cb([]() -> uint32_t { return millis(); });
+
+    const size_t bufBytes = LCD_H_RES * DRAW_BUF_LINES * sizeof(uint16_t);
+    void *buf1 = heap_caps_malloc(bufBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    void *buf2 = heap_caps_malloc(bufBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!buf1 || !buf2) {
+        g_info.error = "LVGL draw buffers: out of internal RAM";
+        return false;
+    }
+
+    g_disp = lv_display_create(LCD_H_RES, LCD_V_RES);
+    lv_display_set_color_format(g_disp, LV_COLOR_FORMAT_RGB565);
+    lv_display_set_buffers(g_disp, buf1, buf2, bufBytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_flush_cb(g_disp, flushCb);
+
+    if (g_info.touch) {
+        g_indev = lv_indev_create();
+        lv_indev_set_type(g_indev, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(g_indev, touchReadCb);
+        lv_indev_set_display(g_indev, g_disp);
+    }
+    return true;
+}
+
+}  // namespace
+
+bool begin() {
+    // GPIO38 goes to the J4/J7 headers: keep it in a safe state.
+    pinMode(GPIO_D, OUTPUT);
+    digitalWrite(GPIO_D, LOW);
+
+    // Backlight off until the first frame is in the framebuffer.
+    ledcAttach(LCD_PIN_BACKLIGHT, BACKLIGHT_PWM_HZ, BACKLIGHT_PWM_BITS);
+    ledcWrite(LCD_PIN_BACKLIGHT, 0);
+
+    g_info.psramBytes = ESP.getPsramSize();
+    uint32_t flash = 0;
+    if (esp_flash_get_size(nullptr, &flash) == ESP_OK) g_info.flashBytes = flash;
+    if (!psramFound() || g_info.psramBytes < 4 * 1024 * 1024) {
+        g_info.error = "PSRAM missing — the RGB framebuffer needs octal PSRAM (memory_type = qio_opi)";
+        return false;
+    }
+
+    Wire.begin(I2C_PIN_SDA, I2C_PIN_SCL, I2C_FREQ_HZ);
+    g_info.pca9557 = resetTouchViaExpander();
+    scanI2c();
+
+    // Diagnostic: expander state after the sequence, then wait for the GT911.
+    uint8_t pin = 0, pout = 0, pcfg = 0;
+    g_pca.readReg(Pca9557::REG_INPUT, pin);
+    g_pca.readReg(Pca9557::REG_OUTPUT, pout);
+    g_pca.readReg(Pca9557::REG_CONFIG, pcfg);
+    Serial.printf("[board] pca9557 in=0x%02X out=0x%02X cfg=0x%02X\n", pin, pout, pcfg);
+#ifdef TOUCH_DIAG
+    {
+        auto rd = [](const char *tag) {
+            uint8_t i = 0, o = 0, c = 0;
+            g_pca.readReg(Pca9557::REG_INPUT, i);
+            g_pca.readReg(Pca9557::REG_OUTPUT, o);
+            g_pca.readReg(Pca9557::REG_CONFIG, c);
+            delay(300);
+            scanI2c();
+            Serial.printf("[diag] %-28s in=0x%02X out=0x%02X cfg=0x%02X i2c=[%s]\n", tag, i, o, c,
+                          g_info.i2cDevices.c_str());
+        };
+        g_pca.setDirections(0xFF); rd("all inputs (released)");
+        // INT high during reset -> GT911 should pick 0x14
+        g_pca.setOutputs(0xFF); g_pca.setDirections(0xFC);   // IO0, IO1 outputs, high
+        g_pca.setPin(PCA9557_IO_TP_RESET, false); delay(20);
+        g_pca.setPin(PCA9557_IO_TP_RESET, true); delay(100);
+        g_pca.setPinInput(PCA9557_IO_TP_INT, true); rd("reset with INT high");
+        // Long reset low then release, INT low (0x5D)
+        g_pca.setOutputs(0xFC); g_pca.setDirections(0x00); delay(200);
+        rd("IO0+IO1 held low");
+        g_pca.setPin(PCA9557_IO_TP_RESET, true); delay(200);
+        g_pca.setPinInput(PCA9557_IO_TP_INT, true); rd("released after 200ms");
+        Wire.setClock(100000); rd("same at 100 kHz");
+        Wire.setClock(I2C_FREQ_HZ);
+    }
+#endif
+    bool found = false;
+    for (int i = 0; i < 20 && !found; i++) {
+        found = g_touch.begin(GT911_ADDR, GT911_ADDR_ALT);
+        if (!found) delay(50);
+        if (found || i % 5 == 4) {
+            scanI2c();
+            Serial.printf("[board] t+%dms i2c=[%s]\n", 100 + i * 50, g_info.i2cDevices.c_str());
+        }
+    }
+
+    if (found) {
+        g_info.touch = true;
+        g_info.touchAddr = g_touch.address();
+        if (!g_touch.readInfo(g_info.touchId, g_info.touchFw, g_info.touchXRes, g_info.touchYRes)) {
+            g_info.error = "GT911 answered its address but not the info registers";
+        }
+    } else {
+        g_info.error = g_info.pca9557 ? "GT911 not found on I2C (0x5D / 0x14)"
+                                      : "PCA9557 (0x18) not found: touch reset not done";
+    }
+
+    if (!createPanel()) return false;
+    if (!createLvgl()) return false;
+    return true;
+}
+
+const Info &info() { return g_info; }
+
+lv_display_t *display() { return g_disp; }
+
+bool lastTouch(uint16_t &x, uint16_t &y) {
+    x = g_touchX;
+    y = g_touchY;
+    return g_touchDown;
+}
+
+void setBacklight(uint8_t percent) {
+    if (percent > 100) percent = 100;
+    const uint32_t maxDuty = (1u << BACKLIGHT_PWM_BITS) - 1;
+    ledcWrite(LCD_PIN_BACKLIGHT, maxDuty * percent / 100);
+}
+
+}  // namespace board
