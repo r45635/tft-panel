@@ -33,6 +33,20 @@ at 115200 baud, which the board's CH340 handles (921600 fails on this board).
 - First boot of the new image: confirmed once Wi-Fi is up and the companion answers; if not
   within 3 minutes, the bootloader rolls back to the previous image.
 
+## Testing an update without publishing
+
+The local upload page exercises the same install and rollback path as a GitHub update:
+
+1. `GET http://tft-panel-xxxx.local/update` (or the panel's IP) — the panel shows a 6-digit code.
+2. `curl -F firmware=@.pio/build/crowpanel7/firmware.bin "http://<panel>/update?code=<code>"`
+   (~30 s for 1.8 MB). The log shows `first boot of …: rollback in 3 min…`, then `confirmed working`.
+3. Rollback: put `#define OTA_TEST_NEVER_HEALTHY 1` at the top of `src/net/ota.cpp` (temporarily —
+   `PLATFORMIO_SRC_BUILD_FLAGS` did not reach it), build, upload: after 3 min the log shows
+   `never got healthy` and the panel boots the previous image, without the "first boot" line.
+   Verified 2026-11-07.
+
+The GitHub download path (TLS stream + SHA-256) is only exercised by a real release.
+
 ## Rules
 
 - The partition table (`partitions.csv`) is final: an OTA cannot change it.

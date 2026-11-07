@@ -302,6 +302,9 @@ void tick(bool wifiUp) {
 }
 
 void markHealthy() {
+#ifdef OTA_TEST_NEVER_HEALTHY   // test build for the rollback path (PLATFORMIO_SRC_BUILD_FLAGS)
+    return;
+#endif
     if (!g_pendingVerify) return;
     g_pendingVerify = false;
     if (g_deadline) esp_timer_stop(g_deadline);

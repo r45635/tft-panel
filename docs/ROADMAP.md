@@ -41,9 +41,16 @@
       views, saved choice, automatic when a track has no lyrics
 - [x] Flickering dots on the LCD: gone (fewer redraws, 20-line bounce buffers, 64-byte cache lines) — confirmed by eye
 
+## Phase 2b — product basics (done 2026-11-07, waiting for the first release)
+
+- [x] Final partition table (2 × 1984 KB OTA slots + coredump), firmware version from git tags
+- [x] OTA from GitHub releases: daily check, header badge, on-screen confirmation, SHA-256, rollback
+- [x] Local upload page with an on-screen code; install + rollback verified on the board
+- [x] Release script + browser installer (ESP Web Tools on GitHub Pages) — first release not published yet
+- [x] Settings screen, idle clock (SNTP + time zone), volume slider + mute, per-track lyrics offset
+
 ## Phase 3 — polish
 
-- OTA updates (from GitHub releases or the companion)
 - Companion push channel (SSE/WebSocket) instead of polling
 - Wider scripts (CJK…) from the microSD card (tiny_ttf)
 - Double framebuffer + vsync if tearing shows; PCLK tuning
