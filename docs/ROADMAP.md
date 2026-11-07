@@ -19,7 +19,9 @@
       extrapolated locally and clamped to Roon's whole-second window
 - [x] Lyrics fonts with accents: Noto Sans Latin + Latin Extended-A, rendered at run time (tiny_ttf)
 - [x] Serial console for development (`help`)
-- [ ] End-to-end check on the real network (needs the Wi-Fi set once from a phone)
+- [x] End-to-end on the real network: phone setup, mDNS, zone, synced lyrics, track change
+- [x] Internal RAM kept for Wi-Fi: LVGL and JSON allocate in PSRAM (steady ~120 KB free)
+- [ ] Visual check of the lyrics screen by eye (layout, accents, timing feel)
 - [ ] Flash budget: the image is at 85 % of an OTA slot (Wi-Fi + HTTP + web server ≈ 900 KB)
 
 ## Phase 2 — lyrics and controls UI

@@ -38,6 +38,10 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   2026-06) does **no** reset at all (PCA9557 sequence commented out, `TOUCH_GT911_RST -1`); our
   "all inputs (released)" step covers that variant too — still no GT911. Next: physical check of the
   touch FPC. Phase 1 firmware (Wi-Fi AP + setup QR) runs on the board meanwhile.
+- **2026-11-07, phase 1 on the bench** — provisioned from an iPhone through the setup AP
+  (`POST /save` reached; the first attempt left no trace before request logging existed). Joined
+  Wi-Fi at -36..-46 dBm, found the companion by mDNS, followed the playing zone, loaded synced lyrics,
+  followed a track change. Two OOM aborts before the PSRAM allocator fix (see Pitfalls), none after.
 
 ## Pitfalls
 
@@ -49,6 +53,13 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   turns **all** expander pins into outputs latched high. We copy the code, not the prose.
 - 🪤 The PCA9557 library header claims address 0x41; the board uses **0x18**.
 - 🪤 GPIO0 is both BOOT strapping and LCD PCLK: never hold BOOT while the display runs.
+- 🪤 **Internal RAM is the scarce resource, not PSRAM.** Blocks under 4 KB
+  (`CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`) go to internal RAM even with 7 MB of PSRAM free. With
+  LVGL on the C allocator, the tiny_ttf glyph cache (~1.3 KB per 44 px glyph) ate the ~70 KB the
+  Wi-Fi stack needs: `abort()` in `esp_phy_enable` / mDNS a few minutes into a song, and every HTTP
+  call reported "connection refused" (HTTPClient's name for any failed connect). Fix: LVGL allocates
+  in PSRAM (`src/board/lv_mem_psram.c`), ArduinoJson too, JSON parsed from the socket. Internal RAM
+  free while playing went from 0 to a steady ~120 KB; the net task warns below 20 KB.
 - 🪤 LVGL's built-in Montserrat fonts are **ASCII only** — no French accents. Text goes through the
   embedded Noto Sans (tiny_ttf, `src/app/fonts.cpp`); Montserrat only supplies the LVGL symbols.
 - 🪤 LVGL 9.6 deprecates `lv_obj_add_flag/remove_flag` for common flags (runtime warning): use

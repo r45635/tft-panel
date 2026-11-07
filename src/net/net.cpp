@@ -92,6 +92,19 @@ const char *disconnectReasonText(uint8_t r) {
 
 // ---- HTTP ----
 
+// JSON documents in PSRAM: internal RAM is reserved for the Wi-Fi/lwIP stack.
+struct PsramAllocator : ArduinoJson::Allocator {
+    void *allocate(size_t n) override { return heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); }
+    void deallocate(void *p) override { heap_caps_free(p); }
+    void *reallocate(void *p, size_t n) override {
+        return heap_caps_realloc(p, n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+};
+ArduinoJson::Allocator *psram() {
+    static PsramAllocator a;
+    return &a;
+}
+
 struct HttpResult {
     int code = 0;          // HTTP status, or < 0 for a transport error
     String errorCode;      // companion error.code when present
@@ -112,15 +125,15 @@ HttpResult getJson(const String &path, JsonDocument &doc, uint32_t timeoutMs) {
     }
     String token = settings::get().accessToken;
     if (token.length()) http.addHeader("Authorization", "Bearer " + token);
+    http.useHTTP10(true);   // no chunked encoding: parse straight from the socket, no body String
     r.code = http.GET();
     if (r.code < 0) {
         r.message = HTTPClient::errorToString(r.code);
         http.end();
         return r;
     }
-    String body = http.getString();
+    DeserializationError err = deserializeJson(doc, http.getStream());
     http.end();
-    DeserializationError err = deserializeJson(doc, body);
     if (err) {
         r.message = String("bad JSON (") + err.c_str() + ")";
         if (r.code == 200) r.code = -101;
@@ -192,7 +205,7 @@ bool discover() {
 // Picks the zone to follow: the pinned one if it exists, else keep the current zone
 // while it plays, else the first playing zone, else the first with a track, else the first.
 bool refreshZones() {
-    JsonDocument doc;
+    JsonDocument doc(psram());
     HttpResult r = getJson("/api/roon/zones", doc, 4000);
     if (r.code != 200) {
         reportCompanionFailure("zones", r);
@@ -258,7 +271,7 @@ void clearTrack() {
 
 void fetchLyrics(const String &zoneId) {
     update([](Snapshot &s) { s.lyricsStatus = LyricsStatus::Loading; });
-    JsonDocument doc;
+    JsonDocument doc(psram());
     // The companion resolves lyrics before answering (cache, tags, LRCLIB…): allow time.
     HttpResult r = getJson("/api/lyrics/current?zone_id=" + zoneId, doc, 20000);
     g_lyricsFetchedAt = millis();
@@ -305,7 +318,7 @@ void pollNowPlaying() {
     xSemaphoreGive(g_lock);
     if (!zoneId.length()) return;
 
-    JsonDocument doc;
+    JsonDocument doc(psram());
     uint32_t sentAt = millis();
     HttpResult r = getJson("/api/roon/now-playing?zone_id=" + zoneId, doc, 3000);
     uint32_t now = millis();
@@ -461,6 +474,13 @@ void task(void *) {
         }
 
         uint32_t now = millis();
+        static uint32_t lastHeapWarn = 0;
+        size_t freeInternal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+        if (freeInternal < 20 * 1024 && now - lastHeapWarn > 30000) {
+            lastHeapWarn = now;
+            Serial.printf("[net] WARNING: internal RAM low: %u KB free (min %u KB)\n", (unsigned)(freeInternal / 1024),
+                          (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
+        }
         if (!g_baseUrl.length()) {
             if (now - lastDiscovery < DISCOVERY_PERIOD_MS && lastDiscovery) {
                 delay(20);

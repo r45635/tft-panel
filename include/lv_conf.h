@@ -5,8 +5,9 @@
 
 #define LV_COLOR_DEPTH 16
 
-// Use the C library allocator: on ESP32 with PSRAM, large blocks go to PSRAM.
-#define LV_USE_STDLIB_MALLOC LV_STDLIB_CLIB
+// All LVGL allocations in PSRAM (src/board/lv_mem_psram.c): with the C allocator,
+// blocks under 4 KB stay in internal RAM and the glyph caches starved the Wi-Fi stack.
+#define LV_USE_STDLIB_MALLOC LV_STDLIB_CUSTOM
 #define LV_USE_STDLIB_STRING LV_STDLIB_CLIB
 #define LV_USE_STDLIB_SPRINTF LV_STDLIB_CLIB
 

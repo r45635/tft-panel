@@ -52,10 +52,11 @@ const char PAGE_HEAD[] PROGMEM = R"(<!doctype html><html><head><meta charset="ut
 h1{font-size:1.4rem}label{display:block;margin-top:1rem}input{width:100%;box-sizing:border-box;padding:.6rem;
 font-size:1rem;border-radius:.4rem;border:1px solid #3a4652;background:#1c232b;color:#e8ecf0}
 button{margin-top:1.4rem;width:100%;padding:.8rem;font-size:1.05rem;border:0;border-radius:.4rem;background:#40c4ff;color:#101418}
-small{color:#9aa6b2}.err{color:#ffb0a0}</style></head><body>)";
+small{color:#9aa6b2}.err{color:#101418;background:#ffb0a0;padding:.8rem;border-radius:.4rem}</style></head><body>)";
 
-void sendForm(const String &error) {
+void sendForm(const String &error, const String &typedSsid = String()) {
     settings::Settings s = settings::get();
+    if (typedSsid.length()) s.wifiSsid = typedSsid;
     String h = FPSTR(PAGE_HEAD);
     h += "<h1>TFT Panel setup</h1>";
     if (error.length()) h += "<p class=err>" + esc(error) + "</p>";
@@ -84,11 +85,17 @@ void handleSave() {
     settings::Settings cur = settings::get();
     if (!pass.length() && ssid == cur.wifiSsid) pass = cur.wifiPass;   // "unchanged if left empty"
 
-    if (!ssid.length() || ssid.length() > 32) return sendForm("The network name must be 1 to 32 characters.");
-    if (pass.length() && (pass.length() < 8 || pass.length() > 63))
-        return sendForm("A WPA password is 8 to 63 characters (leave it empty for an open network).");
-    if (companion.length() && !companion.startsWith("http://"))
-        return sendForm("The companion address starts with http:// (for example http://192.168.1.20:3888).");
+    String error;
+    if (!ssid.length() || ssid.length() > 32) error = "The network name must be 1 to 32 characters.";
+    else if (pass.length() && (pass.length() < 8 || pass.length() > 63))
+        error = "A WPA password is 8 to 63 characters (leave it empty for an open network).";
+    else if (companion.length() && !companion.startsWith("http://"))
+        error = "The companion address starts with http:// (for example http://192.168.1.20:3888).";
+    if (error.length()) {
+        Serial.printf("[portal] save rejected: %s (args=%d, ssid len %u, pass len %u)\n", error.c_str(),
+                      g_http.args(), ssid.length(), pass.length());
+        return sendForm(error, ssid);
+    }
     while (companion.endsWith("/")) companion.remove(companion.length() - 1);
 
     settings::setWifi(ssid, pass);
@@ -103,7 +110,15 @@ void handleSave() {
     g_restartPending = true;
 }
 
+void logRequest() {
+    static const char *names[] = {"ANY", "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"};
+    int m = (int)g_http.method();
+    Serial.printf("[portal] %s %s%s args=%d\n", (m >= 0 && m < 8) ? names[m] : "?", g_http.hostHeader().c_str(),
+                  g_http.uri().c_str(), g_http.args());
+}
+
 void redirectHome() {
+    logRequest();
     g_http.sendHeader("Location", "http://" + WiFi.softAPIP().toString() + "/", true);
     g_http.send(302, "text/plain", "");
 }
@@ -122,11 +137,25 @@ void start(const String &ssid, const String &pass) {
     g_dns.setErrorReplyCode(DNSReplyCode::NoError);
     g_dns.start(53, "*", ip);   // captive: every name resolves to the panel
 
-    g_http.on("/", HTTP_GET, [] { sendForm(""); });
-    g_http.on("/save", HTTP_POST, handleSave);
+    g_http.on("/", HTTP_GET, [] {
+        logRequest();
+        sendForm("");
+    });
+    g_http.on("/save", HTTP_POST, [] {
+        logRequest();
+        handleSave();
+    });
     g_http.onNotFound(redirectHome);   // generate_204, hotspot-detect.html… → captive page
     g_http.begin();
 
+    static bool eventsHooked = false;
+    if (!eventsHooked) {
+        eventsHooked = true;
+        WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) { Serial.println("[portal] a device joined the AP"); },
+                     ARDUINO_EVENT_WIFI_AP_STACONNECTED);
+        WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) { Serial.println("[portal] a device left the AP"); },
+                     ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
+    }
     WiFi.scanNetworks(true);
     g_lastScanMs = millis();
     g_active = true;
@@ -150,7 +179,7 @@ void loop() {
     g_dns.processNextRequest();
     g_http.handleClient();
     collectScan();
-    if (millis() - g_lastScanMs > 30000 && WiFi.scanComplete() == -2) {
+    if (millis() - g_lastScanMs > 30000 && WiFi.scanComplete() == -2 && WiFi.softAPgetStationNum() == 0) {
         WiFi.scanNetworks(true);
         g_lastScanMs = millis();
     }

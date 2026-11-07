@@ -90,6 +90,10 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
   with `board_build.embed_files`. Montserrat stays as the fallback for LVGL symbols. CJK can later come
   from the microSD card the same way.
 - **ArduinoJson 7.4.2** for the companion's JSON.
+- **Memory**: internal RAM is kept for the Wi-Fi/lwIP stack and the two LVGL draw strips. LVGL
+  (objects, texts, glyph caches) uses a PSRAM allocator (`LV_STDLIB_CUSTOM`,
+  `src/board/lv_mem_psram.c`); ArduinoJson documents use a PSRAM allocator and parse straight from the
+  socket (HTTP/1.0, no body `String`).
 - 4 MB flash: `min_spiffs.csv` = two 1.9 MB OTA slots. Image: 752 KB at phase 0, **1.66 MB (85 %)
   with Wi-Fi, HTTP, web server and mDNS**. Next cuts if needed: log level, the web server (Improv
   serial instead), or a single-slot layout with OTA from the companion.
