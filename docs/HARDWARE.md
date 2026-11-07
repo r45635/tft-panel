@@ -103,6 +103,14 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   failed boot and rolls the update back (v0.1.2 could never install over the air because of it).
   Then the reset waits until the app confirms the image. Intentional restarts all go through
   `board::restart()` (a marked system reset), so updates from v0.1.3 on boot clean at once.
+- 🪤 **Image shifted / jumping after flash writes** (2026-11-07): the RGB LCD interrupt was not
+  IRAM-safe, so every flash write (NVS settings, Wi-Fi calibration, OTA) stalled the bounce-buffer
+  refill; the driver's VSYNC resync only catches a lag of more than two bounce buffers, so a
+  20-line shift could stay. Fix: `CONFIG_SPIRAM_XIP_FROM_PSRAM` (code + rodata copied to PSRAM at
+  boot, ~1.8 MB) + `CONFIG_LCD_RGB_ISR_IRAM_SAFE`: 20 NVS writes in 20 s, image steady, rendering
+  not slower. Works with the v0.1.x bootloader (OTA never replaces it).
+- The panel's white is cool (bluish), seen by Vincent with neutral UI colours. `board::setWarmth()`
+  scales green/blue in the flush through a 4 KB G+B table (~5 ms per full-stage frame, O2 + IRAM).
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.
 
 ## Touch diagnostic
