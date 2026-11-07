@@ -7,7 +7,7 @@
 #   tft-panel-<tag>.bin          app image, installed over the air
 #   tft-panel-<tag>.sha256       its SHA-256 ("<hex>  <file>"), checked before the image is committed
 #   tft-panel-<tag>-factory.bin  bootloader + partitions + app, flashed at 0x0 by the web installer
-# The web installer (tools/web-installer) goes to the gh-pages branch, latest version only.
+# The website (docs + browser installer, tools/site.sh) goes to the gh-pages branch, latest version only.
 # See docs/RELEASING.md.
 set -euo pipefail
 
@@ -46,16 +46,16 @@ trap - ERR
 gh release create "$tag" --repo "$repo" --title "TFT Panel $tag" --notes "$notes" \
     "$out/tft-panel-$tag.bin" "$out/tft-panel-$tag.sha256" "$out/tft-panel-$tag-factory.bin"
 
-# Web installer: an orphan gh-pages commit holding only the latest version (no binary history).
-site="$(mktemp -d)"
-sed "s/{{VERSION}}/$tag/g" tools/web-installer/index.html > "$site/index.html"
+# Website (docs + browser installer) on gh-pages: tools/site.sh with this release's firmware.
 # Four parts, not the merged factory image: the merged one fills the gap over NVS (0x9000) with
 # 0xFF, which would wipe the Wi-Fi and settings of a panel that is only being reinstalled.
-cp .pio/build/crowpanel7/bootloader.bin "$site/bootloader.bin"
-cp .pio/build/crowpanel7/partitions.bin "$site/partitions.bin"
-cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" "$site/boot_app0.bin"
-cp "$out/tft-panel-$tag.bin" "$site/"
-cat > "$site/manifest.json" <<EOF
+fw="$out/site-fw"
+mkdir -p "$fw"
+cp .pio/build/crowpanel7/bootloader.bin "$fw/bootloader.bin"
+cp .pio/build/crowpanel7/partitions.bin "$fw/partitions.bin"
+cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" "$fw/boot_app0.bin"
+cp "$out/tft-panel-$tag.bin" "$fw/"
+cat > "$fw/manifest.json" <<MANIFEST
 {
   "name": "TFT Panel",
   "version": "$tag",
@@ -69,16 +69,6 @@ cat > "$site/manifest.json" <<EOF
     ] }
   ]
 }
-EOF
-touch "$site/.nojekyll"
-(
-    cd "$site"
-    git init -q -b gh-pages
-    git add -A
-    git -c user.name="$(git -C "$root" config user.name)" -c user.email="$(git -C "$root" config user.email)" \
-        commit -q -m "Web installer for $tag"
-    git push -q --force "$(git -C "$root" remote get-url origin)" gh-pages
-)
-rm -rf "$site"
+MANIFEST
+tools/site.sh "$fw"
 echo "released $tag: https://github.com/$repo/releases/tag/$tag"
-echo "web installer: https://r45635.github.io/tft-panel/ (GitHub Pages, branch gh-pages)"

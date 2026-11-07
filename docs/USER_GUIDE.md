@@ -19,7 +19,7 @@ zones and cover are invented.*
 
 ## 1. Install the firmware (once)
 
-1. On a computer, open the [web installer](https://r45635.github.io/tft-panel/) in **Chrome or Edge**.
+1. On a computer, open the [web installer](https://r45635.github.io/tft-panel/install.html) in **Chrome or Edge**.
 2. Connect the panel with the USB-C cable, click **Install**, pick the serial port (CH340 /
    usbserial) and confirm. It takes about 3 minutes.
 3. On Windows, if no port shows up, install the

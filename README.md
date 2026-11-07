@@ -36,7 +36,7 @@ Details and pitfalls: [docs/HARDWARE.md](docs/HARDWARE.md).
 ## Install
 
 **First time — from your browser, no tools to install.** Open the
-[web installer](https://r45635.github.io/tft-panel/) in Chrome or Edge on a computer, connect the
+[web installer](https://r45635.github.io/tft-panel/install.html) in Chrome or Edge on a computer, connect the
 panel's USB-C port, click *Install* and pick the serial port (about 3 minutes). On Windows you may
 need the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html).
 

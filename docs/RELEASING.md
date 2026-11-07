@@ -18,13 +18,15 @@ tag. It then:
    - `tft-panel-<tag>-factory.bin` — bootloader + partition table + app at 0x0 (PlatformIO's
      `firmware.factory.bin`), for the web installer;
 3. pushes the tag and creates the GitHub release with these assets;
-4. force-pushes an orphan `gh-pages` commit with `index.html` (from `tools/web-installer/`),
+4. publishes the website with `tools/site.sh` (landing page, user guide rendered from
+   `docs/USER_GUIDE.md`, installer page): an orphan `gh-pages` commit with the HTML,
    `manifest.json`, bootloader, partition table, `boot_app0` and the app — latest version only,
    so binaries never pile up in git. Four parts rather than the merged factory image: the merged
    image fills the NVS area (0x9000) with 0xFF and would wipe a reinstalled panel's Wi-Fi and
    settings (the installer's own "erase" choice still wipes everything for a fresh start).
 
-GitHub Pages serves `gh-pages` at <https://r45635.github.io/tft-panel/>. ESP Web Tools needs the
+GitHub Pages serves `gh-pages` at <https://r45635.github.io/tft-panel/>. To publish doc changes
+without a release, run `tools/site.sh` alone: it keeps the firmware already on the site. ESP Web Tools needs the
 image on the same origin (release assets have no CORS headers), hence the copy there. It flashes
 at 115200 baud, which the board's CH340 handles (921600 fails on this board).
 

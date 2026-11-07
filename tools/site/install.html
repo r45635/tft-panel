@@ -22,11 +22,13 @@
   esp-web-install-button button, .install button { font-size: 1.1em; padding: 12px 28px; border-radius: 24px;
     border: 0; background: var(--accent); color: #fff; cursor: pointer; }
   a { color: var(--accent); }
+  nav { margin: 0 0 28px; color: var(--dim); }
   small, .dim { color: var(--dim); }
 </style>
 </head>
 <body>
 <main>
+  <nav><a href="index.html">TFT Panel</a> · <a href="guide.html">User guide</a> · <b>Install</b></nav>
   <h1>Install TFT Panel</h1>
   <p class="version">Firmware {{VERSION}} for the Elecrow CrowPanel 7" (DIS08070H, board V3.0)</p>
 
@@ -56,6 +58,7 @@
     <b>After this, no cable needed.</b><br>
     The panel checks for new versions by itself and shows <i>Update</i> at the top of the screen: tap it to
     install. If an update ever fails to start, the panel goes back to the previous version.
+    The <a href="guide.html">user guide</a> explains the rest.
   </div>
 
   <p class="dim"><small>TFT Panel is open source (MIT):
