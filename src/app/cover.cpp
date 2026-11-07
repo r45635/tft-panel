@@ -36,13 +36,19 @@ size_t inFunc(JDEC *jd, uint8_t *buf, size_t n) {
     return n;
 }
 
+// LVGL's TJpgDec writes B, G, R (LVGL's RGB888 memory order), not R, G, B: swap here, or every
+// real cover comes out with red and blue exchanged (orange covers turned blue).
 int outFunc(JDEC *jd, void *bitmap, JRECT *r) {
     Decode *d = (Decode *)jd->device;
     const uint8_t *src = (const uint8_t *)bitmap;
     int bw = r->right - r->left + 1;
     for (int y = r->top; y <= r->bottom; y++) {
-        memcpy(d->rgb->px + ((size_t)y * d->rgb->w + r->left) * 3, src, (size_t)bw * 3);
-        src += bw * 3;
+        uint8_t *dst = d->rgb->px + ((size_t)y * d->rgb->w + r->left) * 3;
+        for (int x = 0; x < bw; x++, src += 3, dst += 3) {
+            dst[0] = src[2];
+            dst[1] = src[1];
+            dst[2] = src[0];
+        }
     }
     return 1;
 }

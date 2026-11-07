@@ -119,6 +119,9 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   On the colour test card (Settings, console `colours`) Vincent picked 76 % (blue -34 %, green -9 %):
   default 75 %. Screenshots read the corrected framebuffer, so they look yellowish (`warmth 0` for
   documentation captures).
+- 🪤 **Covers with red and blue swapped** (until v0.1.6): LVGL's bundled TJpgDec writes B, G, R (LVGL's
+  RGB888 memory order). `cover.cpp` swaps to R, G, B in its output callback. Check against the
+  companion's own JPEG (`/api/roon/image/<key>`) with `warmth 0`, not by eye on the bluish panel.
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.
 
 ## Touch diagnostic

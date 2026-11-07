@@ -76,7 +76,8 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
 - Commands (control, volume, zone) go through a FreeRTOS queue to the net task, so a tap never
   blocks the UI: `POST /api/roon/control {action, zone_id}`, `POST /api/roon/volume {output_id,
   how: relative_step, value: ±1}` on every output of the zone. A failure shows in red for 5 s.
-- Cover (`src/app/cover.*`): on an `image_key` change, one `GET /api/roon/image/<key>?w=384&h=384`
+- Cover (`src/app/cover.*`, built by its own task as soon as the track changes, in parallel with
+  the lyrics; a request superseded by a newer track is dropped): one `GET /api/roon/image/<key>?w=384&h=384`
   (20–90 KB; the companion fits it, so a non-square cover comes back e.g. 384×350), decoded by
   TJpgDec into the cover view's picture. An area-average copy ≤ 56 px gives the thumbnail left of
   the title and, unless `backdrop off`, the backdrop: 2 box-blur passes, bilinear scale to cover

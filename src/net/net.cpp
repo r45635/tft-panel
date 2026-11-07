@@ -178,7 +178,8 @@ HttpResult getJson(const String &path, JsonDocument &doc, uint32_t timeoutMs) {
 }
 
 // GETs a binary body into a PSRAM buffer the caller frees (heap_caps_free).
-HttpResult getBytes(const String &path, uint8_t *&buf, size_t &len, size_t maxLen, uint32_t timeoutMs) {
+HttpResult getBytes(const String &base, const String &path, uint8_t *&buf, size_t &len, size_t maxLen,
+                    uint32_t timeoutMs) {
     HttpResult r;
     buf = nullptr;
     len = 0;
@@ -187,7 +188,7 @@ HttpResult getBytes(const String &path, uint8_t *&buf, size_t &len, size_t maxLe
     http.setConnectTimeout(3000);
     http.setTimeout(timeoutMs);
     http.useHTTP10(true);
-    if (!http.begin(client, g_baseUrl + path)) {
+    if (!http.begin(client, base + path)) {
         r.code = -100;
         r.message = "bad companion URL";
         return r;
@@ -242,11 +243,12 @@ void setCover(cover::Cover c) {
 }
 
 // Fetches the cover at `px` and builds the pictures. false with `why` on failure.
-bool loadCover(const String &imageKey, int px, bool withBig, cover::Cover &c, size_t &len, String &why) {
+bool loadCover(const String &base, const String &imageKey, int px, bool withBig, cover::Cover &c, size_t &len,
+               String &why) {
     uint8_t *jpeg = nullptr;
     len = 0;
     String q = "?w=" + String(px) + "&h=" + String(px);
-    HttpResult r = getBytes("/api/roon/image/" + imageKey + q, jpeg, len, 256 * 1024, 5000);
+    HttpResult r = getBytes(base, "/api/roon/image/" + imageKey + q, jpeg, len, 256 * 1024, 5000);
     if (r.code != 200 || !jpeg) {
         why = "not loaded: " + r.message;
         return false;
@@ -257,30 +259,61 @@ bool loadCover(const String &imageKey, int px, bool withBig, cover::Cover &c, si
     return ok;
 }
 
+// The cover is fetched and built (~1-1.5 s) by its own task, as soon as the track changes,
+// while the net task goes on with the lyrics (which can take seconds). A request carries a
+// generation: a cover finished after the track changed again is dropped.
+struct CoverRequest {
+    uint32_t gen;
+    char base[96];
+    char key[96];
+};
+QueueHandle_t g_coverQueue = nullptr;
+volatile uint32_t g_coverGen = 0;
+
 // One fetch at the big size feeds the cover view, the thumbnail and the backdrop. If the big
 // one fails (e.g. a progressive JPEG), the small one still gives thumbnail and backdrop.
-void fetchCover(const String &imageKey) {
-    g_imageKey = imageKey;
-    if (!imageKey.length()) {
-        setCover({});
-        return;
-    }
+void buildCover(const CoverRequest &rq) {
+    String base = rq.base, key = rq.key;
     uint32_t t0 = millis();
     cover::Cover c;
     size_t len = 0;
     String why;
-    if (!loadCover(imageKey, COVER_BIG_PX, true, c, len, why)) {
+    bool ok = loadCover(base, key, COVER_BIG_PX, true, c, len, why);
+    if (!ok) {
         Serial.printf("[net] WARNING: big cover %s, trying the small one\n", why.c_str());
-        if (!loadCover(imageKey, COVER_THUMB_PX, false, c, len, why)) {
-            Serial.printf("[net] WARNING: cover %s\n", why.c_str());
-            setCover({});
-            return;
-        }
+        ok = loadCover(base, key, COVER_THUMB_PX, false, c, len, why);
+        if (!ok) Serial.printf("[net] WARNING: cover %s\n", why.c_str());
+    }
+    if (rq.gen != g_coverGen) return;   // the track changed meanwhile
+    if (!ok) {
+        setCover({});
+        return;
     }
     Serial.printf("[net] cover ready (%u bytes JPEG, big %dx%d, thumb %dx%d, backdrop %s, %u ms)\n", (unsigned)len,
                   c.big ? c.big->w : 0, c.big ? c.big->h : 0, c.thumb->w, c.thumb->h, c.backdrop ? "yes" : "off",
                   (unsigned)(millis() - t0));
     setCover(std::move(c));
+}
+
+void coverTask(void *) {
+    CoverRequest rq;
+    for (;;)
+        if (xQueueReceive(g_coverQueue, &rq, portMAX_DELAY) == pdTRUE) buildCover(rq);
+}
+
+// Net task: asks for the cover of `imageKey` (empty = no cover). The latest request wins.
+void fetchCover(const String &imageKey) {
+    g_imageKey = imageKey;
+    uint32_t gen = ++g_coverGen;
+    if (!imageKey.length()) {
+        setCover({});
+        return;
+    }
+    CoverRequest rq{};
+    rq.gen = gen;
+    strlcpy(rq.base, g_baseUrl.c_str(), sizeof rq.base);
+    strlcpy(rq.key, imageKey.c_str(), sizeof rq.key);
+    xQueueOverwrite(g_coverQueue, &rq);
 }
 
 // Turns a failed call into the status line, and drops a discovered companion after
@@ -411,10 +444,7 @@ bool refreshZones() {
 
 void clearTrack() {
     g_trackKey = "";
-    if (g_imageKey.length()) {
-        g_imageKey = "";
-        setCover({});
-    }
+    if (g_imageKey.length()) fetchCover("");   // also drops a cover still being built
     update([](Snapshot &s) {
         s.state = "stopped";
         s.title = s.artist = s.album = "";
@@ -556,6 +586,9 @@ void pollNowPlaying() {
         g_lyricsRetries = 0;
         Serial.printf("[net] track: %s - %s (%u s, %s)\n", artist.c_str(), title.c_str(),
                       (unsigned)(durationMs / 1000), state.c_str());
+        // Cover first, in its own task: it shows in ~1 s while the lyrics are being resolved.
+        g_backdropWanted = settings::backdrop();
+        fetchCover(imageKey);
         fetchLyrics(zoneId);
     } else {
         if (imageKey != g_imageKey || settings::backdrop() != g_backdropWanted) {
@@ -803,6 +836,8 @@ int32_t Snapshot::positionAt(uint32_t now) const {
 }
 
 void begin() {
+    g_coverQueue = xQueueCreate(1, sizeof(CoverRequest));
+    xTaskCreatePinnedToCore(coverTask, "cover", 8192, nullptr, 1, nullptr, 0);
     ota::begin();
     webupdate::begin();
     g_lock = xSemaphoreCreateMutex();
