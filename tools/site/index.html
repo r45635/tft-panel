@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="brand/icon-32.png">
+<link rel="apple-touch-icon" href="brand/icon-180.png">
 <title>TFT Panel</title>
 <meta name="description" content="Synced lyrics and touch controls for your music, on a 7-inch screen. Open firmware for the Elecrow CrowPanel 7.">
 <meta property="og:title" content="TFT Panel">
@@ -35,10 +37,12 @@
   .shots { max-width: 1100px; margin: 48px auto 0; padding: 0 16px; }
   .shots img { width: 100%; height: auto; border-radius: 12px; display: block; }
   footer { max-width: 780px; margin: 56px auto 40px; padding: 0 16px; color: var(--dim); font-size: 0.85em; text-align: center; }
+  footer.site { max-width: 820px; margin: 0 auto 32px; padding: 0 16px; color: #aaa4b2; font-size: 0.85em; text-align: center; }
+  footer.site a { color: inherit; }
 </style>
 </head>
 <body>
-<header><b>TFT Panel</b><a href="guide.html">User guide</a><a href="install.html">Install</a><a href="https://github.com/r45635/tft-panel">GitHub</a></header>
+<header><b><img src="brand/icon-32.png" width="32" height="32" alt="" style="vertical-align:-8px;margin-right:8px">TFT Panel</b><a href="guide.html">User guide</a><a href="install.html">Install</a><a href="media-kit.html">Media kit</a><a href="https://github.com/r45635/tft-panel">GitHub</a></header>
 
 <div class="hero"><img src="media/hero.png" width="1600" height="900" alt="TFT Panel showing synced lyrics"></div>
 
@@ -73,5 +77,6 @@
   Pictures from the panel's showcase mode: the song, lyrics and cover are invented.<br>
   Roon is a trademark of Roon Labs. TFT Panel is an independent project, not affiliated with Roon Labs or Elecrow.
 </footer>
+<footer class="site">TFT Panel {{VERSION}} · <a href="https://github.com/r45635/tft-panel/blob/main/LICENSE">MIT licence</a> · <a href="https://github.com/r45635/tft-panel/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a> · <a href="media-kit.html">Media kit</a> · <a href="https://github.com/r45635/tft-panel">GitHub</a></footer>
 </body>
 </html>

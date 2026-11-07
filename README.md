@@ -15,7 +15,7 @@ and gives you play/pause, skip, volume and zone selection at a touch.
 
 - Talks only to **your own** companion on your LAN — no cloud, no account, no lyrics stored on the device.
 - Same open HTTP API as the companion's web player.
-- MIT licence.
+- MIT licence ([details](#licence)).
 
 *Roon is a trademark of Roon Labs. TFT Panel is an independent project, not affiliated with Roon Labs or Elecrow.*
 
@@ -68,3 +68,11 @@ found automatically on your network (Bonjour); its address and access token can 
 - [Hardware](docs/HARDWARE.md) — pin map, bring-up log, pitfalls
 - [Roadmap](docs/ROADMAP.md)
 - [Releasing](docs/RELEASING.md) — how a version is published (GitHub release + web installer)
+- [Media kit](https://r45635.github.io/tft-panel/media-kit.html) — logos, pictures, video and texts for coverage
+
+## Licence
+
+TFT Panel is released under the [MIT licence](LICENSE) — code, documentation and media. The
+firmware also contains third-party components under their own licences (Arduino core for ESP32:
+LGPL-2.1; ESP-IDF: Apache-2.0; LVGL, ArduinoJson: MIT; Noto Sans: OFL 1.1): see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

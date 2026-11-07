@@ -3,6 +3,7 @@
 #   index.html    landing page (tools/site/index.html)
 #   guide.html    docs/USER_GUIDE.md rendered (Python-Markdown, pinned), with docs/images + docs/media
 #   install.html  the browser installer (ESP Web Tools) + manifest.json and the firmware parts
+#   media-kit.html logos (assets/brand), pictures, video, screenshots, texts + tft-panel-media-kit.zip
 #
 #   tools/site.sh             docs only: keeps the firmware currently on gh-pages
 #   tools/site.sh <fw-dir>    with new firmware parts (manifest.json + *.bin), from tools/release.sh
@@ -25,7 +26,16 @@ version=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['versi
 sed "s/{{VERSION}}/$version/g" tools/site/install.html > "$site/install.html"
 sed "s/{{VERSION}}/$version/g" tools/site/index.html > "$site/index.html"
 cp -R docs/images docs/media "$site/"
-uv run --quiet --no-project --with markdown==3.7 python tools/site/render_guide.py "$site/guide.html"
+cp -R assets/brand "$site/brand"
+# Media kit: the page lists every screenshot; the ZIP holds the page and its files (works offline).
+screens=""
+for f in docs/images/*.png; do
+    n=$(basename "$f" .png)
+    screens+="<a href=\"images/$n.png\" download><img src=\"images/$n.png\" alt=\"\">$n</a>"
+done
+sed -e "s/{{VERSION}}/$version/g" -e "s|{{SCREENS}}|$screens|" tools/site/media-kit.html > "$site/media-kit.html"
+(cd "$site" && zip -qr tft-panel-media-kit.zip media-kit.html brand media images)
+uv run --quiet --no-project --with markdown==3.7 python tools/site/render_guide.py "$site/guide.html" "$version"
 touch "$site/.nojekyll"
 (
     cd "$site"
