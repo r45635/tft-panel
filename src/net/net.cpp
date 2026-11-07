@@ -7,6 +7,7 @@
 #include <esp_mac.h>
 
 #include "portal.h"
+#include "position_clock.h"
 #include "settings.h"
 
 namespace net {
@@ -15,7 +16,7 @@ namespace {
 // ---- Timings ----
 constexpr uint32_t WIFI_TIMEOUT_MS = 20000;        // one connection attempt
 constexpr uint32_t WIFI_PORTAL_AFTER_MS = 60000;   // stored Wi-Fi failing that long → portal too
-constexpr uint32_t NOW_PLAYING_PERIOD_MS = 500;
+constexpr uint32_t NOW_PLAYING_PERIOD_MS = 300;   // narrower windows for PositionClock
 constexpr uint32_t ZONES_PERIOD_MS = 5000;
 constexpr uint32_t DISCOVERY_PERIOD_MS = 5000;
 constexpr uint32_t LYRICS_RETRY_MS = 60000;        // "not found" may resolve later (new source)
@@ -37,6 +38,7 @@ int g_consecutiveFails = 0;
 uint32_t g_wifiAttemptAt = 0, g_wifiDownSince = 0;
 uint8_t g_lastDisconnectReason = 0;
 String g_trackKey;
+PositionClock g_clock;
 uint32_t g_lyricsFetchedAt = 0;
 int g_lyricsRetries = 0;
 
@@ -350,21 +352,12 @@ void pollNowPlaying() {
     // Middle of the request round trip: best local time for the reported position.
     uint32_t sampleAt = sentAt + (now - sentAt) / 2;
 
+    if (newTrack) g_clock.reset();
+    g_clock.observe(seekMs, sampleAt, state == "playing", (int32_t)(now - sentAt) / 2 + 10);
     update([&](Snapshot &s) {
-        bool playing = state == "playing";
-        // Roon reports whole seconds: the true position lies in [seek, seek + 1 s) plus
-        // the companion's own update lag. Keep the local clock while it stays in that
-        // window, clamp it when it leaves, reset on a new track or a seek.
-        int32_t predicted = s.positionAt(sampleAt);
-        int32_t lo = seekMs, hi = seekMs + 1500;
-        int32_t pos;
-        if (newTrack || !s.playing() || !playing || predicted < lo - 2000 || predicted > hi + 2000) {
-            pos = playing ? seekMs + 500 : seekMs;
-        } else {
-            pos = predicted < lo ? lo : predicted > hi ? hi : predicted;
-        }
-        s.positionMs = pos;
+        s.positionMs = g_clock.positionAt(sampleAt);
         s.positionAtMs = sampleAt;
+        s.positionUncertaintyMs = g_clock.uncertaintyMs();
         s.state = state;
         s.title = title;
         s.artist = artist;

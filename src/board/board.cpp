@@ -246,6 +246,12 @@ const Info &info() { return g_info; }
 
 lv_display_t *display() { return g_disp; }
 
+const uint16_t *frameBuffer() {
+    void *fb = nullptr;
+    if (!g_panel || esp_lcd_rgb_panel_get_frame_buffer(g_panel, 1, &fb) != ESP_OK) return nullptr;
+    return (const uint16_t *)fb;
+}
+
 bool lastTouch(uint16_t &x, uint16_t &y) {
     x = g_touchX;
     y = g_touchY;

@@ -4,6 +4,7 @@
 #include <lvgl.h>
 
 #include "../net/net.h"
+#include "../net/settings.h"
 #include "fonts.h"
 
 namespace ui {
@@ -243,7 +244,7 @@ void tickLyrics(uint32_t now) {
     int32_t pos = g_s.positionAt(now);
     int index;
     if (l.synced) {
-        index = lyrics::currentIndex(l, pos - g_s.offsetMs);
+        index = lyrics::currentIndex(l, pos + settings::leadMs() - g_s.offsetMs);
     } else {
         // Plain lyrics: no timing, so scroll in proportion to the track position.
         index = g_s.durationMs ? (int)((int64_t)pos * (int64_t)l.lines.size() / g_s.durationMs) : 0;

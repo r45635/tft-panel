@@ -10,6 +10,7 @@ constexpr const char *NS = "tftpanel";
 Settings g_s;
 Preferences g_prefs;
 SemaphoreHandle_t g_lock = nullptr;
+volatile int32_t g_leadMs = 250;
 
 void putString(const char *key, const String &value) {
     g_prefs.begin(NS, false);
@@ -32,6 +33,8 @@ void begin() {
     g_s.accessToken = read("token");
     g_s.zoneId = read("zone");
     g_s.apPass = read("ap_pass");
+    g_s.leadMs = g_prefs.isKey("lead") ? g_prefs.getInt("lead", 250) : 250;
+    g_leadMs = g_s.leadMs;
     if (g_s.apPass.length() < 8) {
         // Setup AP password: random once per device, then stable so a reboot during
         // setup does not invalidate the network the phone has already joined.
@@ -84,6 +87,18 @@ void setZone(const String &zoneId) {
     putString("zone", zoneId);
 }
 
+void setLead(int32_t ms) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.leadMs = ms;
+    g_leadMs = ms;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putInt("lead", ms);
+    g_prefs.end();
+}
+
+int32_t leadMs() { return g_leadMs; }
+
 void forgetWifi() { setWifi("", ""); }
 
 void eraseAll() {
@@ -95,6 +110,7 @@ void eraseAll() {
     xSemaphoreTake(g_lock, portMAX_DELAY);
     g_s = Settings();
     g_s.apPass = apPass;
+    g_leadMs = g_s.leadMs;
     xSemaphoreGive(g_lock);
 }
 

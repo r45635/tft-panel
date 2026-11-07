@@ -2,11 +2,13 @@
 // Phase 1: Wi-Fi setup portal, companion discovery, synced lyrics.
 #include <Arduino.h>
 #include <lvgl.h>
+#include <mbedtls/base64.h>
 
 #include "app/bringup_screen.h"
 #include "app/fonts.h"
 #include "app/ui.h"
 #include "board/board.h"
+#include "board/board_pins.h"
 #include "net/net.h"
 #include "net/settings.h"
 
@@ -28,18 +30,57 @@ void printStatus() {
     Serial.printf("[status] zone=\"%s\" %s state=%s track=\"%s - %s\" pos=%d/%u ms\n", s.zoneName.c_str(),
                   s.zonePinned ? "pinned" : "auto", s.state.c_str(), s.artist.c_str(), s.title.c_str(),
                   (int)s.positionAt(millis()), (unsigned)s.durationMs);
-    Serial.printf("[status] lyrics status=%d lines=%u synced=%d offset=%d source=%s\n", (int)s.lyricsStatus,
-                  s.lyrics ? (unsigned)s.lyrics->lines.size() : 0u, s.lyrics ? s.lyrics->synced : 0,
-                  (int)s.offsetMs, s.lyricsSource.c_str());
+    Serial.printf("[status] lyrics status=%d lines=%u synced=%d offset=%d lead=%d source=%s clock window=%d ms\n",
+                  (int)s.lyricsStatus, s.lyrics ? (unsigned)s.lyrics->lines.size() : 0u, s.lyrics ? s.lyrics->synced : 0,
+                  (int)s.offsetMs, (int)settings::leadMs(), s.lyricsSource.c_str(), (int)s.positionUncertaintyMs);
     Serial.printf("[status] touch=%d heap int %u KB (min %u) psram %u KB\n", info.touch,
                   (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
                   (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024),
                   (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
 }
 
+// Dumps the framebuffer as base64 lines "~..." of RLE pairs (u16 count, u16 RGB565, little
+// endian), between "[shot] begin W H" and "[shot] end <pairs>". Each line is one write so
+// the net task's logs never land inside one. Decoder: tools/screenshot.py.
+void screenshot() {
+    const uint16_t *fb = board::frameBuffer();
+    if (!fb) {
+        Serial.println("[shot] ERROR: no framebuffer");
+        return;
+    }
+    const int n = board::LCD_H_RES * board::LCD_V_RES;
+    Serial.printf("[shot] begin %d %d\n", board::LCD_H_RES, board::LCD_V_RES);
+    uint8_t raw[192];   // 48 pairs → 256 base64 chars
+    size_t used = 0;
+    uint32_t pairs = 0;
+    char line[300];
+    auto flush = [&]() {
+        size_t olen = 0;
+        line[0] = '~';
+        mbedtls_base64_encode((unsigned char *)line + 1, sizeof line - 3, &olen, raw, used);
+        line[1 + olen] = '\n';
+        Serial.write((const uint8_t *)line, olen + 2);
+        used = 0;
+    };
+    for (int i = 0; i < n;) {
+        uint16_t px = fb[i];
+        uint16_t run = 1;
+        while (i + run < n && fb[i + run] == px && run < 0xFFFF) run++;
+        raw[used++] = run & 0xFF;
+        raw[used++] = run >> 8;
+        raw[used++] = px & 0xFF;
+        raw[used++] = px >> 8;
+        pairs++;
+        i += run;
+        if (used == sizeof raw) flush();
+    }
+    if (used) flush();
+    Serial.printf("[shot] end %u\n", (unsigned)pairs);
+}
+
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | screenshot | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -74,6 +115,11 @@ void handleCommand(String line) {
         settings::setZone(arg == "auto" ? "" : arg);
         net::reconnect();
         Serial.printf("[cmd] zone = %s\n", arg.c_str());
+    } else if (cmd == "lead" && arg.length()) {
+        settings::setLead(arg.toInt());
+        Serial.printf("[cmd] lyrics lead = %d ms\n", (int)settings::leadMs());
+    } else if (cmd == "screenshot") {
+        screenshot();
     } else if (cmd == "erase-all") {
         settings::eraseAll();
         Serial.println("[cmd] settings erased, restarting");

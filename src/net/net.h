@@ -43,6 +43,7 @@ struct Snapshot {
     // Position model: positionMs was true at local time positionAtMs (millis()).
     int32_t positionMs = 0;
     uint32_t positionAtMs = 0;
+    int32_t positionUncertaintyMs = -1;   // PositionClock window, -1 when paused
 
     // Lyrics of the current track. `lyricsSerial` changes whenever `lyrics` does.
     LyricsStatus lyricsStatus = LyricsStatus::None;

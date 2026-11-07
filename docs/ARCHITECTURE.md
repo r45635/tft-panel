@@ -64,8 +64,13 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
 
 - Zone: the pinned one (`zone <id>` on the console) or, by default, keep the current zone while it
   plays, else the first playing zone. Never `POST /active-zone`.
-- `now-playing` every 500 ms. Roon gives whole seconds, so the local clock is kept while it stays
-  within `[seek, seek + 1.5 s]`, clamped when it leaves, reset on a new track or a seek.
+- `now-playing` every 300 ms. Roon gives whole seconds; `src/net/position_clock.h` turns each sample
+  into a window for the offset between the local clock and the true position (`[seek, seek + 1 s)`,
+  widened by half the round trip) and intersects the windows: it converges on the instant each
+  second ticks over (simulated: ~10 ms mean error, ~40 ms worst; a plain "seek + clamp" lagged
+  ~300 ms). An empty intersection = a seek: start over.
+- Each line is shown `lead` ms before its timestamp (default 250, `lead <ms>` on the console), then
+  the per-track `offset_ms` from the companion applies.
 - Lyrics fetched on each new track (the call waits while the companion resolves them: 20 s
   timeout); "not found" is retried up to 3 times, once a minute.
 - Every failure becomes the status line (401 → token needed, 503 → Roon Core not connected, transport
