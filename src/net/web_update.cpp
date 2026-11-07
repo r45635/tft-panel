@@ -4,7 +4,11 @@
 #include <Update.h>
 #include <WebServer.h>
 
+#include <WiFi.h>
+
 #include "../board/board.h"
+#include "portal.h"
+#include "../board/board_pins.h"
 #include "../version.h"
 
 namespace webupdate {
@@ -14,6 +18,7 @@ constexpr uint32_t CODE_VALID_MS = 5 * 60 * 1000;
 
 WebServer *g_server = nullptr;
 volatile uint32_t g_code = 0;
+volatile bool g_shots = false;
 uint32_t g_codeAt = 0;
 bool g_uploadAllowed = false, g_uploadOk = false;
 String g_uploadError;
@@ -96,6 +101,22 @@ void start() {
         g_server->send(200, "text/html", page);
     });
     g_server->on("/update", HTTP_POST, handleUploadDone, handleUpload);
+    g_server->on("/screenshot", HTTP_GET, []() {
+        const uint16_t *fb = board::frameBuffer();
+        if (!g_shots || !fb) {
+            g_server->send(403, "text/plain", "Screenshots are off (console: shots on).");
+            return;
+        }
+        const uint16_t w = board::LCD_H_RES, h = board::LCD_V_RES;
+        const size_t bytes = (size_t)w * h * 2;
+        uint8_t head[8] = {'T', 'F', 'T', 'S', (uint8_t)w, (uint8_t)(w >> 8), (uint8_t)h, (uint8_t)(h >> 8)};
+        g_server->client().setNoDelay(true);
+        g_server->setContentLength(sizeof head + bytes);
+        g_server->send(200, "application/octet-stream", "");
+        g_server->sendContent((const char *)head, sizeof head);
+        for (size_t off = 0; off < bytes; off += 32768)
+            g_server->sendContent((const char *)fb + off, std::min((size_t)32768, bytes - off));
+    });
     g_server->begin();
     MDNS.addService("http", "tcp", 80);
     Serial.println("[web] update page on port 80 (/update)");
@@ -110,6 +131,7 @@ void stop() {
 
 }  // namespace
 
+namespace {
 void loop(bool wifiUp, bool portalActive) {
     bool want = wifiUp && !portalActive;   // the portal owns port 80 while it runs
     if (want && !g_server) start();
@@ -117,8 +139,19 @@ void loop(bool wifiUp, bool portalActive) {
     if (g_server) g_server->handleClient();
     if (g_code && millis() - g_codeAt >= CODE_VALID_MS) g_code = 0;
 }
+}  // namespace
+
+void begin() {
+    xTaskCreatePinnedToCore([](void *) {
+        for (;;) {
+            loop(WiFi.status() == WL_CONNECTED && WiFi.getMode() != WIFI_AP, portal::active());
+            delay(2);
+        }
+    }, "web", 6144, nullptr, 1, nullptr, 0);
+}
 
 uint32_t activeCode() { return g_code; }
+void enableScreenshots(bool on) { g_shots = on; }
 void cancelCode() { g_code = 0; }
 
 }  // namespace webupdate

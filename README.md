@@ -2,6 +2,8 @@
 
 **A 7" touch screen that shows the synced lyrics of what you play in Roon — and lets you control it.**
 
+![TFT Panel](docs/media/hero.png)
+
 TFT Panel is open firmware for the **Elecrow CrowPanel ESP32 Display 7.0"** (ESP32-S3, 800×480).
 It is a companion screen for the
 [TextFromTrack Roon Companion](https://github.com/r45635/roon.app.textfromtrack.com): the companion
@@ -16,6 +18,10 @@ and gives you play/pause, skip, volume and zone selection at a touch.
 - MIT licence.
 
 *Roon is a trademark of Roon Labs. TFT Panel is an independent project, not affiliated with Roon Labs or Elecrow.*
+
+<p align="center"><img src="docs/media/lyrics.gif" width="640" alt="Lyrics scrolling, then the cover view"></p>
+
+*Pictures from the panel's showcase mode: the song, lyrics, zones and cover are invented.*
 
 ## Hardware
 
@@ -57,6 +63,7 @@ found automatically on your network (Bonjour); its address and access token can 
 
 ## Documentation
 
+- [User guide](docs/USER_GUIDE.md) — install, Wi-Fi setup, screens, gestures, settings, updates
 - [Architecture](docs/ARCHITECTURE.md) — how the panel talks to the companion, firmware layers, technical choices
 - [Hardware](docs/HARDWARE.md) — pin map, bring-up log, pitfalls
 - [Roadmap](docs/ROADMAP.md)

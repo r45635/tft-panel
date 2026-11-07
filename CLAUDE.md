@@ -31,6 +31,10 @@ Serial console (115200, type `help`): `status`, `portal`, `companion <url>|auto`
 (the real cover thumbnail and backdrop stay on screen: cover art is copyrighted too).
 `touchdiag` replays the touch reset variants live and attaches the touch if the GT911 answers.
 `backdrop off` before `screenshot` makes it fast (a dithered backdrop does not compress: ~3 min at 115200).
+Docs/promo media: `tools/showcase.py --port … --host <panel IP>` (console `demo` showcase: invented
+song, lyrics, zones, generated cover; frames over Wi-Fi with `shots on`, ~4 s each) → `docs/images/`;
+`uv run --with pillow==11.0.0 tools/promo.py` (device frame, hero/square/banner/grid) and
+`tools/animate.sh` (MP4 + GIF) → `docs/media/`. Only showcase pictures may be committed.
 Fonts: `tools/fonts/build_fonts.sh` rebuilds `assets/fonts/` (never `npx` a converter: run-time tiny_ttf).
 
 ## Rules

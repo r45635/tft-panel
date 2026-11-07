@@ -11,10 +11,16 @@
 
 namespace webupdate {
 
-void loop(bool wifiUp, bool portalActive);   // starts/stops the server and serves requests
+// Starts its own task: the server runs while Wi-Fi is up and the setup portal is not (port 80),
+// independent of the companion polling, so pages and screenshots answer at once.
+void begin();
 
 // The code to show on screen, 0 when none is active.
 uint32_t activeCode();
 void cancelCode();   // the user dismissed it on the panel
+
+// GET /screenshot: the framebuffer, "TFTS" + u16 width + u16 height + RGB565 little endian.
+// Off at boot; only the USB console turns it on (it can show lyrics). tools/showcase.py uses it.
+void enableScreenshots(bool on);
 
 }  // namespace webupdate

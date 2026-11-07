@@ -90,6 +90,7 @@ struct Snapshot {
 };
 
 void begin();                // starts the network task
+String hostName();           // "tft-panel-xxxx" (mDNS: tft-panel-xxxx.local, the update page)
 uint32_t version();          // bumps on every snapshot change (cheap to poll)
 Snapshot snapshot();         // copy under the lock
 

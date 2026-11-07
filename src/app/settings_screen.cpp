@@ -421,7 +421,7 @@ void refresh(const net::Snapshot &s, const ota::Status &o) {
     setText(g_fwButtonLabel, g_updateAvailable ? "Install " + o.latest : String("Check now"));
     char ram[24];
     snprintf(ram, sizeof ram, "%u KB", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024));
-    setText(g_about, "Panel IP " + (s.staIp.length() ? s.staIp : String("-")) + "\nCompanion " +
+    setText(g_about, "Panel " + net::hostName() + ".local  (" + (s.staIp.length() ? s.staIp : String("-")) + ")\nCompanion " +
                          (s.companion.length() ? s.companion : String("searching...")) + "\nFree internal RAM " + ram);
 }
 

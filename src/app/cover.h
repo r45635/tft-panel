@@ -31,4 +31,8 @@ struct Cover {
 bool build(const uint8_t *jpeg, size_t len, bool withBig, int thumbBox, bool withBackdrop, int outW, int outH,
            Cover &out, String &error);
 
+// Same from an RGB888 image (w x h x 3), e.g. the showcase's generated artwork.
+bool buildFromRgb(const uint8_t *rgb888, int w, int h, int thumbBox, bool withBackdrop, int outW, int outH,
+                  Cover &out, String &error);
+
 }  // namespace cover

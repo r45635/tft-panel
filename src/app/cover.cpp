@@ -193,11 +193,35 @@ Picture::~Picture() {
 
 namespace cover {
 
+namespace {
+bool compose(Rgb &rgb, bool withBig, int thumbBox, bool withBackdrop, int outW, int outH, Cover &out, String &error);
+}
+
 bool build(const uint8_t *jpeg, size_t len, bool withBig, int thumbBox, bool withBackdrop, int outW, int outH,
            Cover &out, String &error) {
     out = Cover();
     Rgb rgb;
     if (!decode(jpeg, len, rgb, error)) return false;
+    return compose(rgb, withBig, thumbBox, withBackdrop, outW, outH, out, error);
+}
+
+bool buildFromRgb(const uint8_t *rgb888, int w, int h, int thumbBox, bool withBackdrop, int outW, int outH,
+                  Cover &out, String &error) {
+    out = Cover();
+    Rgb rgb;
+    rgb.w = w;
+    rgb.h = h;
+    rgb.px = (uint8_t *)psramAlloc((size_t)w * h * 3);
+    if (!rgb.px) {
+        error = "out of memory (cover)";
+        return false;
+    }
+    memcpy(rgb.px, rgb888, (size_t)w * h * 3);
+    return compose(rgb, true, thumbBox, withBackdrop, outW, outH, out, error);
+}
+
+namespace {
+bool compose(Rgb &rgb, bool withBig, int thumbBox, bool withBackdrop, int outW, int outH, Cover &out, String &error) {
 
     if (withBig) {
         auto big = newPicture(rgb.w, rgb.h);
@@ -236,5 +260,6 @@ bool build(const uint8_t *jpeg, size_t len, bool withBig, int thumbBox, bool wit
     out.backdrop = bd;
     return true;
 }
+}  // namespace
 
 }  // namespace cover

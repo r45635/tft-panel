@@ -13,6 +13,7 @@
 #include "../board/board.h"
 #include "fonts.h"
 #include "settings_screen.h"
+#include "showcase.h"
 #include "../version.h"
 
 #include <vector>
@@ -107,6 +108,9 @@ ota::Status g_ota;
 // plays (settings::clock()). Redrawn once a minute.
 lv_obj_t *g_clock = nullptr, *g_clockTime = nullptr, *g_clockDate = nullptr, *g_clockTrack = nullptr;
 int g_clockMinute = -1;
+bool g_clockForced = false;    // showcase: shown with a fixed time
+bool g_demoManualSlide = false;   // showcase: the slide is stepped by the console, not animated
+int32_t g_demoPos = 98000;
 
 // Volume popup (tap the volume value): slider + mute. Offset popup (long press on the lyrics):
 // -/+ 250 ms, applied at once on screen, saved to the companion after a short pause.
@@ -124,7 +128,6 @@ String g_offsetTrack;
 lv_obj_t *g_codePopup = nullptr, *g_codeValue = nullptr;
 uint32_t g_shownCode = 0;
 
-bool g_demo = false;
 uint32_t g_seenVersion = UINT32_MAX;
 net::Snapshot g_s;
 uint32_t g_seenLyricsSerial = UINT32_MAX;
@@ -133,6 +136,11 @@ uint32_t g_lastProgress = 0;
 String g_qrWifiData, g_qrUrlData;
 
 void syncVolumePopup();
+
+// Showcase (console "demo"): invented content through the normal UI path; nothing is ever sent
+// to the companion while it is on (live() guards every command).
+bool g_demo = false;
+bool live() { return !g_demo; }
 
 lv_obj_t *label(lv_obj_t *parent, const lv_font_t *font, uint32_t colour) {
     lv_obj_t *l = lv_label_create(parent);
@@ -239,23 +247,35 @@ lv_obj_t *roundButton(lv_obj_t *parent, const char *symbol, lv_obj_t **iconOut, 
     return b;
 }
 
-void onPrev(lv_event_t *) { touchControls(); net::control("previous"); }
-void onNext(lv_event_t *) { touchControls(); net::control("next"); }
+void onPrev(lv_event_t *) {
+    touchControls();
+    if (live()) net::control("previous");
+}
+void onNext(lv_event_t *) {
+    touchControls();
+    if (live()) net::control("next");
+}
 void onPlay(lv_event_t *) {
     touchControls();
     // Optimistic icon: the next now-playing poll (≤ 300 ms) confirms or corrects it.
     bool playing = g_s.playing();
     setText(g_playIcon, playing ? LV_SYMBOL_PLAY : LV_SYMBOL_PAUSE);
-    net::control("playpause");
+    if (live()) net::control("playpause");
 }
-void onVolDown(lv_event_t *) { touchControls(); net::volumeStep(-1); }
-void onVolUp(lv_event_t *) { touchControls(); net::volumeStep(+1); }
+void onVolDown(lv_event_t *) {
+    touchControls();
+    if (live()) net::volumeStep(-1);
+}
+void onVolUp(lv_event_t *) {
+    touchControls();
+    if (live()) net::volumeStep(+1);
+}
 
 void closePicker() { setHidden(g_picker, true); }
 
 void onPickZone(lv_event_t *e) {
     intptr_t i = (intptr_t)lv_event_get_user_data(e);
-    if (i >= 0 && i < (intptr_t)g_pickerIds.size()) net::selectZone(g_pickerIds[i]);
+    if (live() && i >= 0 && i < (intptr_t)g_pickerIds.size()) net::selectZone(g_pickerIds[i]);
     closePicker();
     showControls(false);
 }
@@ -607,7 +627,7 @@ void onVolSlider(lv_event_t *e) {
     if (released || millis() - g_volSentAt >= 250) {   // at most 4 requests a second while dragging
         g_volSentAt = millis();
         g_volDirty = false;
-        net::volumeSet(v);
+        if (live()) net::volumeSet(v);
     } else {
         g_volDirty = true;
     }
@@ -653,7 +673,7 @@ void buildVolumePopup() {
         bool muted = false;
         for (const net::OutputInfo &x : g_s.outputs)
             if (x.volumeType.length() && x.muted) muted = true;
-        net::mute(!muted);
+        if (live()) net::mute(!muted);
     });
     g_muteLabel = lv_obj_get_child(mute, 0);
     lv_obj_align(mute, LV_ALIGN_BOTTOM_LEFT, 28, -20);
@@ -724,11 +744,11 @@ void tickPopups(uint32_t now) {
         const net::OutputInfo *o = volumeOutput();
         g_volDirty = false;
         g_volSentAt = now;
-        if (o) net::volumeSet(sliderToVolume(*o));
+        if (o && live()) net::volumeSet(sliderToVolume(*o));
     }
     if (g_offsetPending && now - g_offsetChangedAt >= 800) {
         g_offsetPending = false;
-        if (g_offsetTrack == trackKey()) net::setOffset(g_offsetLocal);
+        if (g_offsetTrack == trackKey() && live()) net::setOffset(g_offsetLocal);
     }
     if (!isHidden(g_offPopup)) showOffset();
 }
@@ -748,6 +768,7 @@ void buildCodePopup() {
 }
 
 void tickCode() {
+    if (g_demo) return;
     uint32_t code = webupdate::activeCode();
     if (code == g_shownCode) return;
     g_shownCode = code;
@@ -802,7 +823,7 @@ void buildOta() {
     lv_obj_align(g_otaConfirmText, LV_ALIGN_CENTER, 0, -60);
     lv_obj_t *install = textButton(g_otaConfirm, "Install now", 0x1F6F9E, [](lv_event_t *) {
         setHidden(g_otaConfirm, true);
-        ota::requestInstall();
+        if (live()) ota::requestInstall();
     });
     lv_obj_align(install, LV_ALIGN_CENTER, -110, 90);
     lv_obj_t *later = textButton(g_otaConfirm, "Later", 0x232326, [](lv_event_t *) { setHidden(g_otaConfirm, true); });
@@ -1166,6 +1187,11 @@ void tickLyrics(uint32_t now) {
         scrollExec(g_rowsBox, 0);
         return;
     }
+    if (g_demo && g_demoManualSlide) {   // frames for the showcase animation: see demoSlide()
+        g_scrollFrom = from;
+        scrollExec(g_rowsBox, from);
+        return;
+    }
     lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_var(&a, g_rowsBox);
@@ -1238,6 +1264,7 @@ void hookTouch() {
 }
 
 void tickClock() {
+    if (g_clockForced) return;
     time_t t = time(nullptr);
     struct tm lt;
     localtime_r(&t, &lt);
@@ -1312,37 +1339,101 @@ void show() {
     lv_display_add_event_cb(board::display(), onRefr, LV_EVENT_REFR_READY, nullptr);
 }
 
+void loadShowcase() {
+    g_s = showcase::make(g_demoPos);
+    g_seenCoverSerial = UINT32_MAX;
+    g_shownIndex = INT32_MIN;
+    applySnapshot();
+    syncVolumePopup();
+}
+
 void setDemo(bool on) {
     g_demo = on;
     g_seenVersion = UINT32_MAX;   // live mode redraws everything on the next tick
+    g_seenCoverSerial = UINT32_MAX;
     g_shownIndex = INT32_MIN;
-    if (!on) return;
-    static const char *rows[LYRIC_ROWS] = {
-        "Sous la pluie d'automne, les néons s'éteignent un à un",
-        "« Où vas-tu ? » m'a-t-elle dit — je n'ai rien répondu…",
-        "Et l'été s'en allait sur la Côte, à l'heure où l'on rêve encore d'Œdipe",
-        "Żółw, façade, garçon, naïve : l'aube est déjà là",
-        "Ça ira mieux demain",
-    };
-    setHidden(g_setup, true);
-    setHidden(g_message, true);
-    setHidden(g_stage, false);
-    for (int r = 0; r < LYRIC_ROWS; r++) setText(g_rows[r], rows[r]);
-    setText(g_zone, "Living Room");
-    setText(g_status, "Playing");
-    setText(g_title, "Les Néons d'automne");
-    setText(g_artist, "Jean‐Luc Démo  -  Démonstration");
-    for (lv_obj_t *o : {g_bar, g_elapsed, g_total}) setHidden(o, false);
-    lv_bar_set_value(g_bar, 420, LV_ANIM_OFF);
-    setText(g_elapsed, "1:38");
-    setText(g_total, "3:54");
-    setText(g_cvTitle, "Les Néons d'automne (version longue enregistrée à l'aube)");
-    setText(g_cvArtist, "Jean‐Luc Démo & l'Orchestre de la Côte");
-    setText(g_cvAlbum, "Démonstration");
-    setText(g_cvLyric, rows[CURRENT_ROW]);
-    lv_bar_set_value(g_cvBar, 420, LV_ANIM_OFF);
-    setText(g_cvElapsed, "1:38");
-    setText(g_cvTotal, "3:54");
+    if (on) {
+        loadShowcase();
+        return;
+    }
+    showcase("none");
+    g_demoManualSlide = false;
+    g_seenOtaVersion = UINT32_MAX;   // back to the real update status
+}
+
+void demoSeek(int32_t positionMs) {
+    if (!g_demo) return;
+    g_demoPos = positionMs;
+    g_s.positionMs = positionMs;
+    g_s.positionAtMs = millis();
+}
+
+void demoManualSlide(bool on) { g_demoManualSlide = on; }
+
+void demoSlide(int percent) {
+    if (!g_demo || g_scrollFrom <= 0) return;
+    float t = percent / 100.0f;
+    float eased = 1 - (1 - t) * (1 - t) * (1 - t);   // ease-out, like lv_anim_path_ease_out
+    scrollExec(g_rowsBox, (int32_t)lroundf(g_scrollFrom * (1 - eased)));
+}
+
+bool showcase(const String &what) {
+    if (what == "none") {
+        settingsui::close();
+        for (lv_obj_t *o : {g_volPopup, g_offPopup, g_codePopup, g_otaConfirm, g_otaProgress, g_otaBadge, g_clock})
+            setHidden(o, true);
+        closePicker();
+        showControls(false);
+        g_clockForced = false;
+        g_ota = ota::Status();
+        if (g_demo) loadShowcase();
+        return true;
+    }
+    if (!g_demo) return false;
+    if (what == "lyrics" || what == "cover") showView(what == "cover" ? View::Cover : View::Lyrics);
+    else if (what == "controls") showControls(true);
+    else if (what == "settings") {
+        settingsui::open();
+        ota::Status o;
+        o.state = ota::State::UpToDate;
+        o.latest = FW_VERSION;
+        settingsui::refresh(g_s, o);
+    } else if (what == "colours") settingsui::showColourTest();
+    else if (what == "volume") {
+        setHidden(g_volPopup, false);
+        syncVolumePopup();
+    } else if (what == "offset") {
+        g_offsetTrack = trackKey();
+        g_offsetLocal = 250;
+        g_offsetChangedAt = millis() + 3600000;   // keep "0.25 s later" on screen
+        showOffset();
+        setHidden(g_offPopup, false);
+    } else if (what == "zones") onZone(nullptr);
+    else if (what == "clock") {
+        g_clockForced = true;
+        setText(g_clockTime, "21:47");
+        setText(g_clockDate, "Saturday 7 November");
+        setText(g_clockTrack, "Paused  -  Neon Autumn  -  The Demo Lights");
+        setHidden(g_clock, false);
+    } else if (what == "update" || what == "confirm") {
+        g_ota.state = ota::State::Available;
+        g_ota.latest = "v0.2.0";
+        applyOta();
+        if (what == "confirm") setHidden(g_otaConfirm, false);
+    } else if (what == "progress") {
+        setHidden(g_otaProgress, false);
+        setHidden(g_otaClose, true);
+        setHidden(g_otaBar, false);
+        setText(g_otaProgressText, "Updating to v0.2.0\nDo not unplug the panel");
+        lv_bar_set_value(g_otaBar, 42, LV_ANIM_OFF);
+    } else if (what == "setup") {
+        showcase::fakePortal(g_s);
+        applySnapshot();
+    } else if (what == "code") {
+        setText(g_codeValue, "482913");
+        setHidden(g_codePopup, false);
+    } else return false;
+    return true;
 }
 
 void tick() {
@@ -1354,7 +1445,12 @@ void tick() {
         lastClock = now;
         tickClock();
     }
-    if (g_demo) return;
+    if (g_demo) {   // frozen showcase: no network, the position stays still
+        g_s.positionAtMs = now;
+        tickLyrics(now);
+        tickProgress(now);
+        return;
+    }
     uint32_t v = net::version();
     if (v != g_seenVersion) {
         g_seenVersion = v;

@@ -10,6 +10,7 @@
 #include "app/ui.h"
 #include "version.h"
 #include "net/ota.h"
+#include "net/web_update.h"
 #include "board/board.h"
 #include "board/board_pins.h"
 #include "net/net.h"
@@ -97,7 +98,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off|pos <ms>|manual on|off|slide <%>] | show <screen>|none | shots on|off | screenshot | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -175,8 +176,19 @@ void handleCommand(String line) {
         board::setBacklight((uint8_t)constrain(arg.toInt(), 0, 100));
         Serial.printf("[cmd] backlight %d %%\n", (int)constrain(arg.toInt(), 0, 100));
     } else if (cmd == "demo") {
-        ui::setDemo(arg != "off");
-        Serial.printf("[cmd] demo %s\n", arg == "off" ? "off" : "on (\"demo off\" to go back)");
+        // demo [off|pos <ms>|manual on|off|slide <%>] | show <screen>|none | shots on|off | demo pos <ms> | demo manual on|off | demo slide <0-100>
+        int sp2 = arg.indexOf(' ');
+        String sub = sp2 < 0 ? arg : arg.substring(0, sp2), val = sp2 < 0 ? "" : arg.substring(sp2 + 1);
+        if (sub == "pos") ui::demoSeek(val.toInt());
+        else if (sub == "manual") ui::demoManualSlide(val != "off");
+        else if (sub == "slide") ui::demoSlide(val.toInt());
+        else ui::setDemo(sub != "off");
+        Serial.printf("[cmd] demo %s %s\n", sub.c_str(), val.c_str());
+    } else if (cmd == "show" && arg.length()) {
+        Serial.printf("[cmd] show %s: %s\n", arg.c_str(), ui::showcase(arg) ? "ok" : "unknown, or not in demo");
+    } else if (cmd == "shots" && arg.length()) {
+        webupdate::enableScreenshots(arg != "off");
+        Serial.printf("[cmd] screenshots over Wi-Fi %s (GET /screenshot)\n", arg != "off" ? "on until restart" : "off");
     } else if (cmd == "screenshot") {
         // ESP-IDF logs bypass Serial's lock and could land inside a data line: hold the
         // net task (the only other logger) during the dump. An in-flight request finishes first.

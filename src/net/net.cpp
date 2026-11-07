@@ -300,14 +300,22 @@ void reportCompanionFailure(const char *what, const HttpResult &r) {
 }
 
 // ---- Companion discovery ----
+}  // namespace
 
-// Our own name on the LAN (tft-panel-xxxx.local, also the update page) + companion lookup.
-void startMdns() {
-    if (g_mdnsStarted) return;
+String hostName() {
     String mac = WiFi.macAddress();
     mac.replace(":", "");
     String host = "tft-panel-" + mac.substring(8);
     host.toLowerCase();
+    return host;
+}
+
+namespace {
+
+// Our own name on the LAN (tft-panel-xxxx.local, also the update page) + companion lookup.
+void startMdns() {
+    if (g_mdnsStarted) return;
+    String host = hostName();
     g_mdnsStarted = MDNS.begin(host.c_str());
     if (g_mdnsStarted) Serial.printf("[net] this panel is %s.local\n", host.c_str());
     else Serial.println("[net] WARNING: mDNS responder failed to start");
@@ -728,7 +736,6 @@ void task(void *) {
                 g_wifiAttemptAt = now;
             }
             if (now - g_wifiDownSince > WIFI_PORTAL_AFTER_MS) openPortalNow();
-            webupdate::loop(false, portal::active());
             delay(20);
             continue;
         }
@@ -756,7 +763,6 @@ void task(void *) {
                           (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
         }
         ota::tick(true);   // update check (boot + daily) and a confirmed install; no companion needed
-        webupdate::loop(true, portal::active());
         if (!g_baseUrl.length()) {
             if (now - lastDiscovery < DISCOVERY_PERIOD_MS && lastDiscovery) {
                 delay(20);
@@ -798,6 +804,7 @@ int32_t Snapshot::positionAt(uint32_t now) const {
 
 void begin() {
     ota::begin();
+    webupdate::begin();
     g_lock = xSemaphoreCreateMutex();
     g_commands = xQueueCreate(8, sizeof(Command));
     uint8_t mac[6] = {0};
