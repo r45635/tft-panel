@@ -8,7 +8,8 @@ It is a companion screen for the
 watches your Roon Core and finds the lyrics; the panel displays them line by line, with the cover,
 and gives you play/pause, skip, volume and zone selection at a touch.
 
-> 🚧 **Early development** — phase 1 (Wi-Fi setup, companion discovery, synced lyrics). Not usable yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> 🚧 **Early development** — synced lyrics, cover view, touch controls and over-the-air updates work
+> on the developer's panel; expect rough edges. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 - Talks only to **your own** companion on your LAN — no cloud, no account, no lyrics stored on the device.
 - Same open HTTP API as the companion's web player.
@@ -25,6 +26,17 @@ and gives you play/pause, skip, volume and zone selection at a touch.
 | Screen | 800×480 RGB, GT911 capacitive touch |
 
 Details and pitfalls: [docs/HARDWARE.md](docs/HARDWARE.md).
+
+## Install
+
+**First time — from your browser, no tools to install.** Open the
+[web installer](https://r45635.github.io/tft-panel/) in Chrome or Edge on a computer, connect the
+panel's USB-C port, click *Install* and pick the serial port (about 3 minutes). On Windows you may
+need the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html).
+
+**After that — over the air.** The panel checks for new releases by itself; when one is out, *Update*
+appears at the top of the screen. Tap it and confirm: the panel downloads it, checks its checksum and
+restarts. If the new version does not start properly, it goes back to the previous one by itself.
 
 ## Build and flash
 
@@ -48,3 +60,4 @@ found automatically on your network (Bonjour); its address and access token can 
 - [Architecture](docs/ARCHITECTURE.md) — how the panel talks to the companion, firmware layers, technical choices
 - [Hardware](docs/HARDWARE.md) — pin map, bring-up log, pitfalls
 - [Roadmap](docs/ROADMAP.md)
+- [Releasing](docs/RELEASING.md) — how a version is published (GitHub release + web installer)

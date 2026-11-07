@@ -20,3 +20,4 @@ secrets.h
 
 # Firmware version, generated at build time by tools/version.py
 /src/generated/
+/dist/
