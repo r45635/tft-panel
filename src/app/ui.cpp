@@ -11,6 +11,7 @@
 #include "../net/settings.h"
 #include "../board/board.h"
 #include "fonts.h"
+#include "settings_screen.h"
 #include "../version.h"
 
 #include <vector>
@@ -86,7 +87,7 @@ int32_t g_scrollFrom = 0;
 // A touch wakes it; the touch that wakes a dark screen does nothing else.
 enum class Screen : uint8_t { On, Dimmed, Off };
 constexpr uint32_t DIM_AFTER_MS = 60 * 1000;
-constexpr uint8_t BRIGHT_ON = 100, BRIGHT_DIM = 12;
+constexpr uint8_t BRIGHT_DIM = 12;   // awake level: settings::brightness()
 Screen g_screen = Screen::On;
 uint32_t g_activeAt = 0;
 int32_t g_backlight = 100;        // current level, animated
@@ -279,13 +280,13 @@ void buildControls() {
     lv_obj_set_flex_align(g_controls, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     g_btnZone = lv_button_create(g_controls);
-    lv_obj_set_size(g_btnZone, 190, 64);
+    lv_obj_set_size(g_btnZone, 150, 64);
     lv_obj_set_style_radius(g_btnZone, 32, 0);
     lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(0x1C232B), 0);
     lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
     lv_obj_set_style_shadow_width(g_btnZone, 0, 0);
     g_zoneBtnLabel = label(g_btnZone, fonts::ui16, COL_TEXT);
-    lv_obj_set_width(g_zoneBtnLabel, 160);
+    lv_obj_set_width(g_zoneBtnLabel, 124);
     lv_label_set_long_mode(g_zoneBtnLabel, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(g_zoneBtnLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(g_zoneBtnLabel);
@@ -299,6 +300,11 @@ void buildControls() {
     lv_obj_set_width(g_volLabel, 80);
     lv_obj_set_style_text_align(g_volLabel, LV_TEXT_ALIGN_CENTER, 0);
     g_btnVolUp = roundButton(g_controls, LV_SYMBOL_PLUS, nullptr, onVolUp);
+    roundButton(g_controls, LV_SYMBOL_SETTINGS, nullptr, [](lv_event_t *) {
+        showControls(false);
+        settingsui::open();
+        settingsui::refresh(g_s, g_ota);
+    });
     setHidden(g_controls, true);
 
     // Zone picker: full-screen list.
@@ -472,7 +478,7 @@ void chooseView(View v) {
 
 void onGesture(lv_event_t *) {
     lv_indev_t *indev = lv_indev_active();
-    if (!indev || g_s.portalActive || !isHidden(g_picker)) return;
+    if (!indev || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen()) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     if (dir != LV_DIR_LEFT && dir != LV_DIR_RIGHT) return;
     // No click at the end of a swipe, on the screen or on a button the finger started on.
@@ -481,6 +487,8 @@ void onGesture(lv_event_t *) {
     int step = dir == LV_DIR_LEFT ? 1 : VIEW_COUNT - 1;
     chooseView((View)(((int)g_view + step) % VIEW_COUNT));
 }
+
+void backlightExec(void *, int32_t v);
 
 lv_obj_t *textButton(lv_obj_t *parent, const char *text, uint32_t bg, void (*cb)(lv_event_t *)) {
     lv_obj_t *b = lv_button_create(parent);
@@ -674,6 +682,15 @@ void build() {
 
     buildSetup();
     buildControls();
+    settingsui::build(g_scr, settingsui::Hooks{
+        [](int percent) {   // live preview while the slider moves (the screen is awake)
+            lv_anim_delete(&g_backlight, backlightExec);
+            g_backlight = percent;
+            board::setBacklight((uint8_t)percent);
+        },
+        []() { onZone(nullptr); },
+        []() { setHidden(g_otaConfirm, false); },
+    });
     buildOta();
     for (lv_obj_t *o : {g_stage, g_setup}) lv_obj_set_clickable(o, false);
     lv_obj_add_event_cb(g_scr, onScreenTap, LV_EVENT_CLICKED, nullptr);
@@ -944,7 +961,7 @@ void hookTouch() {
 void tickSleep(uint32_t now) {
     hookTouch();
     bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch ||
-                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress);
+                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress) || settingsui::isOpen();
     if (busy) g_activeAt = now;
     uint32_t idle = now - g_activeAt;
     uint32_t offAfter = (uint32_t)settings::sleepMin() * 60000u;
@@ -957,9 +974,10 @@ void tickSleep(uint32_t now) {
     if (want == Screen::Off) {
         showControls(false);
         closePicker();
+        settingsui::close();
     }
     g_screen = want;
-    fadeBacklight(want == Screen::On ? BRIGHT_ON : want == Screen::Dimmed ? BRIGHT_DIM : 0,
+    fadeBacklight(want == Screen::On ? settings::brightness() : want == Screen::Dimmed ? BRIGHT_DIM : 0,
                   want == Screen::On ? 250 : 1500);
 }
 
@@ -977,6 +995,8 @@ void show() {
     build();
     lv_screen_load(g_scr);
     g_activeAt = millis();
+    g_backlight = settings::brightness();
+    settingsui::applyTz();
     lv_display_add_event_cb(board::display(), onRefr, LV_EVENT_REFR_START, nullptr);
     lv_display_add_event_cb(board::display(), onRefr, LV_EVENT_REFR_READY, nullptr);
 }
@@ -1025,11 +1045,17 @@ void tick() {
         applySnapshot();
         g_seenOtaVersion = UINT32_MAX;   // badge visibility depends on the portal state
     }
+    static uint32_t lastRefresh = 0;
     uint32_t ov = ota::version();
     if (ov != g_seenOtaVersion) {
         g_seenOtaVersion = ov;
         g_ota = ota::status();
         applyOta();
+        settingsui::refresh(g_s, g_ota);
+    }
+    if (now - lastRefresh > 1000) {   // the about row shows live memory
+        lastRefresh = now;
+        settingsui::refresh(g_s, g_ota);
     }
     if (!isHidden(g_controls) && isHidden(g_picker) && now - g_controlsShownAt > CONTROLS_HIDE_MS)
         showControls(false);

@@ -98,6 +98,10 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
   `sleep <min>` (default 10, `off` = never) it goes off — never during setup, the zone picker or
   `demo`, and never off when there is no touch to wake it. A touch wakes it; the touch that wakes
   a dark screen is swallowed at the input device (`lv_indev_stop_processing`) so it presses nothing.
+- Settings screen (`src/app/settings_screen.*`, gear button in the controls bar): brightness,
+  screen-off delay, lyrics lead, backdrop / scroll / clock switches, time zone, zone, forget
+  Wi-Fi, firmware version + check/install, about (IP, companion, free RAM). Every change is saved
+  to NVS at once; the screen talks back to the main UI through `settingsui::Hooks`.
 - Firmware updates (`src/net/ota.*`, net task): 30 s after boot and every 24 h, HTTPS GET of
   GitHub's `releases/latest` (built-in CA bundle, TLS in PSRAM). A newer `vX.Y.Z` tag with
   assets `tft-panel-<tag>.bin` + `.sha256` shows a header badge; a tap opens a confirmation,

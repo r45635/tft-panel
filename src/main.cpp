@@ -6,6 +6,7 @@
 
 #include "app/bringup_screen.h"
 #include "app/fonts.h"
+#include "app/settings_screen.h"
 #include "app/ui.h"
 #include "version.h"
 #include "net/ota.h"
@@ -88,7 +89,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -142,6 +143,16 @@ void handleCommand(String line) {
         if (arg == "check") ota::requestCheck();
         else ota::requestInstall();
         Serial.printf("[cmd] ota %s requested\n", arg.c_str());
+    } else if (cmd == "settings") {
+        if (arg == "close") settingsui::close();
+        else {
+            settingsui::open();
+            settingsui::refresh(net::snapshot(), ota::status());
+        }
+    } else if (cmd == "tz" && arg.length()) {
+        settings::setTz(arg == "default" ? "" : arg);
+        settingsui::applyTz();
+        Serial.printf("[cmd] time zone %s\n", settings::tz().c_str());
     } else if (cmd == "view" && arg.length()) {
         ui::setView(arg == "cover");
         Serial.printf("[cmd] view %s\n", arg == "cover" ? "cover" : "lyrics");
@@ -207,7 +218,7 @@ void setup() {
     net::begin();
     ui::show();
     lv_refr_now(board::display());   // first frame into the framebuffer…
-    board::setBacklight(100);         // …then light it (Elecrow: backlight last); ui owns it from here
+    board::setBacklight(settings::brightness());   // …then light it (Elecrow: backlight last); ui owns it from here
     Serial.println("[tft-panel] ui shown; type 'help' on this console for commands");
 }
 

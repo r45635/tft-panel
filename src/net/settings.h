@@ -17,7 +17,13 @@ struct Settings {
     bool scroll = true;    // animate lyric lines sliding up
     int32_t sleepMin = 10; // nothing playing this long → backlight off (0 = never; dims after 1 min)
     uint8_t view = 0;      // last view chosen by a swipe: 0 = lyrics, 1 = cover
+    uint8_t brightness = 100;  // backlight when awake, 10..100 %
+    bool clock = true;     // big clock on the dimmed screen when nothing plays
+    String tz;             // POSIX TZ string; empty = DEFAULT_TZ
 };
+
+// US Eastern by default; changed on the settings screen (console: tz <POSIX TZ>).
+constexpr const char *DEFAULT_TZ = "EST5EDT,M3.2.0,M11.1.0";
 
 void begin();                 // loads from NVS
 Settings get();               // copy taken under the lock (safe from any task)
@@ -36,6 +42,12 @@ void setSleepMin(int32_t minutes);
 int32_t sleepMin();
 void setView(uint8_t view);
 uint8_t view();
+void setBrightness(uint8_t percent);
+uint8_t brightness();
+void setClock(bool on);
+bool clock();
+void setTz(const String &tz);
+String tz();                   // never empty: DEFAULT_TZ when unset
 void forgetWifi();
 void eraseAll();
 

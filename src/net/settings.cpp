@@ -15,6 +15,8 @@ volatile bool g_backdrop = true;
 volatile bool g_scroll = true;
 volatile int32_t g_sleepMin = 10;
 volatile uint8_t g_view = 0;
+volatile uint8_t g_brightness = 100;
+volatile bool g_clock = true;
 
 void putString(const char *key, const String &value) {
     g_prefs.begin(NS, false);
@@ -47,6 +49,11 @@ void begin() {
     g_sleepMin = g_s.sleepMin;
     g_s.view = g_prefs.isKey("view") ? g_prefs.getUChar("view", 0) : 0;
     g_view = g_s.view;
+    g_s.brightness = g_prefs.isKey("bright") ? g_prefs.getUChar("bright", 100) : 100;
+    g_brightness = g_s.brightness;
+    g_s.clock = g_prefs.isKey("clock") ? g_prefs.getBool("clock", true) : true;
+    g_clock = g_s.clock;
+    g_s.tz = read("tz");
     if (g_s.apPass.length() < 8) {
         // Setup AP password: random once per device, then stable so a reboot during
         // setup does not invalidate the network the phone has already joined.
@@ -163,6 +170,45 @@ void setView(uint8_t view) {
 
 uint8_t view() { return g_view; }
 
+void setBrightness(uint8_t percent) {
+    percent = percent < 10 ? 10 : percent > 100 ? 100 : percent;
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.brightness = percent;
+    g_brightness = percent;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putUChar("bright", percent);
+    g_prefs.end();
+}
+
+uint8_t brightness() { return g_brightness; }
+
+void setClock(bool on) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.clock = on;
+    g_clock = on;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putBool("clock", on);
+    g_prefs.end();
+}
+
+bool clock() { return g_clock; }
+
+void setTz(const String &tz) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.tz = tz;
+    xSemaphoreGive(g_lock);
+    putString("tz", tz);
+}
+
+String tz() {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    String t = g_s.tz;
+    xSemaphoreGive(g_lock);
+    return t.length() ? t : String(DEFAULT_TZ);
+}
+
 void forgetWifi() { setWifi("", ""); }
 
 void eraseAll() {
@@ -179,6 +225,8 @@ void eraseAll() {
     g_scroll = g_s.scroll;
     g_sleepMin = g_s.sleepMin;
     g_view = g_s.view;
+    g_brightness = g_s.brightness;
+    g_clock = g_s.clock;
     xSemaphoreGive(g_lock);
 }
 
