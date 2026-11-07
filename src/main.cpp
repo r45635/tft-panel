@@ -96,7 +96,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | backlight <0-100> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -163,6 +163,10 @@ void handleCommand(String line) {
     } else if (cmd == "view" && arg.length()) {
         ui::setView(arg == "cover");
         Serial.printf("[cmd] view %s\n", arg == "cover" ? "cover" : "lyrics");
+    } else if (cmd == "warmth" && arg.length()) {
+        settings::setWarmth((uint8_t)constrain(arg.toInt(), 0, 100));
+        board::setWarmth(settings::warmth());
+        Serial.printf("[cmd] colour warmth %d %%\n", (int)settings::warmth());
     } else if (cmd == "backlight" && arg.length()) {
         // Raw PWM level for hardware checks; the sleep logic takes over again on its next change.
         board::setBacklight((uint8_t)constrain(arg.toInt(), 0, 100));
@@ -224,6 +228,7 @@ void setup() {
     if (!fonts::begin()) Serial.println("[tft-panel] ERROR: TTF fonts unavailable, accents will be missing");
     settings::begin();
     net::begin();
+    board::setWarmth(settings::warmth());   // white balance before the first frame
     ui::show();
     lv_refr_now(board::display());   // first frame into the framebuffer…
     board::setBacklight(settings::brightness());   // …then light it (Elecrow: backlight last); ui owns it from here

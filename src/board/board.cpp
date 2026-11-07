@@ -118,9 +118,27 @@ bool createPanel() {
 
 volatile uint32_t g_flushCount = 0, g_flushUs = 0;
 
+// White balance: the panel's white is cool (bluish). Red stays, green and blue are scaled on
+// every pixel on its way to the framebuffer, through one table on the 11 G+B bits (4 KB,
+// internal RAM): ~1 lookup per pixel.
+uint16_t g_gbLut[2048];
+volatile bool g_balanceOn = false;
+
+// Hot loop (every flushed pixel): speed-optimised and in IRAM, two pixels per 32-bit word.
+IRAM_ATTR __attribute__((optimize("O2"))) void balance(uint16_t *p, size_t n) {
+    const uint16_t *lut = g_gbLut;
+    uint32_t *w = (uint32_t *)p;   // LVGL draw buffers are 4-byte aligned
+    for (size_t i = 0; i < n / 2; i++) {
+        uint32_t c = w[i];
+        w[i] = (c & 0xF800F800u) | lut[c & 0x07FF] | ((uint32_t)lut[(c >> 16) & 0x07FF] << 16);
+    }
+    if (n & 1) p[n - 1] = (p[n - 1] & 0xF800) | lut[p[n - 1] & 0x07FF];
+}
+
 void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
     // Synchronous CPU copy into the PSRAM framebuffer (num_fbs = 1).
     int64_t t0 = esp_timer_get_time();
+    if (g_balanceOn) balance((uint16_t *)px, (size_t)lv_area_get_width(area) * lv_area_get_height(area));
     esp_lcd_panel_draw_bitmap(g_panel, area->x1, area->y1, area->x2 + 1, area->y2 + 1, px);
     g_flushUs += (uint32_t)(esp_timer_get_time() - t0);
     g_flushCount++;
@@ -418,6 +436,19 @@ bool lastTouch(uint16_t &x, uint16_t &y) {
     x = g_touchX;
     y = g_touchY;
     return g_touchDown;
+}
+
+void setWarmth(uint8_t percent) {
+    if (percent > 100) percent = 100;
+    // 100 % = blue -30 %, green -8 %: a warm white on this panel. Red stays at full scale.
+    uint32_t gainB = 256 - percent * 77 / 100, gainG = 256 - percent * 20 / 100;
+    g_balanceOn = false;   // the flush runs in this same (LVGL) thread: no race on the table
+    for (uint32_t v = 0; v < 2048; v++) {
+        uint32_t g = (v >> 5) & 0x3F, b = v & 0x1F;
+        g_gbLut[v] = (uint16_t)((((g * gainG) >> 8) << 5) | ((b * gainB) >> 8));
+    }
+    g_balanceOn = percent > 0;
+    if (g_disp) lv_obj_invalidate(lv_display_get_screen_active(g_disp));   // repaint with the new balance
 }
 
 void setBacklight(uint8_t percent) {

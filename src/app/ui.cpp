@@ -20,10 +20,10 @@
 namespace ui {
 namespace {
 
-constexpr uint32_t COL_BG = 0x0E1116;
-constexpr uint32_t COL_TEXT = 0xF2F4F7;
-constexpr uint32_t COL_DIM = 0x6B7683;
-constexpr uint32_t COL_MID = 0xA4AEB9;
+constexpr uint32_t COL_BG = 0x0B0B0C;
+constexpr uint32_t COL_TEXT = 0xF2F2F2;
+constexpr uint32_t COL_DIM = 0x78787C;
+constexpr uint32_t COL_MID = 0xAEAEB2;
 constexpr uint32_t COL_ACCENT = 0x40C4FF;
 constexpr uint32_t COL_ERROR = 0xFFB0A0;
 
@@ -225,7 +225,7 @@ lv_obj_t *roundButton(lv_obj_t *parent, const char *symbol, lv_obj_t **iconOut, 
     lv_obj_t *b = lv_button_create(parent);
     lv_obj_set_size(b, 76, 76);
     lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(b, lv_color_hex(0x1C232B), 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x232326), 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(b, LV_OPA_40, LV_STATE_DISABLED);
     lv_obj_set_style_shadow_width(b, 0, 0);
@@ -268,8 +268,8 @@ void fillPicker() {
         lv_obj_set_width(b, lv_pct(100));
         lv_obj_set_style_radius(b, 10, 0);
         lv_obj_set_style_shadow_width(b, 0, 0);
-        lv_obj_set_style_bg_color(b, lv_color_hex(0x161B22), 0);
-        lv_obj_set_style_bg_color(b, lv_color_hex(0x24303C), LV_STATE_PRESSED);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x18181B), 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x2C2C30), LV_STATE_PRESSED);
         lv_obj_set_style_pad_ver(b, 16, 0);
         lv_obj_t *l = label(b, fonts::ui20, current ? COL_ACCENT : COL_TEXT);
         lv_obj_set_width(l, lv_pct(100));
@@ -297,7 +297,7 @@ void buildControls() {
     lv_obj_remove_style_all(g_controls);
     lv_obj_set_size(g_controls, 800, 112);
     lv_obj_align(g_controls, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(g_controls, lv_color_hex(0x0A0D11), 0);
+    lv_obj_set_style_bg_color(g_controls, lv_color_hex(0x0A0A0B), 0);
     lv_obj_set_style_bg_opa(g_controls, LV_OPA_90, 0);
     lv_obj_set_scrollable(g_controls, false);
     lv_obj_set_flex_flow(g_controls, LV_FLEX_FLOW_ROW);
@@ -306,7 +306,7 @@ void buildControls() {
     g_btnZone = lv_button_create(g_controls);
     lv_obj_set_size(g_btnZone, 150, 64);
     lv_obj_set_style_radius(g_btnZone, 32, 0);
-    lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(0x1C232B), 0);
+    lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(0x232326), 0);
     lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
     lv_obj_set_style_shadow_width(g_btnZone, 0, 0);
     g_zoneBtnLabel = label(g_btnZone, fonts::ui16, COL_TEXT);
@@ -401,7 +401,7 @@ lv_obj_t *boundedLabel(lv_obj_t *parent, const lv_font_t *font, uint32_t colour,
 lv_obj_t *progressBar(lv_obj_t *parent) {
     lv_obj_t *b = lv_bar_create(parent);
     lv_bar_set_range(b, 0, 1000);
-    lv_obj_set_style_bg_color(b, lv_color_hex(0x2A323C), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x2E2E32), LV_PART_MAIN);
     lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
     return b;
 }
@@ -622,7 +622,7 @@ lv_obj_t *popupBox(int h) {
     lv_obj_remove_style_all(box);
     lv_obj_set_size(box, 680, h);
     lv_obj_align(box, LV_ALIGN_BOTTOM_MID, 0, -24);
-    lv_obj_set_style_bg_color(box, lv_color_hex(0x161B22), 0);
+    lv_obj_set_style_bg_color(box, lv_color_hex(0x18181B), 0);
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(box, 16, 0);
     lv_obj_set_scrollable(box, false);
@@ -649,7 +649,7 @@ void buildVolumePopup() {
     lv_obj_set_style_pad_all(g_volSlider, 10, LV_PART_KNOB);
     lv_obj_add_event_cb(g_volSlider, onVolSlider, LV_EVENT_VALUE_CHANGED, nullptr);
     lv_obj_add_event_cb(g_volSlider, onVolSlider, LV_EVENT_RELEASED, nullptr);
-    lv_obj_t *mute = textButton(box, "Mute", 0x1C232B, [](lv_event_t *) {
+    lv_obj_t *mute = textButton(box, "Mute", 0x232326, [](lv_event_t *) {
         bool muted = false;
         for (const net::OutputInfo &x : g_s.outputs)
             if (x.volumeType.length() && x.muted) muted = true;
@@ -702,9 +702,9 @@ void buildOffsetPopup() {
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scrollable(row, false);
-    textButton(row, "Earlier", 0x1C232B, [](lv_event_t *) { stepOffset(-250); });
-    textButton(row, "Later", 0x1C232B, [](lv_event_t *) { stepOffset(+250); });
-    textButton(row, "Reset", 0x1C232B, [](lv_event_t *) { stepOffset(0); });
+    textButton(row, "Earlier", 0x232326, [](lv_event_t *) { stepOffset(-250); });
+    textButton(row, "Later", 0x232326, [](lv_event_t *) { stepOffset(+250); });
+    textButton(row, "Reset", 0x232326, [](lv_event_t *) { stepOffset(0); });
     textButton(row, "Done", 0x1F6F9E, [](lv_event_t *) { setHidden(g_offPopup, true); });
 }
 
@@ -743,7 +743,7 @@ void buildCodePopup() {
     lv_obj_align(t, LV_ALIGN_CENTER, 0, -110);
     g_codeValue = label(g_codePopup, fonts::clock, COL_TEXT);
     lv_obj_align(g_codeValue, LV_ALIGN_CENTER, 0, 10);
-    lv_obj_t *cancel = textButton(g_codePopup, "Cancel", 0x1C232B, [](lv_event_t *) { webupdate::cancelCode(); });
+    lv_obj_t *cancel = textButton(g_codePopup, "Cancel", 0x232326, [](lv_event_t *) { webupdate::cancelCode(); });
     lv_obj_align(cancel, LV_ALIGN_CENTER, 0, 150);
 }
 
@@ -805,7 +805,7 @@ void buildOta() {
         ota::requestInstall();
     });
     lv_obj_align(install, LV_ALIGN_CENTER, -110, 90);
-    lv_obj_t *later = textButton(g_otaConfirm, "Later", 0x1C232B, [](lv_event_t *) { setHidden(g_otaConfirm, true); });
+    lv_obj_t *later = textButton(g_otaConfirm, "Later", 0x232326, [](lv_event_t *) { setHidden(g_otaConfirm, true); });
     lv_obj_align(later, LV_ALIGN_CENTER, 110, 90);
 
     g_otaProgress = fullScreen(LV_OPA_COVER);
@@ -818,7 +818,7 @@ void buildOta() {
     lv_bar_set_range(g_otaBar, 0, 100);
     lv_obj_set_size(g_otaBar, 520, 8);
     lv_obj_align(g_otaBar, LV_ALIGN_CENTER, 0, 40);
-    g_otaClose = textButton(g_otaProgress, "Close", 0x1C232B, [](lv_event_t *) { setHidden(g_otaProgress, true); });
+    g_otaClose = textButton(g_otaProgress, "Close", 0x232326, [](lv_event_t *) { setHidden(g_otaProgress, true); });
     lv_obj_align(g_otaClose, LV_ALIGN_CENTER, 0, 120);
 }
 
@@ -932,7 +932,7 @@ void build() {
     lv_obj_set_size(g_bar, 640, 4);
     lv_obj_align(g_bar, LV_ALIGN_BOTTOM_MID, 0, -20);
     lv_bar_set_range(g_bar, 0, 1000);
-    lv_obj_set_style_bg_color(g_bar, lv_color_hex(0x2A323C), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(g_bar, lv_color_hex(0x2E2E32), LV_PART_MAIN);
     lv_obj_set_style_bg_color(g_bar, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
     g_elapsed = label(g_lyricsView, fonts::ui16, COL_DIM);
     lv_obj_align(g_elapsed, LV_ALIGN_BOTTOM_LEFT, 24, -10);

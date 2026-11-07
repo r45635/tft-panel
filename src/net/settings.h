@@ -19,6 +19,7 @@ struct Settings {
     uint8_t view = 0;      // last view chosen by a swipe: 0 = lyrics, 1 = cover
     uint8_t brightness = 100;  // backlight when awake, 10..100 %
     bool clock = true;     // big clock on the dimmed screen when nothing plays
+    uint8_t warmth = 40;   // colour warmth 0..100 %, against the panel's bluish white
     String tz;             // POSIX TZ string; empty = DEFAULT_TZ
 };
 
@@ -46,6 +47,8 @@ void setBrightness(uint8_t percent);
 uint8_t brightness();
 void setClock(bool on);
 bool clock();
+void setWarmth(uint8_t percent);
+uint8_t warmth();
 void setTz(const String &tz);
 String tz();                   // never empty: DEFAULT_TZ when unset
 void forgetWifi();

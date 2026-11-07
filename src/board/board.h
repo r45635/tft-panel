@@ -54,6 +54,9 @@ void touchDiag();
 // Cumulative flush count and time (µs) spent copying into the framebuffer, for profiling.
 void flushStats(uint32_t &count, uint32_t &us);
 
+// Colour warmth 0..100 %: 0 = the panel's own (cool, bluish) white, 100 = blue -30 %.
+void setWarmth(uint8_t percent);
+
 // 0..100 %. 0 turns the backlight off.
 void setBacklight(uint8_t percent);
 

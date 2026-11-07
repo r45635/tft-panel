@@ -17,6 +17,7 @@ volatile int32_t g_sleepMin = 10;
 volatile uint8_t g_view = 0;
 volatile uint8_t g_brightness = 100;
 volatile bool g_clock = true;
+volatile uint8_t g_warmth = 40;
 
 void putString(const char *key, const String &value) {
     g_prefs.begin(NS, false);
@@ -53,6 +54,8 @@ void begin() {
     g_brightness = g_s.brightness;
     g_s.clock = g_prefs.isKey("clock") ? g_prefs.getBool("clock", true) : true;
     g_clock = g_s.clock;
+    g_s.warmth = g_prefs.isKey("warmth") ? g_prefs.getUChar("warmth", 40) : 40;
+    g_warmth = g_s.warmth;
     g_s.tz = read("tz");
     if (g_s.apPass.length() < 8) {
         // Setup AP password: random once per device, then stable so a reboot during
@@ -195,6 +198,19 @@ void setClock(bool on) {
 
 bool clock() { return g_clock; }
 
+void setWarmth(uint8_t percent) {
+    if (percent > 100) percent = 100;
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.warmth = percent;
+    g_warmth = percent;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putUChar("warmth", percent);
+    g_prefs.end();
+}
+
+uint8_t warmth() { return g_warmth; }
+
 void setTz(const String &tz) {
     xSemaphoreTake(g_lock, portMAX_DELAY);
     g_s.tz = tz;
@@ -227,6 +243,7 @@ void eraseAll() {
     g_view = g_s.view;
     g_brightness = g_s.brightness;
     g_clock = g_s.clock;
+    g_warmth = g_s.warmth;
     xSemaphoreGive(g_lock);
 }
 

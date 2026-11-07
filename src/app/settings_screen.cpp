@@ -4,14 +4,15 @@
 #include <esp_heap_caps.h>
 
 #include "../net/settings.h"
+#include "../board/board.h"
 #include "../version.h"
 #include "fonts.h"
 
 namespace settingsui {
 namespace {
 
-constexpr uint32_t COL_BG = 0x0E1116, COL_ROW = 0x161B22, COL_BTN = 0x1C232B;
-constexpr uint32_t COL_TEXT = 0xF2F4F7, COL_MID = 0xA4AEB9, COL_DIM = 0x6B7683, COL_ACCENT = 0x40C4FF;
+constexpr uint32_t COL_BG = 0x0B0B0C, COL_ROW = 0x18181B, COL_BTN = 0x232326;
+constexpr uint32_t COL_TEXT = 0xF2F2F2, COL_MID = 0xAEAEB2, COL_DIM = 0x78787C, COL_ACCENT = 0x40C4FF;
 
 struct TzChoice {
     const char *name, *posix;
@@ -31,7 +32,7 @@ Hooks g_hooks{};
 lv_obj_t *g_root = nullptr, *g_list = nullptr;
 lv_obj_t *g_leadValue = nullptr, *g_wifiTitle = nullptr, *g_fwTitle = nullptr, *g_fwStatus = nullptr;
 lv_obj_t *g_fwButton = nullptr, *g_fwButtonLabel = nullptr, *g_about = nullptr;
-lv_obj_t *g_brightness = nullptr, *g_sleep = nullptr, *g_tz = nullptr;
+lv_obj_t *g_brightness = nullptr, *g_warmth = nullptr, *g_sleep = nullptr, *g_tz = nullptr;
 lv_obj_t *g_swBackdrop = nullptr, *g_swScroll = nullptr, *g_swClock = nullptr;
 bool g_updateAvailable = false;
 
@@ -172,6 +173,21 @@ void buildRows() {
     lv_obj_add_event_cb(g_brightness, [](lv_event_t *) { settings::setBrightness(lv_slider_get_value(g_brightness)); },
                         LV_EVENT_RELEASED, nullptr);
 
+    // Colour warmth: live while dragging, saved on release.
+    lv_obj_t *wsub = nullptr;
+    r = row("Colour warmth", nullptr, &wsub);
+    lv_label_set_text(wsub, "Warmer counters the panel's bluish white.");
+    g_warmth = lv_slider_create(r);
+    lv_obj_set_width(g_warmth, 300);
+    lv_slider_set_range(g_warmth, 0, 100);
+    lv_slider_set_value(g_warmth, settings::warmth(), LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(g_warmth, lv_color_hex(0xFFB060), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(g_warmth, lv_color_hex(COL_TEXT), LV_PART_KNOB);
+    lv_obj_add_event_cb(g_warmth, [](lv_event_t *) { board::setWarmth(lv_slider_get_value(g_warmth)); },
+                        LV_EVENT_VALUE_CHANGED, nullptr);
+    lv_obj_add_event_cb(g_warmth, [](lv_event_t *) { settings::setWarmth(lv_slider_get_value(g_warmth)); },
+                        LV_EVENT_RELEASED, nullptr);
+
     // Screen off after (it always dims after a minute without playback).
     lv_obj_t *sub = nullptr;
     r = row("Screen off after", nullptr, &sub);
@@ -289,6 +305,7 @@ void build(lv_obj_t *scr, const Hooks &hooks) {
 void open() {
     // Values may have changed from the console since the screen was built.
     lv_slider_set_value(g_brightness, settings::brightness(), LV_ANIM_OFF);
+    lv_slider_set_value(g_warmth, settings::warmth(), LV_ANIM_OFF);
     lv_obj_set_state(g_swBackdrop, LV_STATE_CHECKED, settings::backdrop());
     lv_obj_set_state(g_swScroll, LV_STATE_CHECKED, settings::scroll());
     lv_obj_set_state(g_swClock, LV_STATE_CHECKED, settings::clock());
