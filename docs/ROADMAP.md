@@ -49,6 +49,20 @@
 - [x] Release script + browser installer (ESP Web Tools on GitHub Pages) — first release not published yet
 - [x] Settings screen, idle clock (SNTP + time zone), volume slider + mute, per-track lyrics offset
 
+## To discuss (estimated 2026-11-07, not started)
+
+- **Multi-language UI** — ~120 strings, 3–6 KB of flash per language, about a day for English +
+  French (UI + setup portal), then mostly translation. Latin Extended-A already covers FR, DE, ES,
+  IT, PT, NL, PL, CS, SV… Greek / Cyrillic: +30–50 KB (two font weights), which would also make
+  lyrics in those scripts readable (boxes today). CJK: too big for flash, needs the microSD.
+- **Browse and search the library** (artist, album, genre, composer, playlists, radio) — through
+  the companion's `browse` / `browse/load` / `play-item`; scrollable lists with lazily loaded
+  56 px covers, Roon's actions (play now, queue, start radio), an on-screen keyboard (LVGL) for
+  search; genre through browse (Roon search has no genre category). Use the panel's own browse
+  `multi_session_key` so it never moves what the desktop app is browsing (same spirit as never
+  touching the companion's active zone). ~40–60 KB of flash, 2–3 days.
+- Smaller ideas: a quick small cover before the big one, a French user guide / site, release CI.
+
 ## Phase 3 — polish
 
 - Companion push channel (SSE/WebSocket) instead of polling

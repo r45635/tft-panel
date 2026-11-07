@@ -92,6 +92,10 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
   that track while it has none, so the panel never stays stuck on covers. No track → lyrics view
   (it carries the status message). `lv_indev_wait_release` after a swipe: the finger's
   release never clicks the screen or a button it started on.
+- Long texts (title, artist, status, zone button, zone list, idle-clock track) bounce-scroll
+  slowly (LVGL `LONG_MODE_SCROLL`, ~35 px/s) instead of ending in "…". In the cover view a text
+  that fits its 2 lines wraps, a longer one goes on one scrolling line. Lyric lines are not
+  scrolled (a moving line while singing would distract).
 - Lyrics slide up when the next line comes (320 ms ease-out, `scroll on|off`): the rows sit in a
   box translated inside a fixed, clipping stage; the incoming last line fades in. Seeks, track
   changes and going back jump.

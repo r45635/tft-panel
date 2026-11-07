@@ -158,6 +158,30 @@ void setText(lv_obj_t *l, const char *t) {
     if (!cur || strcmp(cur, t) != 0) lv_label_set_text(l, t);
 }
 
+// Too long for its box: the text slides to the end, pauses, slides back (LVGL's bounce scroll),
+// instead of being cut with "...". Slow, so it reads and costs few redraws.
+void marquee(lv_obj_t *l) {
+    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_SCROLL);
+    lv_obj_set_style_anim_duration(l, lv_anim_speed_clamped(35, 600, 30000), 0);
+}
+
+// Multi-line boxes (cover view): wrapped on up to `maxLines` (set by boundedLabel) when it
+// fits, else on one line that scrolls.
+void setFitText(lv_obj_t *l, const char *t) {
+    int maxLines = (int)(intptr_t)lv_obj_get_user_data(l);
+    const lv_font_t *font = lv_obj_get_style_text_font(l, LV_PART_MAIN);
+    lv_point_t size;
+    // The style width (fixed), not the coordinates, which are 0 before the first layout.
+    lv_text_get_size(&size, t, font, 0, 0, lv_obj_get_style_width(l, LV_PART_MAIN), LV_TEXT_FLAG_NONE);
+    int lines = (size.y + lv_font_get_line_height(font) / 2) / lv_font_get_line_height(font);
+    lv_label_long_mode_t mode = lines > maxLines ? LV_LABEL_LONG_MODE_SCROLL : LV_LABEL_LONG_MODE_WRAP;
+    if (lv_label_get_long_mode(l) != mode) {
+        if (mode == LV_LABEL_LONG_MODE_SCROLL) marquee(l);
+        else lv_label_set_long_mode(l, mode);
+    }
+    setText(l, t);
+}
+
 void setTextColour(lv_obj_t *o, uint32_t colour) {
     lv_color_t c = lv_color_hex(colour);
     if (!lv_color_eq(lv_obj_get_style_text_color(o, LV_PART_MAIN), c)) lv_obj_set_style_text_color(o, c, 0);
@@ -293,7 +317,7 @@ void fillPicker() {
         lv_obj_set_style_pad_ver(b, 16, 0);
         lv_obj_t *l = label(b, fonts::ui20, current ? COL_ACCENT : COL_TEXT);
         lv_obj_set_width(l, lv_pct(100));
-        lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
+        marquee(l);
         setText(l, ((current ? String(LV_SYMBOL_OK "  ") : String("     ")) + text).c_str());
         lv_obj_add_event_cb(b, onPickZone, LV_EVENT_CLICKED, (void *)(intptr_t)g_pickerIds.size());
         g_pickerIds.push_back(id);
@@ -331,7 +355,7 @@ void buildControls() {
     lv_obj_set_style_shadow_width(g_btnZone, 0, 0);
     g_zoneBtnLabel = label(g_btnZone, fonts::ui16, COL_TEXT);
     lv_obj_set_width(g_zoneBtnLabel, 124);
-    lv_label_set_long_mode(g_zoneBtnLabel, LV_LABEL_LONG_MODE_DOTS);
+    marquee(g_zoneBtnLabel);
     lv_obj_set_style_text_align(g_zoneBtnLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(g_zoneBtnLabel);
     lv_obj_add_event_cb(g_btnZone, onZone, LV_EVENT_CLICKED, nullptr);
@@ -414,7 +438,8 @@ lv_obj_t *boundedLabel(lv_obj_t *parent, const lv_font_t *font, uint32_t colour,
     lv_obj_t *l = label(parent, font, colour);
     lv_obj_set_width(l, CV_COL_W);
     lv_obj_set_style_max_height(l, maxLines * lv_font_get_line_height(font), 0);
-    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
+    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_user_data(l, (void *)(intptr_t)maxLines);   // for setFitText
     return l;
 }
 
@@ -795,7 +820,7 @@ void buildClock() {
     lv_obj_align(g_clockDate, LV_ALIGN_CENTER, 0, 70);
     g_clockTrack = label(g_clock, fonts::ui20, COL_DIM);
     lv_obj_set_width(g_clockTrack, 700);
-    lv_label_set_long_mode(g_clockTrack, LV_LABEL_LONG_MODE_DOTS);
+    marquee(g_clockTrack);
     lv_obj_set_style_text_align(g_clockTrack, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(g_clockTrack, LV_ALIGN_BOTTOM_MID, 0, -36);
     lv_obj_set_hidden(g_clock, true);
@@ -897,7 +922,7 @@ void build() {
     g_status = label(g_scr, fonts::ui16, COL_DIM);
     lv_obj_set_width(g_status, 460);
     lv_obj_set_style_text_align(g_status, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_label_set_long_mode(g_status, LV_LABEL_LONG_MODE_DOTS);
+    marquee(g_status);
     lv_obj_align(g_status, LV_ALIGN_TOP_RIGHT, -24, 12);
 
     auto viewBox = []() {
@@ -919,11 +944,11 @@ void build() {
 
     g_title = label(g_lyricsView, fonts::ui20, COL_TEXT);
     lv_obj_set_width(g_title, TRACK_W);
-    lv_label_set_long_mode(g_title, LV_LABEL_LONG_MODE_DOTS);
+    marquee(g_title);
     lv_obj_set_pos(g_title, TRACK_X, 40);
     g_artist = label(g_lyricsView, fonts::ui16, COL_MID);
     lv_obj_set_width(g_artist, TRACK_W);
-    lv_label_set_long_mode(g_artist, LV_LABEL_LONG_MODE_DOTS);
+    marquee(g_artist);
     lv_obj_set_pos(g_artist, TRACK_X, 68);
 
     g_stage = lv_obj_create(g_lyricsView);
@@ -1006,7 +1031,7 @@ void setRows(int index) {
         if (l && i >= 0 && i < (int)l->lines.size()) text = l->lines[i].text.c_str();
         // Before the first line, show the first lines dimmed below an empty current row.
         setText(g_rows[r], text);
-        if (r == CURRENT_ROW) setText(g_cvLyric, text);
+        if (r == CURRENT_ROW) setFitText(g_cvLyric, text);
     }
 }
 
@@ -1090,10 +1115,10 @@ void applySnapshot() {
     applyCover(track);
     setText(g_title, track ? g_s.title.c_str() : "");
     setText(g_artist, track ? (g_s.artist + (g_s.album.length() ? "  -  " + g_s.album : "")).c_str() : "");
-    setText(g_cvTitle, track ? g_s.title.c_str() : "");
-    setText(g_cvArtist, track ? g_s.artist.c_str() : "");
-    setText(g_cvAlbum, track ? g_s.album.c_str() : "");
-    if (g_s.lyricsStatus != net::LyricsStatus::Found) setText(g_cvLyric, "");
+    setFitText(g_cvTitle, track ? g_s.title.c_str() : "");
+    setFitText(g_cvArtist, track ? g_s.artist.c_str() : "");
+    setFitText(g_cvAlbum, track ? g_s.album.c_str() : "");
+    if (g_s.lyricsStatus != net::LyricsStatus::Found) setFitText(g_cvLyric, "");
     applyView();
     setHidden(g_bar, !track);
     setHidden(g_elapsed, !track);
