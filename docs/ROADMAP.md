@@ -36,7 +36,7 @@
 - [x] Smooth scroll between lyric lines (`scroll on|off`) — to check by eye on the LCD
 - [x] Cover thumbnail next to the title (one 56 px fetch feeds thumbnail and backdrop)
 - [x] Screen dimming / sleep when nothing plays (`sleep <min>|off`, a touch wakes it)
-- [ ] Watch: flickering dots on the LCD (fixed by fewer redraws + 20-line bounce buffers? confirm by eye)
+- [x] Flickering dots on the LCD: gone (fewer redraws, 20-line bounce buffers, 64-byte cache lines) — confirmed by eye
 
 ## Phase 3 — polish
 

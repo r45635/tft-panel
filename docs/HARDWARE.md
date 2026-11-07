@@ -75,7 +75,9 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   the RGB bounce buffers are refilled from the PSRAM framebuffer while LVGL's flush writes into it.
   Mitigation: only touch LVGL objects whose content changed (`setText`/`setTextColour`/`setHidden` in
   `ui.cpp`; set_text with the same text still invalidates) and 20-line bounce buffers (were 10).
-  Next levers if dots remain: lower PCLK (16 → 14 MHz), double framebuffer.
+  **Confirmed gone by eye (2026-11-07)**, lyric slides included, with the 64-byte cache lines and the
+  single 48-line draw strip (shorter flushes). Levers if they ever come back: lower PCLK (16 → 14 MHz),
+  double framebuffer.
 - 🪤 **Internal RAM is the scarce resource, not PSRAM.** Blocks under 4 KB
   (`CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`) go to internal RAM even with 7 MB of PSRAM free. With
   LVGL on the C allocator, the tiny_ttf glyph cache (~1.3 KB per 44 px glyph) ate the ~70 KB the
