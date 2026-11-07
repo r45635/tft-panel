@@ -37,7 +37,7 @@ struct ZoneInfo {
 struct OutputInfo {
     String id, name;
     String volumeType;        // "number" | "db" | "incremental" | "" (no volume control)
-    float value = 0, min = 0, max = 0;
+    float value = 0, min = 0, max = 0, step = 1;
     bool muted = false;
 };
 
@@ -102,5 +102,9 @@ void pause(bool on);         // hold all network calls (used while dumping a scr
 void control(const char *action);   // "playpause" | "next" | "previous" | "play" | "pause"
 void volumeStep(int direction);      // +1 / -1 on every output of the zone
 void selectZone(const String &zoneId);   // pin a zone; empty = follow the playing zone
+void volumeSet(float value);         // absolute, on the zone's first output with a volume
+void mute(bool on);                  // every output of the zone
+// Saves the current track's lyrics offset in the companion (> 0 = lyrics later).
+void setOffset(int32_t ms);
 
 }  // namespace net

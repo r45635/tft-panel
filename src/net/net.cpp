@@ -45,11 +45,12 @@ String g_imageKey;          // cover currently shown (or attempted)
 bool g_backdropWanted = true;
 uint32_t g_lastZonesAt = 0, g_lastNowPlayingAt = 0;
 
-enum class CmdType : uint8_t { Control, Volume, Zone };
+enum class CmdType : uint8_t { Control, Volume, Zone, VolumeSet, Mute, Offset };
 struct Command {
     CmdType type;
     int8_t direction;
     char arg[48];
+    float value;
 };
 QueueHandle_t g_commands = nullptr;
 PositionClock g_clock;
@@ -504,6 +505,7 @@ void pollNowPlaying() {
             oi.value = v["value"] | 0.0f;
             oi.min = v["min"] | 0.0f;
             oi.max = v["max"] | 0.0f;
+            oi.step = v["step"] | 1.0f;
             oi.muted = v["is_muted"] | false;
         }
         outputs.push_back(oi);
@@ -590,6 +592,46 @@ void runCommand(const Command &c) {
         HttpResult r = request("/api/roon/control", &body, resp, 4000);
         if (r.code == 200) Serial.printf("[net] control %s ok\n", c.arg);
         else commandFailed(String("Control ") + c.arg, r);
+    } else if (c.type == CmdType::VolumeSet) {
+        for (const OutputInfo &o : outputs) {
+            if (o.volumeType != "number" && o.volumeType != "db") continue;
+            body["output_id"] = o.id;
+            body["how"] = "absolute";
+            body["value"] = c.value;
+            HttpResult r = request("/api/roon/volume", &body, resp, 4000);
+            if (r.code != 200) commandFailed("Volume " + o.name, r);
+            break;   // the slider follows the first output with an absolute volume
+        }
+    } else if (c.type == CmdType::Mute) {
+        for (const OutputInfo &o : outputs) {
+            if (!o.volumeType.length()) continue;
+            body.clear();
+            body["output_id"] = o.id;
+            body["how"] = c.direction ? "mute" : "unmute";
+            HttpResult r = request("/api/roon/mute", &body, resp, 4000);
+            if (r.code != 200) commandFailed(String(c.direction ? "Mute " : "Unmute ") + o.name, r);
+        }
+    } else if (c.type == CmdType::Offset) {
+        String title, artist, album;
+        xSemaphoreTake(g_lock, portMAX_DELAY);
+        title = g_snap.title;
+        artist = g_snap.artist;
+        album = g_snap.album;
+        xSemaphoreGive(g_lock);
+        if (!title.length()) return;
+        body["title"] = title;
+        body["artist"] = artist;
+        if (album.length()) body["album"] = album;
+        body["offset_ms"] = (int32_t)c.value;
+        HttpResult r = request("/api/lyrics/offset", &body, resp, 4000);
+        if (r.code != 200) {
+            commandFailed("Lyrics offset", r);
+            return;
+        }
+        int32_t saved = resp["offset_ms"] | (int32_t)c.value;
+        update([&](Snapshot &s) { s.offsetMs = saved; });
+        Serial.printf("[net] lyrics offset %d ms saved for \"%s\"\n", (int)saved, title.c_str());
+        return;
     } else {
         int sent = 0;
         for (const OutputInfo &o : outputs) {
@@ -772,10 +814,11 @@ void reconnect() { g_reconnectRequested = true; }
 void pause(bool on) { g_paused = on; }
 
 namespace {
-void enqueue(CmdType type, const char *arg, int8_t direction) {
+void enqueue(CmdType type, const char *arg, int8_t direction, float value = 0) {
     Command c{};
     c.type = type;
     c.direction = direction;
+    c.value = value;
     strlcpy(c.arg, arg ? arg : "", sizeof c.arg);
     if (xQueueSend(g_commands, &c, 0) != pdTRUE) Serial.println("[net] WARNING: command queue full, command dropped");
 }
@@ -784,5 +827,8 @@ void enqueue(CmdType type, const char *arg, int8_t direction) {
 void control(const char *action) { enqueue(CmdType::Control, action, 0); }
 void volumeStep(int direction) { enqueue(CmdType::Volume, nullptr, direction > 0 ? 1 : -1); }
 void selectZone(const String &zoneId) { enqueue(CmdType::Zone, zoneId.c_str(), 0); }
+void volumeSet(float value) { enqueue(CmdType::VolumeSet, nullptr, 0, value); }
+void mute(bool on) { enqueue(CmdType::Mute, nullptr, on ? 1 : 0); }
+void setOffset(int32_t ms) { enqueue(CmdType::Offset, nullptr, 0, (float)ms); }
 
 }  // namespace net

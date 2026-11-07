@@ -107,6 +107,18 @@ ota::Status g_ota;
 lv_obj_t *g_clock = nullptr, *g_clockTime = nullptr, *g_clockDate = nullptr, *g_clockTrack = nullptr;
 int g_clockMinute = -1;
 
+// Volume popup (tap the volume value): slider + mute. Offset popup (long press on the lyrics):
+// -/+ 250 ms, applied at once on screen, saved to the companion after a short pause.
+lv_obj_t *g_volPopup = nullptr, *g_volTitle = nullptr, *g_volSlider = nullptr, *g_volValue = nullptr;
+lv_obj_t *g_muteLabel = nullptr;
+uint32_t g_volTouchedAt = 0, g_volSentAt = 0;
+bool g_volDirty = false;
+lv_obj_t *g_offPopup = nullptr, *g_offValue = nullptr;
+int32_t g_offsetLocal = 0;
+uint32_t g_offsetChangedAt = 0;
+bool g_offsetPending = false;
+String g_offsetTrack;
+
 bool g_demo = false;
 uint32_t g_seenVersion = UINT32_MAX;
 net::Snapshot g_s;
@@ -114,6 +126,8 @@ uint32_t g_seenLyricsSerial = UINT32_MAX;
 int g_shownIndex = INT32_MIN;
 uint32_t g_lastProgress = 0;
 String g_qrWifiData, g_qrUrlData;
+
+void syncVolumePopup();
 
 lv_obj_t *label(lv_obj_t *parent, const lv_font_t *font, uint32_t colour) {
     lv_obj_t *l = lv_label_create(parent);
@@ -303,6 +317,14 @@ void buildControls() {
     g_btnVolDown = roundButton(g_controls, LV_SYMBOL_MINUS, nullptr, onVolDown);
     g_volLabel = label(g_controls, fonts::ui20, COL_MID);
     lv_obj_set_width(g_volLabel, 80);
+    lv_obj_set_height(g_volLabel, 64);   // a finger-sized target: a tap opens the volume slider
+    lv_obj_set_style_pad_top(g_volLabel, 20, 0);
+    lv_obj_set_clickable(g_volLabel, true);
+    lv_obj_add_event_cb(g_volLabel, [](lv_event_t *) {
+        showControls(false);
+        setHidden(g_volPopup, false);
+        syncVolumePopup();
+    }, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_text_align(g_volLabel, LV_TEXT_ALIGN_CENTER, 0);
     g_btnVolUp = roundButton(g_controls, LV_SYMBOL_PLUS, nullptr, onVolUp);
     roundButton(g_controls, LV_SYMBOL_SETTINGS, nullptr, [](lv_event_t *) {
@@ -522,6 +544,190 @@ lv_obj_t *fullScreen(lv_opa_t opa) {
     return o;
 }
 
+const net::OutputInfo *volumeOutput() {
+    for (const net::OutputInfo &o : g_s.outputs)
+        if (o.volumeType == "number" || o.volumeType == "db") return &o;
+    return nullptr;
+}
+
+String volumeText(float v, const net::OutputInfo &o) {
+    char buf[24];
+    if (o.volumeType == "db") snprintf(buf, sizeof buf, "%.1f dB", v);
+    else snprintf(buf, sizeof buf, "%.0f", v);
+    return buf;
+}
+
+float sliderToVolume(const net::OutputInfo &o) {
+    float step = o.step > 0 ? o.step : 1;
+    return o.min + lv_slider_get_value(g_volSlider) * step;
+}
+
+void syncVolumePopup() {
+    if (isHidden(g_volPopup)) return;
+    const net::OutputInfo *o = volumeOutput();
+    bool any = false;
+    for (const net::OutputInfo &x : g_s.outputs) any |= x.volumeType.length() > 0;
+    if (!any) {
+        setHidden(g_volPopup, true);
+        return;
+    }
+    bool muted = false;
+    for (const net::OutputInfo &x : g_s.outputs)
+        if (x.volumeType.length() && x.muted) muted = true;
+    setText(g_muteLabel, muted ? LV_SYMBOL_VOLUME_MAX "  Unmute" : LV_SYMBOL_MUTE "  Mute");
+    setHidden(g_volSlider, !o);
+    setText(g_volTitle, o ? ("Volume  -  " + o->name).c_str() : "Volume (this zone only has - / +)");
+    if (!o) {
+        setText(g_volValue, "");
+        return;
+    }
+    float step = o->step > 0 ? o->step : 1;
+    int32_t n = (int32_t)lroundf((o->max - o->min) / step);
+    if (lv_slider_get_max_value(g_volSlider) != n) lv_slider_set_range(g_volSlider, 0, n);
+    // Don't fight the finger: follow the zone only when the user is not adjusting it.
+    bool touching = lv_obj_has_state(g_volSlider, LV_STATE_PRESSED) || millis() - g_volTouchedAt < 1500;
+    if (!touching) {
+        lv_slider_set_value(g_volSlider, (int32_t)lroundf((o->value - o->min) / step), LV_ANIM_OFF);
+        setText(g_volValue, (muted ? String("muted") : volumeText(o->value, *o)).c_str());
+    }
+}
+
+void onVolSlider(lv_event_t *e) {
+    const net::OutputInfo *o = volumeOutput();
+    if (!o) return;
+    g_volTouchedAt = millis();
+    float v = sliderToVolume(*o);
+    setText(g_volValue, volumeText(v, *o).c_str());
+    bool released = lv_event_get_code(e) == LV_EVENT_RELEASED;
+    if (released || millis() - g_volSentAt >= 250) {   // at most 4 requests a second while dragging
+        g_volSentAt = millis();
+        g_volDirty = false;
+        net::volumeSet(v);
+    } else {
+        g_volDirty = true;
+    }
+}
+
+lv_obj_t *popupBox(int h) {
+    lv_obj_t *dim = fullScreen(LV_OPA_70);
+    lv_obj_add_event_cb(dim, [](lv_event_t *e) {   // tap outside the box closes it
+        if (lv_event_get_target(e) == lv_event_get_current_target(e)) setHidden((lv_obj_t *)lv_event_get_current_target(e), true);
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t *box = lv_obj_create(dim);
+    lv_obj_remove_style_all(box);
+    lv_obj_set_size(box, 680, h);
+    lv_obj_align(box, LV_ALIGN_BOTTOM_MID, 0, -24);
+    lv_obj_set_style_bg_color(box, lv_color_hex(0x161B22), 0);
+    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(box, 16, 0);
+    lv_obj_set_scrollable(box, false);
+    lv_obj_set_clickable(box, true);
+    return box;
+}
+
+void buildVolumePopup() {
+    lv_obj_t *box = popupBox(220);
+    g_volPopup = lv_obj_get_parent(box);
+    g_volTitle = label(box, fonts::ui20, COL_MID);
+    lv_obj_set_width(g_volTitle, 460);
+    lv_label_set_long_mode(g_volTitle, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_pos(g_volTitle, 28, 22);
+    g_volValue = label(box, fonts::lyricsOther, COL_TEXT);
+    lv_obj_set_width(g_volValue, 160);
+    lv_obj_set_style_text_align(g_volValue, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(g_volValue, LV_ALIGN_TOP_RIGHT, -28, 14);
+    g_volSlider = lv_slider_create(box);
+    lv_obj_set_size(g_volSlider, 600, 22);
+    lv_obj_align(g_volSlider, LV_ALIGN_TOP_MID, 0, 90);
+    lv_obj_set_style_bg_color(g_volSlider, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(g_volSlider, lv_color_hex(COL_TEXT), LV_PART_KNOB);
+    lv_obj_set_style_pad_all(g_volSlider, 10, LV_PART_KNOB);
+    lv_obj_add_event_cb(g_volSlider, onVolSlider, LV_EVENT_VALUE_CHANGED, nullptr);
+    lv_obj_add_event_cb(g_volSlider, onVolSlider, LV_EVENT_RELEASED, nullptr);
+    lv_obj_t *mute = textButton(box, "Mute", 0x1C232B, [](lv_event_t *) {
+        bool muted = false;
+        for (const net::OutputInfo &x : g_s.outputs)
+            if (x.volumeType.length() && x.muted) muted = true;
+        net::mute(!muted);
+    });
+    g_muteLabel = lv_obj_get_child(mute, 0);
+    lv_obj_align(mute, LV_ALIGN_BOTTOM_LEFT, 28, -20);
+    lv_obj_t *done = textButton(box, "Done", 0x1F6F9E, [](lv_event_t *) { setHidden(g_volPopup, true); });
+    lv_obj_align(done, LV_ALIGN_BOTTOM_RIGHT, -28, -20);
+}
+
+int32_t effectiveOffset() {
+    // The local value wins while it is being edited or saved, then the companion's.
+    if (g_offsetTrack == trackKey() && (g_offsetPending || millis() - g_offsetChangedAt < 5000)) return g_offsetLocal;
+    return g_s.offsetMs;
+}
+
+void showOffset() {
+    int32_t v = effectiveOffset();
+    char buf[40];
+    if (v == 0) snprintf(buf, sizeof buf, "In sync");
+    else snprintf(buf, sizeof buf, "%.2f s %s", fabsf(v / 1000.0f), v > 0 ? "later" : "earlier");
+    setText(g_offValue, buf);
+}
+
+void stepOffset(int32_t delta) {
+    int32_t base = effectiveOffset();
+    g_offsetTrack = trackKey();
+    g_offsetLocal = delta ? base + delta : 0;
+    if (g_offsetLocal > 10000) g_offsetLocal = 10000;
+    if (g_offsetLocal < -10000) g_offsetLocal = -10000;
+    g_offsetChangedAt = millis();
+    g_offsetPending = true;
+    g_shownIndex = INT32_MIN;   // re-place the lyrics now
+    showOffset();
+}
+
+void buildOffsetPopup() {
+    lv_obj_t *box = popupBox(200);
+    g_offPopup = lv_obj_get_parent(box);
+    lv_obj_t *t = label(box, fonts::ui20, COL_MID);
+    setText(t, "Lyrics timing for this track");
+    lv_obj_set_pos(t, 28, 22);
+    g_offValue = label(box, fonts::lyricsOther, COL_TEXT);
+    lv_obj_align(g_offValue, LV_ALIGN_TOP_RIGHT, -28, 14);
+    lv_obj_t *row = lv_obj_create(box);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, 640, 80);
+    lv_obj_align(row, LV_ALIGN_BOTTOM_MID, 0, -14);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_scrollable(row, false);
+    textButton(row, "Earlier", 0x1C232B, [](lv_event_t *) { stepOffset(-250); });
+    textButton(row, "Later", 0x1C232B, [](lv_event_t *) { stepOffset(+250); });
+    textButton(row, "Reset", 0x1C232B, [](lv_event_t *) { stepOffset(0); });
+    textButton(row, "Done", 0x1F6F9E, [](lv_event_t *) { setHidden(g_offPopup, true); });
+}
+
+void onLongPress(lv_event_t *) {
+    lv_indev_t *indev = lv_indev_active();
+    if (g_view != View::Lyrics || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen()) return;
+    if (g_s.lyricsStatus != net::LyricsStatus::Found || !g_s.lyrics || !g_s.lyrics->synced) return;
+    if (indev) lv_indev_wait_release(indev);   // no tap (controls toggle) at the release
+    showControls(false);
+    showOffset();
+    setHidden(g_offPopup, false);
+}
+
+// Sends the pending volume drag and the offset once the user paused.
+void tickPopups(uint32_t now) {
+    if (g_volDirty && now - g_volSentAt >= 250) {
+        const net::OutputInfo *o = volumeOutput();
+        g_volDirty = false;
+        g_volSentAt = now;
+        if (o) net::volumeSet(sliderToVolume(*o));
+    }
+    if (g_offsetPending && now - g_offsetChangedAt >= 800) {
+        g_offsetPending = false;
+        if (g_offsetTrack == trackKey()) net::setOffset(g_offsetLocal);
+    }
+    if (!isHidden(g_offPopup)) showOffset();
+}
+
 void buildClock() {
     g_clock = lv_obj_create(g_scr);
     lv_obj_remove_style_all(g_clock);
@@ -716,11 +922,14 @@ void build() {
         []() { onZone(nullptr); },
         []() { setHidden(g_otaConfirm, false); },
     });
+    buildVolumePopup();
+    buildOffsetPopup();
     buildClock();
     buildOta();
     for (lv_obj_t *o : {g_stage, g_setup}) lv_obj_set_clickable(o, false);
     lv_obj_add_event_cb(g_scr, onScreenTap, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(g_scr, onGesture, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_event_cb(g_scr, onLongPress, LV_EVENT_LONG_PRESSED, nullptr);
     showView(settings::view() ? View::Cover : View::Lyrics);
 }
 
@@ -885,7 +1094,7 @@ void tickLyrics(uint32_t now) {
     int32_t pos = g_s.positionAt(now);
     int index;
     if (l.synced) {
-        index = lyrics::currentIndex(l, pos + settings::leadMs() - g_s.offsetMs);
+        index = lyrics::currentIndex(l, pos + settings::leadMs() - effectiveOffset());
     } else {
         // Plain lyrics: no timing, so scroll in proportion to the track position.
         index = g_s.durationMs ? (int)((int64_t)pos * (int64_t)l.lines.size() / g_s.durationMs) : 0;
@@ -1015,7 +1224,8 @@ void tickClock() {
 void tickSleep(uint32_t now) {
     hookTouch();
     bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch ||
-                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress) || settingsui::isOpen();
+                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress) || settingsui::isOpen() ||
+                !isHidden(g_volPopup) || !isHidden(g_offPopup);
     if (busy) g_activeAt = now;
     uint32_t idle = now - g_activeAt;
     uint32_t offAfter = (uint32_t)settings::sleepMin() * 60000u;
@@ -1029,6 +1239,8 @@ void tickSleep(uint32_t now) {
         showControls(false);
         closePicker();
         settingsui::close();
+        setHidden(g_volPopup, true);
+        setHidden(g_offPopup, true);
     }
     g_screen = want;
     tickClock();   // show / hide the idle clock with the dim, not up to a frame later
@@ -1103,6 +1315,7 @@ void tick() {
         g_seenVersion = v;
         g_s = net::snapshot();
         applySnapshot();
+        syncVolumePopup();
         g_seenOtaVersion = UINT32_MAX;   // badge visibility depends on the portal state
     }
     static uint32_t lastRefresh = 0;
@@ -1117,6 +1330,7 @@ void tick() {
         lastRefresh = now;
         settingsui::refresh(g_s, g_ota);
     }
+    tickPopups(now);
     if (!isHidden(g_controls) && isHidden(g_picker) && now - g_controlsShownAt > CONTROLS_HIDE_MS)
         showControls(false);
     if (g_errorShown && now - g_s.commandErrorAt >= COMMAND_ERROR_MS) applySnapshot();
