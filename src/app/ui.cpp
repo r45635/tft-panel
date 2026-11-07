@@ -56,7 +56,10 @@ lv_obj_t *g_cvLyric = nullptr, *g_cvBar = nullptr, *g_cvElapsed = nullptr, *g_cv
 lv_obj_t *g_pageDots[VIEW_COUNT] = {};
 std::shared_ptr<const Picture> g_shownBig;
 View g_view = View::Lyrics;
-String g_viewOverrideTrack;   // the user swiped during this track: no automatic view on it
+// A swipe on a track without lyrics only holds for that track while it has none: it is never
+// saved, so the panel never stays stuck on covers once lyrics show up.
+String g_overrideTrack;
+View g_overrideView = View::Lyrics;
 // Setup overlay
 lv_obj_t *g_setup = nullptr, *g_qrWifi = nullptr, *g_qrUrl = nullptr, *g_setupText = nullptr;
 // Controls bar (shown on a tap, hides itself) and zone picker
@@ -426,16 +429,17 @@ bool hasTrack() {
     return g_s.phase == net::Phase::Playing || (g_s.title.length() && bad);
 }
 
-// The saved view, except: no track → lyrics view (it carries the status message); a track
-// without lyrics → cover view, unless the user swiped during this track.
+bool noLyrics() {
+    return g_s.lyricsStatus == net::LyricsStatus::NotFound || g_s.lyricsStatus == net::LyricsStatus::Instrumental ||
+           g_s.lyricsStatus == net::LyricsStatus::Error;
+}
+
+// No track → lyrics view (it carries the status message). A track without lyrics → cover view,
+// or what the user swiped to on this track. Lyrics found or loading → the saved view.
 View wantedView() {
     if (!hasTrack()) return View::Lyrics;
-    View base = settings::view() ? View::Cover : View::Lyrics;
-    bool noLyrics = g_s.lyricsStatus == net::LyricsStatus::NotFound ||
-                    g_s.lyricsStatus == net::LyricsStatus::Instrumental ||
-                    g_s.lyricsStatus == net::LyricsStatus::Error;
-    if (base == View::Lyrics && noLyrics && g_viewOverrideTrack != trackKey()) return View::Cover;
-    return base;
+    if (noLyrics()) return g_overrideTrack == trackKey() ? g_overrideView : View::Cover;
+    return settings::view() ? View::Cover : View::Lyrics;
 }
 
 void applyView() {
@@ -444,9 +448,15 @@ void applyView() {
     if (v != g_view) showView(v);
 }
 
+// A user choice (swipe or console). Saved only when the track has lyrics: that is a real
+// choice between lyrics and cover, not a way around the automatic cover view.
 void chooseView(View v) {
-    settings::setView(v == View::Cover ? 1 : 0);
-    g_viewOverrideTrack = trackKey();
+    if (hasTrack() && noLyrics() && !g_demo) {
+        g_overrideTrack = trackKey();
+        g_overrideView = v;
+    } else {
+        settings::setView(v == View::Cover ? 1 : 0);
+    }
     showView(v);
 }
 

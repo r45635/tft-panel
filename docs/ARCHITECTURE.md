@@ -85,9 +85,11 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
 - Two views, switched by a horizontal swipe that wraps around (left = next, right = previous),
   instantly — a full-screen frame costs ~130 ms, an animated wipe would get 3–4 frames. Lyrics view;
   cover view (384 px cover, title 44 px, artist 30 px, album, current lyric line, progress). Two dots
-  at the top show the page. The chosen view is saved in NVS (`view lyrics|cover` on the console);
-  a track without lyrics shows the cover view unless the user swiped during that track; no track →
-  lyrics view (it carries the status message). `lv_indev_wait_release` after a swipe: the finger's
+  at the top show the page. A track without lyrics shows the cover view; as soon as lyrics are
+  found (a retry or the next track) the saved view comes back. A swipe on a track with lyrics is
+  saved in NVS (`view lyrics|cover` on the console); on a track without lyrics it only holds for
+  that track while it has none, so the panel never stays stuck on covers. No track → lyrics view
+  (it carries the status message). `lv_indev_wait_release` after a swipe: the finger's
   release never clicks the screen or a button it started on.
 - Lyrics slide up when the next line comes (320 ms ease-out, `scroll on|off`): the rows sit in a
   box translated inside a fixed, clipping stage; the incoming last line fades in. Seeks, track
