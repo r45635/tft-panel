@@ -22,6 +22,7 @@ Serial console (115200, type `help`): `status`, `portal`, `companion <url>|auto`
 `token`, `lead <ms>`, `forget-wifi`, `erase-all`, `bringup` (colour bars + touch tracker), `restart`,
 `screenshot` → `tools/screenshot.py <log> out.png` (shows lyrics: keep it out of the repo);
 `demo` freezes the screen on invented lyrics — use it for layout checks and doc screenshots.
+`touchdiag` replays the touch reset variants live and attaches the touch if the GT911 answers.
 Fonts: `tools/fonts/build_fonts.sh` rebuilds `assets/fonts/` (never `npx` a converter: run-time tiny_ttf).
 
 ## Rules

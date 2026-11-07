@@ -42,9 +42,21 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   (`POST /save` reached; the first attempt left no trace before request logging existed). Joined
   Wi-Fi at -36..-46 dBm, found the companion by mDNS, followed the playing zone, loaded synced lyrics,
   followed a track change. Two OOM aborts before the PSRAM allocator fix (see Pitfalls), none after.
+- **2026-11-07, touch, software side closed** — console `touchdiag` (panel and backlight on, as the
+  factory firmware does) replays Elecrow's exact factory sequence (their PCA9557 library: same 0x18,
+  same registers, same 20 ms / 100 ms), a 500 ms reset, and the expander fully released, each at
+  400 and 100 kHz, probing 3 s each: **no GT911**. With every expander pin released for 3 s the input
+  register reads **0x00**: no expander net has a pull-up on the main board. TP-RESET (IO0) is
+  open-drain, so its high level can only come from the touch side; it reads 0 → the GT911 is either
+  not connected or held in reset. Elecrow forum users with the same board see 0x5D in a plain scan
+  (their issues were higher up, e.g. 400 kHz in LovyanGFX), we never do. Remaining test: Elecrow's V3.0
+  factory demo (`factory_firmare/hmi7.0-factory-firmware-3.0`, NVS at the same 0x9000) with a finger.
 
 ## Pitfalls
 
+- If the flex is seated and the GT911 still never answers: give TP-RESET a high level — 10 kΩ from
+  the TP-RESET net to 3V3, or fit **R40 (0 Ω)** to tie it to EN. With R40 fitted, the firmware must
+  stop pulling IO0 low (it would reset the ESP32).
 - 🪤 **PCA9557 IO0 is open-drain.** Writing it high only releases the line. The V3.0 schematic has
   **no pull-up on TP-RESET on the main board** (net: PCA9557 IO0, touch FPC P2.1/P4.1, R40 0R/NC to
   EN_RESET). The high level must come from the touch flex. If IO0 reads 0 while released, the GT911

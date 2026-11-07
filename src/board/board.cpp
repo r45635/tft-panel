@@ -242,6 +242,95 @@ bool begin() {
     return true;
 }
 
+void touchDiag() {
+    auto report = [](const char *tag) {
+        uint8_t i = 0, o = 0, c = 0;
+        g_pca.readReg(Pca9557::REG_INPUT, i);
+        g_pca.readReg(Pca9557::REG_OUTPUT, o);
+        g_pca.readReg(Pca9557::REG_CONFIG, c);
+        scanI2c();
+        Serial.printf("[touchdiag] %-34s in=0x%02X out=0x%02X cfg=0x%02X i2c=[%s]\n", tag, i, o, c,
+                      g_info.i2cDevices.c_str());
+    };
+    auto waitForTouch = [&](const char *tag, uint32_t ms) {
+        uint32_t t0 = millis();
+        while (millis() - t0 < ms) {
+            if (g_touch.begin(GT911_ADDR, GT911_ADDR_ALT)) {
+                Serial.printf("[touchdiag] %s: GT911 answered at 0x%02X after %u ms\n", tag, g_touch.address(),
+                              (unsigned)(millis() - t0));
+                return true;
+            }
+            delay(20);
+        }
+        report(tag);
+        return false;
+    };
+
+    // I2S pins low like the factory firmware (they idle on the amplifier).
+    for (int pin : {I2S_PIN_DOUT, I2S_PIN_LRCLK, I2S_PIN_BCLK}) {
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, LOW);
+    }
+    report("before (panel + backlight on)");
+
+    bool found = false;
+    for (uint32_t hz : {400000u, 100000u}) {
+        Wire.setClock(hz);
+        char tag[48];
+        // 1. Factory order and timings: reset() → all outputs → IO0+IO1 low 20 ms → IO0 high → 100 ms → IO1 input.
+        g_pca.setDirections(0xFF);
+        g_pca.setOutputs(0xFF);
+        g_pca.writeReg(Pca9557::REG_POLARITY, 0x00);
+        g_pca.setDirections(0x00);
+        g_pca.setPin(PCA9557_IO_TP_RESET, false);
+        g_pca.setPin(PCA9557_IO_TP_INT, false);
+        delay(20);
+        g_pca.setPin(PCA9557_IO_TP_RESET, true);
+        delay(100);
+        g_pca.setPinInput(PCA9557_IO_TP_INT, true);
+        snprintf(tag, sizeof tag, "factory sequence @%u kHz", (unsigned)(hz / 1000));
+        if ((found = waitForTouch(tag, 3000))) break;
+
+        // 2. Long reset (GT911 datasheet minimum is 100 us; some modules need far more).
+        g_pca.setPin(PCA9557_IO_TP_INT, false);
+        g_pca.setPinInput(PCA9557_IO_TP_INT, false);
+        g_pca.setPin(PCA9557_IO_TP_RESET, false);
+        delay(500);
+        g_pca.setPin(PCA9557_IO_TP_RESET, true);
+        delay(60);
+        g_pca.setPinInput(PCA9557_IO_TP_INT, true);
+        snprintf(tag, sizeof tag, "500 ms reset @%u kHz", (unsigned)(hz / 1000));
+        if ((found = waitForTouch(tag, 3000))) break;
+
+        // 3. Everything released (power-on state of the expander): GT911 free-running.
+        g_pca.setDirections(0xFF);
+        snprintf(tag, sizeof tag, "expander all inputs @%u kHz", (unsigned)(hz / 1000));
+        if ((found = waitForTouch(tag, 3000))) break;
+        g_pca.setOutputs(0xFF);
+        g_pca.setDirections(0x00);
+    }
+    Wire.setClock(I2C_FREQ_HZ);
+    // Leave the expander as at boot: all outputs high except TP-INT, an input.
+    g_pca.setOutputs(0xFF);
+    g_pca.setDirections(1u << PCA9557_IO_TP_INT);
+
+    if (!found) {
+        Serial.println("[touchdiag] RESULT: no GT911 on the bus in any variant");
+        return;
+    }
+    g_info.touch = true;
+    g_info.touchAddr = g_touch.address();
+    g_touch.readInfo(g_info.touchId, g_info.touchFw, g_info.touchXRes, g_info.touchYRes);
+    Serial.printf("[touchdiag] RESULT: GT911 id=\"%s\" fw=0x%04X res=%ux%u - touch input attached\n", g_info.touchId,
+                  g_info.touchFw, g_info.touchXRes, g_info.touchYRes);
+    if (!g_indev) {
+        g_indev = lv_indev_create();
+        lv_indev_set_type(g_indev, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(g_indev, touchReadCb);
+        lv_indev_set_display(g_indev, g_disp);
+    }
+}
+
 const Info &info() { return g_info; }
 
 lv_display_t *display() { return g_disp; }

@@ -80,7 +80,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | demo [off] | screenshot | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | demo [off] | screenshot | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -118,6 +118,8 @@ void handleCommand(String line) {
     } else if (cmd == "lead" && arg.length()) {
         settings::setLead(arg.toInt());
         Serial.printf("[cmd] lyrics lead = %d ms\n", (int)settings::leadMs());
+    } else if (cmd == "touchdiag") {
+        board::touchDiag();
     } else if (cmd == "demo") {
         ui::setDemo(arg != "off");
         Serial.printf("[cmd] demo %s\n", arg == "off" ? "off" : "on (\"demo off\" to go back)");
