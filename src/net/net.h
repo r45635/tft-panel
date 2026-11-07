@@ -63,5 +63,6 @@ Snapshot snapshot();         // copy under the lock
 
 void openPortal();           // start the setup portal even with Wi-Fi configured
 void reconnect();            // re-read settings (Wi-Fi, companion, zone) and start over
+void pause(bool on);         // hold all network calls (used while dumping a screenshot)
 
 }  // namespace net

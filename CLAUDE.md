@@ -20,7 +20,8 @@ reset with `rts=True` → `False` (`dtr=False`), then read for a few seconds.
 Changing `PLATFORMIO_BUILD_FLAGS` rebuilds the whole framework (~3 min).
 Serial console (115200, type `help`): `status`, `portal`, `companion <url>|auto`, `zone <id>|auto`,
 `token`, `lead <ms>`, `forget-wifi`, `erase-all`, `bringup` (colour bars + touch tracker), `restart`,
-`screenshot` → `tools/screenshot.py <log> out.png` (shows lyrics: keep it out of the repo).
+`screenshot` → `tools/screenshot.py <log> out.png` (shows lyrics: keep it out of the repo);
+`demo` freezes the screen on invented lyrics — use it for layout checks and doc screenshots.
 Fonts: `tools/fonts/build_fonts.sh` rebuilds `assets/fonts/` (never `npx` a converter: run-time tiny_ttf).
 
 ## Rules

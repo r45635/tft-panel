@@ -11,10 +11,15 @@ appear in between and are ignored.
 Screenshots can show lyrics: never commit them (copyright).
 """
 import base64
+import re
 import struct
 import sys
 import time
 import zlib
+
+
+LOG_RE = re.compile(r"\[\s*\d+\]\[[EWIDV]\]")
+B64_RE = re.compile(r"[A-Za-z0-9+/=]+")
 
 
 def decode(lines):
@@ -23,12 +28,25 @@ def decode(lines):
         raise SystemExit("no '[shot] begin' in the input")
     w, h = map(int, lines[start].split()[2:4])
     raw, end_pairs = bytearray(), None
-    for l in lines[start + 1:]:
-        if l.startswith("~"):
-            raw += base64.b64decode(l[1:].strip())
-        elif l.startswith("[shot] end"):
+    body = lines[start + 1:]
+    i = 0
+    while i < len(body):
+        l = body[i]
+        if l.startswith("[shot] end"):
             end_pairs = int(l.split()[2])
             break
+        if l.startswith("~"):
+            data = l[1:].strip()
+            # An ESP-IDF log line ("[  123][E][file.cpp:1] ...") can cut a data line in two:
+            # drop the log text and glue the remainder from the next line back on.
+            m = LOG_RE.search(data)
+            if m:
+                data = data[:m.start()]
+                if i + 1 < len(body) and B64_RE.fullmatch(body[i + 1].strip()):
+                    i += 1
+                    data += body[i].strip()
+            raw += base64.b64decode(data)
+        i += 1
     if end_pairs is None:
         raise SystemExit("dump truncated: no '[shot] end'")
     pairs = len(raw) // 4

@@ -35,6 +35,7 @@ lv_obj_t *g_bar = nullptr, *g_elapsed = nullptr, *g_total = nullptr;
 // Setup overlay
 lv_obj_t *g_setup = nullptr, *g_qrWifi = nullptr, *g_qrUrl = nullptr, *g_setupText = nullptr;
 
+bool g_demo = false;
 uint32_t g_seenVersion = UINT32_MAX;
 net::Snapshot g_s;
 uint32_t g_seenLyricsSerial = UINT32_MAX;
@@ -134,12 +135,17 @@ void build() {
     lv_obj_set_flex_flow(g_stage, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(g_stage, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(g_stage, 10, 0);
+    // Fixed budget so the stage never overflows: neighbours on one line, the current line on
+    // at most two; longer text ends with "…". 4 x 41 + 2 x 60 + gaps fits the 340 px stage.
     for (int i = 0; i < LYRIC_ROWS; i++) {
         bool cur = i == CURRENT_ROW;
-        lv_obj_t *l = label(g_stage, cur ? fonts::lyricsCurrent : fonts::lyricsOther,
-                            cur ? COL_TEXT : COL_DIM);
+        const lv_font_t *font = cur ? fonts::lyricsCurrent : fonts::lyricsOther;
+        lv_obj_t *l = label(g_stage, font, cur ? COL_TEXT : COL_DIM);
+        int32_t lh = lv_font_get_line_height(font);
         lv_obj_set_width(l, 760);
-        lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
+        lv_obj_set_height(l, LV_SIZE_CONTENT);
+        lv_obj_set_style_max_height(l, cur ? 2 * lh : lh, 0);
+        lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
         g_rows[i] = l;
     }
@@ -274,7 +280,34 @@ void show() {
     lv_screen_load(g_scr);
 }
 
+void setDemo(bool on) {
+    g_demo = on;
+    g_seenVersion = UINT32_MAX;   // live mode redraws everything on the next tick
+    g_shownIndex = INT32_MIN;
+    if (!on) return;
+    static const char *rows[LYRIC_ROWS] = {
+        "Sous la pluie d'automne, les néons s'éteignent un à un",
+        "« Où vas-tu ? » m'a-t-elle dit — je n'ai rien répondu…",
+        "Et l'été s'en allait sur la Côte, à l'heure où l'on rêve encore d'Œdipe",
+        "Żółw, façade, garçon, naïve : l'aube est déjà là",
+        "Ça ira mieux demain",
+    };
+    lv_obj_set_hidden(g_setup, true);
+    lv_obj_set_hidden(g_message, true);
+    lv_obj_set_hidden(g_stage, false);
+    for (int r = 0; r < LYRIC_ROWS; r++) lv_label_set_text(g_rows[r], rows[r]);
+    lv_label_set_text(g_zone, "Living Room");
+    lv_label_set_text(g_status, "Playing");
+    lv_label_set_text(g_title, "Les Néons d'automne");
+    lv_label_set_text(g_artist, "Jean‐Luc Démo  -  Démonstration");
+    for (lv_obj_t *o : {g_bar, g_elapsed, g_total}) lv_obj_set_hidden(o, false);
+    lv_bar_set_value(g_bar, 420, LV_ANIM_OFF);
+    lv_label_set_text(g_elapsed, "1:38");
+    lv_label_set_text(g_total, "3:54");
+}
+
 void tick() {
+    if (g_demo) return;
     uint32_t v = net::version();
     if (v != g_seenVersion) {
         g_seenVersion = v;

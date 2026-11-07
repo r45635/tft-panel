@@ -21,7 +21,10 @@
 - [x] Serial console for development (`help`)
 - [x] End-to-end on the real network: phone setup, mDNS, zone, synced lyrics, track change
 - [x] Internal RAM kept for Wi-Fi: LVGL and JSON allocate in PSRAM (steady ~120 KB free)
-- [ ] Visual check of the lyrics screen by eye (layout, accents, timing feel)
+- [x] Lyrics layout bounded (neighbours 1 line, current ≤ 2, "…"), all of General Punctuation in the
+      font (U+2010 in "Jean‐Luc" showed as a box), FPS overlay off; checked with `demo` + `screenshot`
+- [x] Timing: PositionClock (window ~36 ms on the board) + 250 ms display lead
+- [ ] Vincent's eye check on the real LCD after these fixes (the framebuffer is right; the panel itself is unverified)
 - [ ] Flash budget: the image is at 85 % of an OTA slot (Wi-Fi + HTTP + web server ≈ 900 KB)
 
 ## Phase 2 — lyrics and controls UI

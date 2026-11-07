@@ -28,6 +28,7 @@ Snapshot g_snap;
 volatile uint32_t g_version = 0;
 volatile bool g_portalRequested = false;
 volatile bool g_reconnectRequested = false;
+volatile bool g_paused = false;
 
 // Fields below are touched only by the net task.
 String g_apSsid, g_apPass;
@@ -414,6 +415,10 @@ void task(void *) {
     }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
     for (;;) {
+        if (g_paused) {
+            delay(50);
+            continue;
+        }
         portal::loop();
         if (portal::savedAndRestartPending()) {
             delay(1500);   // let the confirmation page reach the phone
@@ -531,5 +536,6 @@ Snapshot snapshot() {
 
 void openPortal() { g_portalRequested = true; }
 void reconnect() { g_reconnectRequested = true; }
+void pause(bool on) { g_paused = on; }
 
 }  // namespace net

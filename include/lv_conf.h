@@ -21,10 +21,10 @@
 #define LV_USE_ASSERT_NULL 1
 #define LV_USE_ASSERT_MALLOC 1
 
-// FPS / CPU overlay for bring-up and performance work.
-#define LV_USE_SYSMON 1
-#define LV_USE_PERF_MONITOR 1
-#define LV_USE_PERF_MONITOR_POS LV_ALIGN_BOTTOM_RIGHT
+// FPS / CPU overlay: off (it covers the track time). Set both to 1 for performance work;
+// last reading with lyrics scrolling: 49 FPS, 22 % CPU.
+#define LV_USE_SYSMON 0
+#define LV_USE_PERF_MONITOR 0
 
 // Fonts. LVGL's built-in Montserrat is ASCII + symbols only: no accents.
 // Lyrics use the embedded Noto Sans through tiny_ttf; Montserrat stays for symbols.

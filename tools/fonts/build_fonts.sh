@@ -23,8 +23,10 @@ for f in 'NotoSans[wdth,wght].ttf' OFL.txt; do
 done
 test -s "$WORK/NotoSans[wdth,wght].ttf" || { echo "font download failed" >&2; exit 1; }
 
-# Basic Latin, Latin-1 Supplement, Latin Extended-A, dashes, quotes, bullet, ellipsis, euro.
-UNICODES='U+0020-007E,U+00A0-017F,U+2013-2014,U+2018-2019,U+201C-201D,U+2022,U+2026,U+20AC'
+# Basic Latin, Latin-1 Supplement, Latin Extended-A, the General Punctuation block (all
+# hyphens and dashes: metadata uses U+2010 in "Jean‐Luc"; quotes, ellipsis, primes,
+# guillemets ‹ ›), fraction slash, euro, and the replacement character.
+UNICODES='U+0020-007E,U+00A0-017F,U+2010-2027,U+2030-203A,U+2044,U+20AC,U+FFFD'
 
 mkdir -p "$OUT"
 for w in 400 600; do

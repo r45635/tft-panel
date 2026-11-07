@@ -80,7 +80,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | screenshot | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | demo [off] | screenshot | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -118,8 +118,16 @@ void handleCommand(String line) {
     } else if (cmd == "lead" && arg.length()) {
         settings::setLead(arg.toInt());
         Serial.printf("[cmd] lyrics lead = %d ms\n", (int)settings::leadMs());
+    } else if (cmd == "demo") {
+        ui::setDemo(arg != "off");
+        Serial.printf("[cmd] demo %s\n", arg == "off" ? "off" : "on (\"demo off\" to go back)");
     } else if (cmd == "screenshot") {
+        // ESP-IDF logs bypass Serial's lock and could land inside a data line: hold the
+        // net task (the only other logger) during the dump. An in-flight request finishes first.
+        net::pause(true);
+        delay(300);
         screenshot();
+        net::pause(false);
     } else if (cmd == "erase-all") {
         settings::eraseAll();
         Serial.println("[cmd] settings erased, restarting");
