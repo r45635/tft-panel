@@ -12,7 +12,7 @@ namespace settingsui {
 namespace {
 
 constexpr uint32_t COL_BG = 0x0B0B0C, COL_ROW = 0x18181B, COL_BTN = 0x232326;
-constexpr uint32_t COL_TEXT = 0xF2F2F2, COL_MID = 0xAEAEB2, COL_DIM = 0x78787C, COL_ACCENT = 0x40C4FF;
+constexpr uint32_t COL_TEXT = 0xF2F2F2, COL_MID = 0xAEAEB2, COL_DIM = 0x78787C, COL_ACCENT = 0x6DB56D;
 
 struct TzChoice {
     const char *name, *posix;

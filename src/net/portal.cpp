@@ -48,11 +48,11 @@ void collectScan() {
 
 const char PAGE_HEAD[] PROGMEM = R"(<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>TFT Panel setup</title>
-<style>body{font:16px system-ui,sans-serif;max-width:28rem;margin:0 auto;padding:1rem;background:#101418;color:#e8ecf0}
+<style>body{font:16px system-ui,sans-serif;max-width:28rem;margin:0 auto;padding:1rem;background:#15161a;color:#f6f4ee}
 h1{font-size:1.4rem}label{display:block;margin-top:1rem}input{width:100%;box-sizing:border-box;padding:.6rem;
-font-size:1rem;border-radius:.4rem;border:1px solid #3a4652;background:#1c232b;color:#e8ecf0}
-button{margin-top:1.4rem;width:100%;padding:.8rem;font-size:1.05rem;border:0;border-radius:.4rem;background:#40c4ff;color:#101418}
-small{color:#9aa6b2}.err{color:#101418;background:#ffb0a0;padding:.8rem;border-radius:.4rem}</style></head><body>)";
+font-size:1rem;border-radius:.4rem;border:1px solid #2f3037;background:#202127;color:#f6f4ee}
+button{margin-top:1.4rem;width:100%;padding:.8rem;font-size:1.05rem;border:0;border-radius:.4rem;background:#6db56d;color:#15161a}
+small{color:#a9aaa6}.err{color:#15161a;background:#ffb0a0;padding:.8rem;border-radius:.4rem}</style></head><body>)";
 
 void sendForm(const String &error, const String &typedSsid = String()) {
     settings::Settings s = settings::get();

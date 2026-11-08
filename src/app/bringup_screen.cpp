@@ -124,7 +124,7 @@ void show() {
     lv_obj_set_size(g_dot, 24, 24);
     lv_obj_set_style_radius(g_dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(g_dot, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(g_dot, lv_color_hex(0x40C4FF), 0);
+    lv_obj_set_style_bg_color(g_dot, lv_color_hex(0x6DB56D), 0);
     lv_obj_set_hidden(g_dot, true);
     lv_obj_set_clickable(g_dot, false);
 }

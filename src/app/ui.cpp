@@ -27,7 +27,7 @@ constexpr uint32_t COL_BG = 0x0B0B0C;
 constexpr uint32_t COL_TEXT = 0xF2F2F2;
 constexpr uint32_t COL_DIM = 0x78787C;
 constexpr uint32_t COL_MID = 0xAEAEB2;
-constexpr uint32_t COL_ACCENT = 0x40C4FF;
+constexpr uint32_t COL_ACCENT = 0x6DB56D;
 constexpr uint32_t COL_ERROR = 0xFFB0A0;
 
 constexpr int LYRIC_ROWS = 5;   // 2 before, current, 2 after
@@ -837,7 +837,7 @@ void buildOta() {
     lv_obj_set_style_pad_ver(g_otaBadge, 0, 0);
     lv_obj_set_style_bg_color(g_otaBadge, lv_color_hex(COL_ACCENT), 0);
     lv_obj_set_pos(g_otaBadge, 430, 7);
-    g_otaBadgeLabel = label(g_otaBadge, fonts::ui16, 0x06121A);
+    g_otaBadgeLabel = label(g_otaBadge, fonts::ui16, 0x15161A);
     lv_obj_center(g_otaBadgeLabel);
     lv_obj_add_event_cb(g_otaBadge, [](lv_event_t *) { setHidden(g_otaConfirm, false); }, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_hidden(g_otaBadge, true);

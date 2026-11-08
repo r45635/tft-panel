@@ -25,9 +25,9 @@ String g_uploadError;
 
 const char PAGE[] PROGMEM = R"HTML(<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>TFT Panel update</title>
-<style>body{font:17px/1.5 system-ui,sans-serif;max-width:560px;margin:32px auto;padding:0 16px;background:#0e1116;color:#f2f4f7}
-input,button{font:inherit;padding:10px;border-radius:8px;border:1px solid #2a323c;background:#161b22;color:#f2f4f7}
-button{background:#1f6f9e;border:0;padding:10px 24px}#msg{margin-top:16px;color:#a4aeb9}</style></head><body>
+<style>body{font:17px/1.5 system-ui,sans-serif;max-width:560px;margin:32px auto;padding:0 16px;background:#15161a;color:#f6f4ee}
+input,button{font:inherit;padding:10px;border-radius:8px;border:1px solid #2f3037;background:#202127;color:#f6f4ee}
+button{background:#6db56d;color:#15161a;border:0;padding:10px 24px}#msg{margin-top:16px;color:#a9aaa6}</style></head><body>
 <h1>Update TFT Panel</h1><p>Running <b>%VERSION%</b>. Choose a firmware file (<code>tft-panel-vX.Y.Z.bin</code>)
 and type the code shown on the panel's screen.</p>
 <p><input id="code" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="off"></p>
