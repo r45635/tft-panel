@@ -4,7 +4,7 @@
 # Frame order from tools/showcase.py: still, 11 slide steps, still, 11 slide steps, cover view.
 # Slide steps last 40 ms each (the panel's real slide is ~400 ms), stills ~1.5 s.
 set -euo pipefail
-dir="$1"; out="$2"
+dir="$(cd "$1" && pwd)"; out="$2"   # absolute: the concat list lives in a temp dir
 list="$(mktemp)"
 i=0
 for f in $(ls "$dir"/f*.png | sort); do
