@@ -18,6 +18,8 @@
 
 #include <vector>
 
+extern "C" const lv_image_dsc_t tft_icon;   // tft_icon.c (tools/tft_icon.py)
+
 namespace ui {
 namespace {
 
@@ -917,8 +919,13 @@ void build() {
     lv_obj_set_clickable(g_bg, false);
     lv_obj_set_hidden(g_bg, true);
 
+    // The TextFromTrack mark before the zone name, like the companion's desktop UI.
+    lv_obj_t *mark = lv_image_create(g_scr);
+    lv_image_set_src(mark, &tft_icon);
+    lv_obj_set_pos(mark, 24, 11);
+    lv_obj_set_clickable(mark, false);
     g_zone = label(g_scr, fonts::ui16, COL_MID);
-    lv_obj_set_pos(g_zone, 24, 12);
+    lv_obj_set_pos(g_zone, 24 + 24 + 8, 12);
     g_status = label(g_scr, fonts::ui16, COL_DIM);
     lv_obj_set_width(g_status, 460);
     lv_obj_set_style_text_align(g_status, LV_TEXT_ALIGN_RIGHT, 0);
