@@ -3,7 +3,7 @@
 roon.app.textfromtrack.com: electron/assets/icon.svg) rendered at the panel header's size as
 an LVGL RGB565A8 image in src/app/tft_icon.c.
 
-    uv run --with pillow==11.0.0 tools/tft_icon.py [size]     # default 22 px
+    uv run --with pillow==11.0.0 tools/tft_icon.py [size]     # default 24 px (the header)
 """
 import os
 import sys
@@ -34,7 +34,7 @@ def render(size, ss=16):
 
 
 def main():
-    size = int(sys.argv[1]) if len(sys.argv) > 1 else 22
+    size = int(sys.argv[1]) if len(sys.argv) > 1 else 24
     im = render(size)
     px = list(im.getdata())
     rgb565 = bytearray()
