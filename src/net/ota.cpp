@@ -217,18 +217,27 @@ bool installOnce(bool &retryable) {
     int size = http.getSize();
     // The UI freezes the update screen in internal RAM before the first flash write.
     for (uint32_t t0 = millis(); !board::staticScreenActive() && millis() - t0 < 2000;) delay(20);
-    if (size <= 0 || !Update.begin(size, U_FLASH)) {
+    // Download-first boards receive the whole image into PSRAM, then write it (board_pins.h).
+    uint8_t *image = nullptr;
+    if (size > 0 && board::OTA_DOWNLOAD_FIRST)
+        image = (uint8_t *)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (size <= 0 || (board::OTA_DOWNLOAD_FIRST ? !image : !Update.begin(size, U_FLASH))) {
         http.end();
-        attemptFailed(size <= 0 ? "download: unknown size" : String("cannot start update: ") + Update.errorString());
+        attemptFailed(size <= 0                     ? "download: unknown size"
+                      : board::OTA_DOWNLOAD_FIRST ? "not enough memory for the image"
+                                                  : String("cannot start update: ") + Update.errorString());
         return false;
     }
-    Serial.printf("[ota] installing %s (%d bytes)\n", g_status.latest.c_str(), size);
+    Serial.printf("[ota] %s %s (%d bytes)\n", board::OTA_DOWNLOAD_FIRST ? "downloading" : "installing",
+                  g_status.latest.c_str(), size);
     mbedtls_sha256_context sha;
     mbedtls_sha256_init(&sha);
     mbedtls_sha256_starts(&sha, 0);
     uint8_t *buf = (uint8_t *)heap_caps_malloc(4096, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     NetworkClient *stream = http.getStreamPtr();
     int done = 0, lastPercent = -1;
+    // Download-first: the download is the first 90 %, writing the last 10 %.
+    const int scale = board::OTA_DOWNLOAD_FIRST ? 90 : 100;
     uint32_t lastData = millis();
     bool ok = buf != nullptr;
     while (ok && done < size) {
@@ -241,16 +250,18 @@ bool installOnce(bool &retryable) {
             delay(2);
             continue;
         }
-        int n = stream->readBytes(buf, std::min(avail, (size_t)4096));
+        int n = stream->readBytes(buf, std::min(avail, (size_t)std::min(4096, size - done)));
         if (n <= 0) continue;
         lastData = millis();
         mbedtls_sha256_update(&sha, buf, n);
-        if (Update.write(buf, n) != (size_t)n) {
+        if (image) {
+            memcpy(image + done, buf, n);
+        } else if (Update.write(buf, n) != (size_t)n) {
             ok = false;
             break;
         }
         done += n;
-        int percent = (int)((int64_t)done * 100 / size);
+        int percent = (int)((int64_t)done * scale / size);
         if (percent != lastPercent) {
             lastPercent = percent;
             update([&](Status &s) { s.percent = percent; });
@@ -262,16 +273,30 @@ bool installOnce(bool &retryable) {
     mbedtls_sha256_finish(&sha, got);
     mbedtls_sha256_free(&sha);
     if (!ok || done != size) {
-        Update.abort();
+        if (image) heap_caps_free(image);
+        else Update.abort();
         attemptFailed(String("download interrupted at ") + done + "/" + size + " bytes");
         return false;
     }
     if (memcmp(got, want, 32) != 0) {
-        Update.abort();
+        if (image) heap_caps_free(image);
+        else Update.abort();
         attemptFailed("checksum mismatch: download corrupted, nothing installed");
         return false;   // retryable: a corrupted transfer can succeed the next time
     }
-    if (!Update.end(true)) {
+    if (image) {
+        Serial.printf("[ota] %s downloaded and verified, writing it\n", g_status.latest.c_str());
+        String err;
+        bool written = writeImage(image, size, err, [](int pct) {
+            update([&](Status &s) { s.percent = 90 + pct / 10; });
+        });
+        heap_caps_free(image);
+        if (!written) {
+            retryable = false;
+            attemptFailed(err);
+            return false;
+        }
+    } else if (!Update.end(true)) {
         retryable = false;
         attemptFailed(String("cannot finish update: ") + Update.errorString());
         return false;
@@ -287,6 +312,30 @@ bool installOnce(bool &retryable) {
 }
 
 }  // namespace
+
+bool writeImage(const uint8_t *data, size_t len, String &error, const std::function<void(int)> &progress) {
+    if (!Update.begin(len, U_FLASH)) {
+        error = String("cannot start update: ") + Update.errorString();
+        return false;
+    }
+    int lastPct = -1;
+    for (size_t off = 0; off < len;) {
+        size_t n = std::min((size_t)4096, len - off);
+        if (Update.write((uint8_t *)data + off, n) != n) {
+            error = String("write failed: ") + Update.errorString();
+            Update.abort();
+            return false;
+        }
+        off += n;
+        int pct = (int)(off * 100 / len);
+        if (progress && pct != lastPct) progress(lastPct = pct);
+    }
+    if (!Update.end(true)) {
+        error = String("cannot finish update: ") + Update.errorString();
+        return false;
+    }
+    return true;
+}
 
 void begin() {
     g_lock = xSemaphoreCreateMutex();

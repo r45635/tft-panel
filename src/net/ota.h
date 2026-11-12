@@ -11,6 +11,8 @@
 
 #include <Arduino.h>
 
+#include <functional>
+
 namespace ota {
 
 enum class State : uint8_t { Idle, Checking, UpToDate, Available, Downloading, Installed, Failed };
@@ -35,5 +37,9 @@ void requestCheck();
 void requestInstall();
 
 const char *stateName(State s);
+
+// Writes a whole image received in memory to the next OTA slot and marks it to boot (pending
+// verify). For boards that must not write flash while the network is busy (OTA_DOWNLOAD_FIRST).
+bool writeImage(const uint8_t *data, size_t len, String &error, const std::function<void(int)> &progress = nullptr);
 
 }  // namespace ota

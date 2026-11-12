@@ -14,6 +14,9 @@ constexpr const char *BOARD_ASSET = "tft-panel-waveshare-p4-7b";
 constexpr bool HAS_STATIC_SCREEN = false;
 // Colour warmth out of the box: none until someone has looked at this panel's white.
 constexpr uint8_t DEFAULT_WARMTH = 0;
+// Firmware updates are received whole into PSRAM, then written to flash: flash writes stall the
+// SDIO link to the Wi-Fi chip, which then stops answering (a streamed download died at 240 KB).
+constexpr bool OTA_DOWNLOAD_FIRST = true;
 
 // ---- MIPI-DSI LCD (1024x600, EK79007, 2 lanes), mounted upside down: the image is rotated
 // 180 degrees on its way to the panel (the controller's MADCTL flip has no effect in video mode).

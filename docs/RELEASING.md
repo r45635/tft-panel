@@ -63,6 +63,13 @@ version, `TFT_FW_VERSION=v0.1.0-test pio run -e <env> -t upload`, then console `
 `ota install`. Verified 2026-11-07 with v0.1.1 (the first real release, v0.1.0, had a broken
 check: always test a release this way before announcing it).
 
+## Waveshare P4 specifics
+
+- The P4 image embeds the ESP32-C6 coprocessor firmware (`assets/hosted/esp32c6.bin`, not in git):
+  `tools/hosted_fw.py` downloads it at build time and checks its pinned SHA-256.
+- The P4 receives the whole update into PSRAM before writing it (flash writes stall its Wi-Fi link).
+  v0.1.11 did not, so a P4 on v0.1.11 cannot update itself: it needs the web installer once.
+
 ## Rules
 
 - The partition tables (`partitions.csv`, `partitions_p4.csv`) are final: an OTA cannot change them.

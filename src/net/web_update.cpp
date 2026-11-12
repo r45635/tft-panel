@@ -6,10 +6,14 @@
 
 #include <WiFi.h>
 
+#include <esp_heap_caps.h>
+#include <esp_ota_ops.h>
+
 #include "../board/board.h"
-#include "portal.h"
 #include "../board/board_pins.h"
 #include "../version.h"
+#include "ota.h"
+#include "portal.h"
 
 namespace webupdate {
 namespace {
@@ -44,32 +48,70 @@ bool codeValid(const String &typed) {
     return g_code && millis() - g_codeAt < CODE_VALID_MS && typed.toInt() == (long)g_code;
 }
 
+// Download-first boards (board_pins.h) collect the upload in PSRAM and write it once complete:
+// flash writes during the transfer would stall their Wi-Fi link.
+uint8_t *g_image = nullptr;
+size_t g_imageLen = 0, g_imageCap = 0;
+
+void dropImage() {
+    if (g_image) heap_caps_free(g_image);
+    g_image = nullptr;
+    g_imageLen = g_imageCap = 0;
+}
+
 void handleUpload() {
     HTTPUpload &up = g_server->upload();
     if (up.status == UPLOAD_FILE_START) {
         g_uploadOk = false;
         g_uploadError = "";
+        dropImage();
         g_uploadAllowed = codeValid(g_server->arg("code"));
         if (!g_uploadAllowed) {
             g_uploadError = "Wrong or expired code: open this page again to get a new one on the panel.";
             return;
         }
         Serial.printf("[web] firmware upload started: %s\n", up.filename.c_str());
-        if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+        if (board::OTA_DOWNLOAD_FIRST) {
+            const esp_partition_t *slot = esp_ota_get_next_update_partition(nullptr);
+            g_imageCap = slot ? slot->size : 0;
+            g_image = g_imageCap ? (uint8_t *)heap_caps_malloc(g_imageCap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : nullptr;
+            if (!g_image) {
+                g_uploadAllowed = false;
+                g_uploadError = "Not enough memory to receive the firmware.";
+            }
+        } else if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
             g_uploadAllowed = false;
             g_uploadError = String("Cannot start the update: ") + Update.errorString();
         }
     } else if (up.status == UPLOAD_FILE_WRITE && g_uploadAllowed) {
-        if (Update.write(up.buf, up.currentSize) != up.currentSize) {
+        if (g_image) {
+            if (g_imageLen + up.currentSize > g_imageCap) {
+                g_uploadAllowed = false;
+                g_uploadError = "File too large for a firmware slot.";
+                dropImage();
+            } else {
+                memcpy(g_image + g_imageLen, up.buf, up.currentSize);
+                g_imageLen += up.currentSize;
+            }
+        } else if (Update.write(up.buf, up.currentSize) != up.currentSize) {
             g_uploadAllowed = false;
             g_uploadError = String("Write failed: ") + Update.errorString();
             Update.abort();
         }
     } else if (up.status == UPLOAD_FILE_END && g_uploadAllowed) {
-        if (Update.end(true)) g_uploadOk = true;
-        else g_uploadError = String("Not a valid firmware image: ") + Update.errorString();
+        if (g_image) {
+            String err;
+            if (ota::writeImage(g_image, g_imageLen, err)) g_uploadOk = true;
+            else g_uploadError = "Not a valid firmware image: " + err;
+            dropImage();
+        } else if (Update.end(true)) {
+            g_uploadOk = true;
+        } else {
+            g_uploadError = String("Not a valid firmware image: ") + Update.errorString();
+        }
     } else if (up.status == UPLOAD_FILE_ABORTED && g_uploadAllowed) {
-        Update.abort();
+        if (g_image) dropImage();
+        else Update.abort();
         g_uploadError = "Upload interrupted, nothing installed.";
     }
 }

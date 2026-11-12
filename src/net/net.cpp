@@ -8,6 +8,7 @@
 #include <esp_sntp.h>
 
 #include "../board/board.h"
+#include "coprocessor.h"
 #include "ota.h"
 #include "portal.h"
 #include "web_update.h"
@@ -723,6 +724,10 @@ void task(void *) {
     bool wifiStarted = false;
 
     WiFi.persistent(false);   // credentials live in our NVS namespace, not the driver's
+    if (coprocessor::updateIfNeeded([](const String &msg) { setPhase(Phase::WifiConnecting, msg); })) {
+        delay(1500);
+        board::restart();
+    }
     WiFi.setAutoReconnect(true);
     WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
         g_lastDisconnectReason = info.wifi_sta_disconnected.reason;

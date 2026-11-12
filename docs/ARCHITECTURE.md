@@ -54,8 +54,10 @@ panel fed from bounce buffers, frozen update screen) and `board_waveshare_p4_7b.
 MIPI-DSI panel fed by the 2D-DMA from two internal-RAM strips, image turned 180° on the way). Shared
 by both: `restart.cpp` (clean resets), `white_balance.cpp` (warmth table), `gt911.cpp`. Per-board
 constants (`pins_*.h`): resolution, `BOARD_NAME`, the release asset name `BOARD_ASSET`,
-`HAS_STATIC_SCREEN`, `DEFAULT_WARMTH`. Wi-Fi on the P4 goes through the on-board ESP32-C6
-(esp_hosted, transparent to `WiFi.h`).
+`HAS_STATIC_SCREEN`, `DEFAULT_WARMTH`, `OTA_DOWNLOAD_FIRST`. Wi-Fi on the P4 goes through the
+on-board ESP32-C6 (esp_hosted, transparent to `WiFi.h`); the firmware carries the C6's matching
+firmware and installs it at boot when needed (`src/net/coprocessor.cpp`). On the P4 an update is
+received whole into PSRAM before it is written: flash writes stall the SDIO link to the C6.
 
 **Scaling.** Layout code is written on the 800×480 grid: `X()` for horizontal positions and widths,
 `Y()` for vertical ones, `S()` for things that keep their proportions (fonts, icons, round

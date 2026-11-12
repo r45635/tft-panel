@@ -166,8 +166,11 @@ Pin map in code: [`src/board/pins_waveshare_p4_7b.h`](../src/board/pins_waveshar
   write-flash 0 factory.bin` puts the demo back. Done and verified on this board (kept outside the repo).
 - A bare spike (DSI bus + DBI commands + DPI panel, GT911 polling, `WiFi.scanNetworks`) worked first
   time: colour bars, touch, 11 networks — through the **factory C6 firmware**, which does not answer
-  esp_hosted's version request (Arduino logs "Slave firmware version: 0.0.0" and an update URL) but
-  carries Wi-Fi fine: STA, soft-AP setup portal, mDNS discovery of the companion, HTTP and TLS.
+  esp_hosted's version request (Arduino logs "Slave firmware version: 0.0.0" and an update URL).
+  It carries the local network (STA, setup portal, mDNS, HTTP to the companion) but **no UDP reply
+  and no Internet**: DNS failed (`-54`), TCP to a public IP failed, UDP to the router's port 53 got
+  no answer from any source port. Installing the C6 firmware matching the host (esp_hosted 2.12.13,
+  1.2 MB, ~40 s over SDIO from the P4) fixed all of it.
 - The image was upside down (colour bars reversed). The EK79007's MADCTL flip (0x36) has no
   effect in video mode: the board layer turns each flushed area by 180° (a rectangle turned 180°
   is its pixels in reverse order) and draws it at the mirrored position. Touch needs nothing: the
@@ -177,6 +180,16 @@ Pin map in code: [`src/board/pins_waveshare_p4_7b.h`](../src/board/pins_waveshar
 
 ### Pitfalls
 
+- **The factory C6 firmware is too old for Arduino 3.3's esp_hosted**: LAN works, Internet and
+  DNS do not (see the bring-up log). The P4 firmware embeds the matching C6 image
+  (`tools/hosted_fw.py` fetches and checks it at build time) and installs it at boot when the C6
+  is older (`src/net/coprocessor.cpp`, two attempts per version, then gives up and boots normally).
+  When the platform is updated, Arduino logs the new expected version and URL at boot: update
+  `tools/hosted_fw.py`.
+- **A flash write kills the SDIO link to the C6** while it is busy: a streamed OTA died at 240 KB
+  ("Response not received for Req_GetWifiMode" forever after). Updates are received whole into PSRAM,
+  checked, then written (`OTA_DOWNLOAD_FIRST`), for GitHub updates and the local upload page alike.
+  v0.1.11 still streamed: a P4 on v0.1.11 cannot update itself, it needs the web installer once.
 - **Opening the USB console resets the P4** when DTR/RTS toggle (reset reason `CHIP_USB_UART_RESET`);
   a logger that reopens the port after each reset then loops. Open it with **DTR high, RTS low**.
 - The console is the native USB (`ARDUINO_USB_CDC_ON_BOOT=1`): nothing on the *USB to UART* port

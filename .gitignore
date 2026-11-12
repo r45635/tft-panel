@@ -22,3 +22,5 @@ secrets.h
 /src/generated/
 /dist/
 __pycache__/
+# ESP32-C6 coprocessor firmware, fetched at build time by tools/hosted_fw.py
+/assets/hosted/

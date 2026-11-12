@@ -14,6 +14,8 @@ constexpr const char *BOARD_ASSET = "tft-panel";
 constexpr bool HAS_STATIC_SCREEN = true;   // OTA: freeze the image in internal RAM (see board.h)
 // Colour warmth out of the box: this panel's white is bluish (Vincent settled on 76 %).
 constexpr uint8_t DEFAULT_WARMTH = 75;
+// Firmware updates stream from the network straight into flash.
+constexpr bool OTA_DOWNLOAD_FIRST = false;
 
 // ---- RGB LCD (800x480, RGB565, EK9716BD3 + EK73002ACGB) ----
 constexpr int LCD_H_RES = 800;

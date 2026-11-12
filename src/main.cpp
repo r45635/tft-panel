@@ -1,6 +1,7 @@
 // TFT Panel — touch display client of the TextFromTrack Companion.
 // Phase 1: Wi-Fi setup portal, companion discovery, synced lyrics.
 #include <Arduino.h>
+#include <WiFi.h>
 #include <lvgl.h>
 #include <mbedtls/base64.h>
 
@@ -30,8 +31,8 @@ void printStatus() {
     Serial.printf("[status] firmware %s (update: %s%s%s%s), %s\n", FW_VERSION, ota::stateName(o.state),
                   o.latest.length() ? ", latest " : "", o.latest.c_str(),
                   o.error.length() ? (", " + o.error).c_str() : "", s.status.c_str());
-    Serial.printf("[status] wifi ssid=\"%s\" ip=%s portal=%d ap=\"%s\"\n", st.wifiSsid.c_str(), s.staIp.c_str(),
-                  s.portalActive, s.apSsid.c_str());
+    Serial.printf("[status] wifi ssid=\"%s\" ip=%s dns=%s,%s portal=%d ap=\"%s\"\n", st.wifiSsid.c_str(), s.staIp.c_str(),
+                  WiFi.dnsIP(0).toString().c_str(), WiFi.dnsIP(1).toString().c_str(), s.portalActive, s.apSsid.c_str());
     Serial.printf("[status] companion=%s (%s) token=%s\n", s.companion.c_str(),
                   st.companionUrl.length() ? "manual" : "mDNS", st.accessToken.length() ? "set" : "none");
     Serial.printf("[status] zone=\"%s\" %s state=%s track=\"%s - %s\" pos=%d/%u ms\n", s.zoneName.c_str(),
