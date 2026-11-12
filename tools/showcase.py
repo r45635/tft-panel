@@ -50,7 +50,9 @@ class Console:
         import serial  # pyserial
         self.s = serial.Serial()
         self.s.port, self.s.baudrate, self.s.timeout = port, 115200, 0.2
-        self.s.dtr = self.s.rts = False   # no reset
+        # DTR high, RTS low opens both boards without a reset (other states reset the P4, whose
+        # settings read before the reset were then lost).
+        self.s.dtr, self.s.rts = True, False
         self.s.open()
         self.s.reset_input_buffer()
 
@@ -97,9 +99,15 @@ def main():
     os.makedirs(a.out, exist_ok=True)
 
     con = Console(a.port)
-    status = con.run("status", 1.0)
-    m = re.search(r"warmth (\d+) %", status)
-    warmth = int(m.group(1)) if m else 75
+    # The warmth is set to 0 for neutral pictures and put back after: never guess it.
+    m = None
+    for _ in range(3):
+        m = re.search(r"warmth (\d+) %", con.run("status", 1.5))
+        if m:
+            break
+    if not m:
+        raise SystemExit("could not read the panel's colour warmth from `status`: nothing changed")
+    warmth = int(m.group(1))
     try:
         con.run("shots on")
         con.run("warmth 0")
