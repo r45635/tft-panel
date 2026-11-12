@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "../layout.h"
+
 // Embedded by platformio.ini (board_build.embed_files).
 extern const uint8_t noto400_start[] asm("_binary_assets_fonts_NotoSans_400_ttf_start");
 extern const uint8_t noto400_end[] asm("_binary_assets_fonts_NotoSans_400_ttf_end");
@@ -15,6 +17,19 @@ const lv_font_t *lyricsOther = &lv_font_montserrat_28;
 const lv_font_t *ui20 = &lv_font_montserrat_20;
 const lv_font_t *ui16 = &lv_font_montserrat_14;
 const lv_font_t *clock = &lv_font_montserrat_28;
+
+// Symbol fallbacks (LVGL's Montserrat has fixed sizes): the closest to the scaled text.
+#if LV_FONT_MONTSERRAT_36
+const lv_font_t *icons = &lv_font_montserrat_36;
+#define SYM_BIG &lv_font_montserrat_36
+#define SYM_MID &lv_font_montserrat_24
+#define SYM_SMALL &lv_font_montserrat_18
+#else
+const lv_font_t *icons = &lv_font_montserrat_28;
+#define SYM_BIG &lv_font_montserrat_28
+#define SYM_MID &lv_font_montserrat_20
+#define SYM_SMALL &lv_font_montserrat_14
+#endif
 
 namespace {
 
@@ -35,11 +50,12 @@ const lv_font_t *make(const uint8_t *start, const uint8_t *end, int32_t px, cons
 
 bool begin() {
     bool ok = true;
-    lyricsCurrent = make(noto600_start, noto600_end, 44, &lv_font_montserrat_28, &lv_font_montserrat_28, ok);
-    lyricsOther = make(noto400_start, noto400_end, 30, &lv_font_montserrat_28, &lv_font_montserrat_28, ok);
-    ui20 = make(noto400_start, noto400_end, 20, &lv_font_montserrat_20, &lv_font_montserrat_20, ok);
-    ui16 = make(noto400_start, noto400_end, 16, &lv_font_montserrat_14, &lv_font_montserrat_14, ok);
-    clock = make(noto600_start, noto600_end, 128, &lv_font_montserrat_28, &lv_font_montserrat_28, ok);
+    using layout::S;
+    lyricsCurrent = make(noto600_start, noto600_end, S(44), SYM_BIG, SYM_BIG, ok);
+    lyricsOther = make(noto400_start, noto400_end, S(30), SYM_BIG, SYM_BIG, ok);
+    ui20 = make(noto400_start, noto400_end, S(20), SYM_MID, SYM_MID, ok);
+    ui16 = make(noto400_start, noto400_end, S(16), SYM_SMALL, SYM_SMALL, ok);
+    clock = make(noto600_start, noto600_end, S(128), SYM_BIG, SYM_BIG, ok);
     return ok;
 }
 

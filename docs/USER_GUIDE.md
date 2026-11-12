@@ -1,6 +1,6 @@
 # TFT Panel — user guide
 
-TFT Panel turns an Elecrow CrowPanel 7" into a lyrics screen for the music you play with Roon:
+TFT Panel turns a 7" touch screen (Elecrow CrowPanel 7" or Waveshare ESP32-P4 7B) into a lyrics screen for the music you play with Roon:
 the words of the song scroll in time with the music, with the cover, and you can pause, skip,
 change the volume or the zone with a touch.
 
@@ -11,8 +11,9 @@ zones and cover are invented.*
 
 ## What you need
 
-- An **Elecrow CrowPanel ESP32 Display 7.0"** (DIS08070H), board **V3.0**, and a USB-C cable that
-  carries data.
+- One of these screens, and a USB-C cable that carries data:
+  - **Elecrow CrowPanel ESP32 Display 7.0"** (DIS08070H), board **V3.0**;
+  - **Waveshare ESP32-P4-WIFI6-Touch-LCD-7B** (1024×600).
 - A **Roon** system, and the free **TextFromTrack companion** running on a computer of the same
   network: it finds the lyrics and tells the panel what plays.
 - Your **Wi-Fi** network name and password (2.4 GHz).
@@ -20,9 +21,12 @@ zones and cover are invented.*
 ## 1. Install the firmware (once)
 
 1. On a computer, open the [web installer](https://r45635.github.io/tft-panel/install.html) in **Chrome or Edge**.
-2. Connect the panel with the USB-C cable, click **Install**, pick the serial port (CH340 /
-   usbserial) and confirm. It takes about 3 minutes.
-3. On Windows, if no port shows up, install the
+2. Connect the panel with the USB-C cable — on the Waveshare, the port marked **USB 1.1** — click
+   **Install**, pick the serial port and confirm. The installer recognises the screen and picks its
+   firmware. It takes about 3 minutes on the CrowPanel, about a minute on the Waveshare.
+   - CrowPanel: the port is called *USB Serial*, *CH340* or *usbserial*.
+   - Waveshare: *USB JTAG/serial debug unit* or *usbmodem*.
+3. CrowPanel on Windows: if no port shows up, install the
    [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html) and plug the panel again.
 
 After this, updates come over Wi-Fi (see [Updates](#updates)).

@@ -1,0 +1,291 @@
+// Board layer of the Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (ESP32-P4, MIPI-DSI panel).
+#include "board.h"
+
+#if defined(BOARD_WAVESHARE_P4_7B)
+
+#include <Wire.h>
+#include <esp_cache.h>
+#include <esp_flash.h>
+#include <esp_heap_caps.h>
+#include <esp_lcd_mipi_dsi.h>
+#include <esp_lcd_panel_io.h>
+#include <esp_lcd_panel_ops.h>
+#include <esp_ldo_regulator.h>
+#include <esp_timer.h>
+
+#include <cstring>
+
+#include "board_pins.h"
+#include "gt911.h"
+#include "white_balance.h"
+
+namespace board {
+namespace {
+
+Info g_info;
+Gt911 g_touch(Wire);
+esp_lcd_panel_handle_t g_panel = nullptr;
+lv_display_t *g_disp = nullptr;
+lv_indev_t *g_indev = nullptr;
+
+volatile bool g_touchDown = false;
+volatile uint16_t g_touchX = 0, g_touchY = 0;
+volatile uint32_t g_flushCount = 0, g_flushUs = 0;
+
+// LVGL renders into two internal-RAM strips; the DSI driver copies each one into its PSRAM
+// framebuffer with the 2D-DMA while LVGL renders the next one.
+constexpr int DRAW_BUF_LINES = 48;
+
+// Upright copy of the screen (the panel's own framebuffer is upside down): screenshots and
+// anything else that reads the screen use this one.
+uint16_t *g_shadow = nullptr;
+
+void scanI2c() {
+    g_info.i2cDevices = "";
+    for (uint8_t a = 0x08; a < 0x78; a++) {
+        Wire.beginTransmission(a);
+        if (Wire.endTransmission() == 0) {
+            char buf[6];
+            snprintf(buf, sizeof buf, "0x%02X", a);
+            if (g_info.i2cDevices.length()) g_info.i2cDevices += ' ';
+            g_info.i2cDevices += buf;
+        }
+    }
+}
+
+bool fail(const char *what, esp_err_t err) {
+    g_info.error = String(what) + ": " + esp_err_to_name(err);
+    return false;
+}
+
+void dcs(esp_lcd_panel_io_handle_t io, int cmd, const uint8_t *data, size_t len) {
+    esp_err_t err = esp_lcd_panel_io_tx_param(io, cmd, data, len);
+    if (err != ESP_OK) Serial.printf("[board] EK79007 command 0x%02X: %s\n", cmd, esp_err_to_name(err));
+}
+
+bool IRAM_ATTR onCopied(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t *, void *) {
+    lv_display_flush_ready(g_disp);
+    return false;
+}
+
+bool createPanel() {
+    // The D-PHY needs its LDO before the DSI bus comes up.
+    esp_ldo_channel_handle_t ldo = nullptr;
+    esp_ldo_channel_config_t ldoCfg = {};
+    ldoCfg.chan_id = DSI_PHY_LDO_CHAN;
+    ldoCfg.voltage_mv = DSI_PHY_LDO_MV;
+    esp_err_t err = esp_ldo_acquire_channel(&ldoCfg, &ldo);
+    if (err != ESP_OK) return fail("DSI PHY power", err);
+
+    esp_lcd_dsi_bus_handle_t bus = nullptr;
+    esp_lcd_dsi_bus_config_t busCfg = {};
+    busCfg.bus_id = 0;
+    busCfg.num_data_lanes = DSI_LANES;
+    busCfg.phy_clk_src = (mipi_dsi_phy_clock_source_t)0;   // default
+    busCfg.lane_bit_rate_mbps = DSI_LANE_MBPS;
+    err = esp_lcd_new_dsi_bus(&busCfg, &bus);
+    if (err != ESP_OK) return fail("DSI bus", err);
+
+    esp_lcd_panel_io_handle_t io = nullptr;
+    esp_lcd_dbi_io_config_t dbi = {};
+    dbi.virtual_channel = 0;
+    dbi.lcd_cmd_bits = 8;
+    dbi.lcd_param_bits = 8;
+    err = esp_lcd_new_panel_io_dbi(bus, &dbi, &io);
+    if (err != ESP_OK) return fail("DSI command channel", err);
+
+    // EK79007: hardware reset, then the vendor sequence (esp_lcd_ek79007 2.0.2, Apache-2.0).
+    pinMode(LCD_PIN_RESET, OUTPUT);
+    digitalWrite(LCD_PIN_RESET, LOW);
+    delay(10);
+    digitalWrite(LCD_PIN_RESET, HIGH);
+    delay(20);
+    static const uint8_t lanes2 = 0x10;
+    dcs(io, 0xB2, &lanes2, 1);
+    static const uint8_t vendor[][2] = {{0x80, 0x8B}, {0x81, 0x78}, {0x82, 0x84}, {0x83, 0x88},
+                                        {0x84, 0xA8}, {0x85, 0xE3}, {0x86, 0x88}};
+    for (const auto &c : vendor) dcs(io, c[0], &c[1], 1);
+    dcs(io, 0x11, nullptr, 0);   // sleep out
+    delay(120);
+
+    esp_lcd_dpi_panel_config_t dpi = {};
+    dpi.virtual_channel = 0;
+    dpi.dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT;
+    dpi.dpi_clock_freq_mhz = DPI_CLOCK_MHZ;
+    dpi.pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565;
+    dpi.num_fbs = 1;
+    dpi.video_timing.h_size = LCD_H_RES;
+    dpi.video_timing.v_size = LCD_V_RES;
+    dpi.video_timing.hsync_pulse_width = LCD_HSYNC_PULSE_WIDTH;
+    dpi.video_timing.hsync_back_porch = LCD_HSYNC_BACK_PORCH;
+    dpi.video_timing.hsync_front_porch = LCD_HSYNC_FRONT_PORCH;
+    dpi.video_timing.vsync_pulse_width = LCD_VSYNC_PULSE_WIDTH;
+    dpi.video_timing.vsync_back_porch = LCD_VSYNC_BACK_PORCH;
+    dpi.video_timing.vsync_front_porch = LCD_VSYNC_FRONT_PORCH;
+    dpi.flags.use_dma2d = true;
+    err = esp_lcd_new_panel_dpi(bus, &dpi, &g_panel);
+    if (err != ESP_OK) return fail("DPI panel", err);
+    err = esp_lcd_panel_init(g_panel);
+    if (err != ESP_OK) return fail("DPI panel init", err);
+
+    // Black screen before the backlight comes on.
+    void *fb = nullptr;
+    if (esp_lcd_dpi_panel_get_frame_buffer(g_panel, 1, &fb) == ESP_OK && fb) {
+        memset(fb, 0, (size_t)LCD_H_RES * LCD_V_RES * 2);
+        esp_cache_msync(fb, (size_t)LCD_H_RES * LCD_V_RES * 2, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    }
+    g_shadow = (uint16_t *)heap_caps_aligned_calloc(64, 1, (size_t)LCD_H_RES * LCD_V_RES * 2,
+                                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!g_shadow) {
+        g_info.error = "screen copy: out of PSRAM";
+        return false;
+    }
+    esp_lcd_dpi_panel_event_callbacks_t cbs = {};
+    cbs.on_color_trans_done = onCopied;
+    err = esp_lcd_dpi_panel_register_event_callbacks(g_panel, &cbs, nullptr);
+    if (err != ESP_OK) return fail("DPI callbacks", err);
+    return true;
+}
+
+// Reverses a buffer in place: a rectangle turned 180 degrees is its pixels in reverse order.
+IRAM_ATTR __attribute__((optimize("O2"))) void reverse(uint16_t *p, size_t n) {
+    uint16_t *a = p, *b = p + n - 1;
+    while (a < b) {
+        uint16_t t = *a;
+        *a++ = *b;
+        *b-- = t;
+    }
+}
+
+void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
+    int64_t t0 = esp_timer_get_time();
+    const int w = lv_area_get_width(area), h = lv_area_get_height(area);
+    uint16_t *p = (uint16_t *)px;
+    wb::apply(p, (size_t)w * h);
+    for (int y = 0; y < h; y++) memcpy(g_shadow + (size_t)(area->y1 + y) * LCD_H_RES + area->x1, p + y * w, w * 2);
+    reverse(p, (size_t)w * h);
+    // The panel is upside down: the area goes to the mirrored position (end coordinates exclusive).
+    esp_err_t err = esp_lcd_panel_draw_bitmap(g_panel, LCD_H_RES - 1 - area->x2, LCD_V_RES - 1 - area->y2,
+                                              LCD_H_RES - area->x1, LCD_V_RES - area->y1, p);
+    g_flushUs += (uint32_t)(esp_timer_get_time() - t0);
+    g_flushCount++;
+    if (err != ESP_OK) lv_display_flush_ready(disp);   // nothing queued: no completion callback
+}
+
+void touchReadCb(lv_indev_t *, lv_indev_data_t *data) {
+    TouchPoint p;
+    int n = g_touch.read(p);
+    if (n > 0) {
+        // The GT911 reports in the viewer's orientation (checked at the four corners).
+        uint16_t x = p.x < LCD_H_RES ? p.x : LCD_H_RES - 1;
+        uint16_t y = p.y < LCD_V_RES ? p.y : LCD_V_RES - 1;
+        g_touchX = x;
+        g_touchY = y;
+        g_touchDown = true;
+        data->point.x = x;
+        data->point.y = y;
+        data->state = LV_INDEV_STATE_PRESSED;
+    } else {
+        g_touchDown = false;
+        data->state = LV_INDEV_STATE_RELEASED;
+    }
+}
+
+bool createLvgl() {
+    lv_init();
+    lv_tick_set_cb([]() -> uint32_t { return millis(); });
+
+    const size_t bufBytes = LCD_H_RES * DRAW_BUF_LINES * sizeof(uint16_t);
+    void *buf1 = heap_caps_aligned_alloc(64, bufBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+    void *buf2 = heap_caps_aligned_alloc(64, bufBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+    if (!buf1 || !buf2) {
+        g_info.error = "LVGL draw buffers: out of internal RAM";
+        return false;
+    }
+    g_disp = lv_display_create(LCD_H_RES, LCD_V_RES);
+    lv_display_set_color_format(g_disp, LV_COLOR_FORMAT_RGB565);
+    lv_display_set_buffers(g_disp, buf1, buf2, bufBytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_flush_cb(g_disp, flushCb);
+
+    if (g_info.touch) {
+        g_indev = lv_indev_create();
+        lv_indev_set_type(g_indev, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(g_indev, touchReadCb);
+        lv_indev_set_display(g_indev, g_disp);
+    }
+    return true;
+}
+
+}  // namespace
+
+bool begin() {
+    // Backlight off until the first frame is on the panel (PWM output is inverted on this board).
+    ledcAttach(LCD_PIN_BACKLIGHT, 5000, 10);
+    ledcOutputInvert(LCD_PIN_BACKLIGHT, true);
+    ledcWrite(LCD_PIN_BACKLIGHT, 0);
+
+    g_info.psramBytes = ESP.getPsramSize();
+    uint32_t flash = 0;
+    if (esp_flash_get_size(nullptr, &flash) == ESP_OK) g_info.flashBytes = flash;
+    if (!psramFound()) {
+        g_info.error = "PSRAM missing";
+        return false;
+    }
+
+    Wire.begin(I2C_PIN_SDA, I2C_PIN_SCL, I2C_FREQ_HZ);
+    scanI2c();
+    if (g_touch.begin(GT911_ADDR, GT911_ADDR_ALT)) {
+        g_info.touch = true;
+        g_info.touchAddr = g_touch.address();
+        if (!g_touch.readInfo(g_info.touchId, g_info.touchFw, g_info.touchXRes, g_info.touchYRes))
+            g_info.error = "GT911 answered its address but not the info registers";
+    } else {
+        g_info.error = "GT911 not found on I2C (0x5D / 0x14)";
+    }
+
+    if (!createPanel()) return false;
+    if (!createLvgl()) return false;
+    return true;
+}
+
+void touchDiag() { Serial.println("[touchdiag] not needed on this board (touch reset is not wired)"); }
+
+const Info &info() { return g_info; }
+
+lv_display_t *display() { return g_disp; }
+
+const uint16_t *frameBuffer() { return g_shadow; }
+
+void flushStats(uint32_t &count, uint32_t &us) {
+    count = g_flushCount;
+    us = g_flushUs;
+}
+
+bool lastTouch(uint16_t &x, uint16_t &y) {
+    x = g_touchX;
+    y = g_touchY;
+    return g_touchDown;
+}
+
+// Flash writes do not stall the display here: the update screen stays live (HAS_STATIC_SCREEN).
+namespace {
+volatile bool g_staticOn = false;
+}
+void staticScreenBegin(const StaticScreen &) { g_staticOn = true; }
+void staticScreenProgress(int) {}
+void staticScreenEnd() { g_staticOn = false; }
+bool staticScreenActive() { return g_staticOn; }
+
+void setWarmth(uint8_t percent) {
+    wb::set(percent);
+    if (g_disp) lv_obj_invalidate(lv_display_get_screen_active(g_disp));
+}
+
+void setBacklight(uint8_t percent) {
+    if (percent > 100) percent = 100;
+    ledcWrite(LCD_PIN_BACKLIGHT, 1023u * percent / 100);
+}
+
+}  // namespace board
+
+#endif  // BOARD_WAVESHARE_P4_7B

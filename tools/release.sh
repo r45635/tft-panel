@@ -3,10 +3,11 @@
 #
 #   tools/release.sh v0.1.0 "Short release notes"
 #
-# Assets (what the panels' OTA and the web installer expect):
-#   tft-panel-<tag>.bin          app image, installed over the air
-#   tft-panel-<tag>.sha256       its SHA-256 ("<hex>  <file>"), checked before the image is committed
-#   tft-panel-<tag>-factory.bin  bootloader + partitions + app, flashed at 0x0 by the web installer
+# Assets, per board (what the panels' OTA and the web installer expect); <base> is the board's
+# BOARD_ASSET: tft-panel (CrowPanel, the first board kept the plain name), tft-panel-waveshare-p4-7b.
+#   <base>-<tag>.bin          app image, installed over the air
+#   <base>-<tag>.sha256       its SHA-256 ("<hex>  <file>"), checked before the image is committed
+#   <base>-<tag>-factory.bin  bootloader + partitions + app, for a manual flash at the bootloader offset
 # The website (docs + browser installer, tools/site.sh) goes to the gh-pages branch, latest version only.
 # See docs/RELEASING.md.
 set -euo pipefail
@@ -30,45 +31,60 @@ if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "tag $tag al
 git tag -a "$tag" -m "TFT Panel $tag"
 trap 'echo "failed: removing local tag $tag" >&2; git tag -d "$tag" >/dev/null' ERR
 
-"$pio" run
-version=$(grep -o '"v[^"]*"' src/generated/version.cpp | tr -d '"')
-[[ "$version" == "$tag" ]] || { echo "built version $version is not $tag" >&2; false; }
-
+# env  asset-base  chip-family  bootloader-offset
+boards=(
+    "crowpanel7 tft-panel ESP32-S3 0"
+    "waveshare-p4-7b tft-panel-waveshare-p4-7b ESP32-P4 8192"
+)
 out="dist/$tag"
-rm -rf "$out" && mkdir -p "$out"
-cp .pio/build/crowpanel7/firmware.bin "$out/tft-panel-$tag.bin"
-cp .pio/build/crowpanel7/firmware.factory.bin "$out/tft-panel-$tag-factory.bin"
-(cd "$out" && shasum -a 256 "tft-panel-$tag.bin" > "tft-panel-$tag.sha256")
-echo "built:"; ls -l "$out"
-
-git push -q origin "$tag"
-trap - ERR
-gh release create "$tag" --repo "$repo" --title "TFT Panel $tag" --notes "$notes" \
-    "$out/tft-panel-$tag.bin" "$out/tft-panel-$tag.sha256" "$out/tft-panel-$tag-factory.bin"
-
-# Website (docs + browser installer) on gh-pages: tools/site.sh with this release's firmware.
-# Four parts, not the merged factory image: the merged one fills the gap over NVS (0x9000) with
-# 0xFF, which would wipe the Wi-Fi and settings of a panel that is only being reinstalled.
-fw="$out/site-fw"
-mkdir -p "$fw"
-cp .pio/build/crowpanel7/bootloader.bin "$fw/bootloader.bin"
-cp .pio/build/crowpanel7/partitions.bin "$fw/partitions.bin"
-cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" "$fw/boot_app0.bin"
-cp "$out/tft-panel-$tag.bin" "$fw/"
+fw="$out/site-fw"   # the web installer's files (tools/site.sh)
+rm -rf "$out" && mkdir -p "$fw"
+assets=()
+builds=""
+# Each board's files are copied right after its build: a pioarduino framework rebuild for the
+# other environment can wipe .pio/build. Alternating environments makes it redo the CrowPanel's
+# (custom_sdkconfig), whose first pass can fail on a missing .sconsign file: one retry.
+for b in "${boards[@]}"; do
+    read -r env base chip boot <<<"$b"
+    "$pio" run -e "$env" || "$pio" run -e "$env"
+    version=$(grep -o '"v[^"]*"' src/generated/version.cpp | tr -d '"')
+    [[ "$version" == "$tag" ]] || { echo "built version $version is not $tag" >&2; false; }
+    cp ".pio/build/$env/firmware.bin" "$out/$base-$tag.bin"
+    cp ".pio/build/$env/firmware.factory.bin" "$out/$base-$tag-factory.bin"
+    (cd "$out" && shasum -a 256 "$base-$tag.bin" > "$base-$tag.sha256")
+    assets+=("$out/$base-$tag.bin" "$out/$base-$tag.sha256" "$out/$base-$tag-factory.bin")
+    # Web installer: four parts, not the merged factory image, which fills the gap over NVS
+    # (0x9000) with 0xFF and would wipe the Wi-Fi and settings of a panel being reinstalled.
+    cp ".pio/build/$env/bootloader.bin" "$fw/$env-bootloader.bin"
+    cp ".pio/build/$env/partitions.bin" "$fw/$env-partitions.bin"
+    cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" "$fw/$env-boot_app0.bin"
+    cp "$out/$base-$tag.bin" "$fw/"
+    [[ -z "$builds" ]] || builds+=","
+    builds+="
+    { \"chipFamily\": \"$chip\", \"parts\": [
+      { \"path\": \"$env-bootloader.bin\", \"offset\": $boot },
+      { \"path\": \"$env-partitions.bin\", \"offset\": 32768 },
+      { \"path\": \"$env-boot_app0.bin\", \"offset\": 57344 },
+      { \"path\": \"$base-$tag.bin\", \"offset\": 65536 }
+    ] }"
+done
+# ESP Web Tools picks the build matching the chip it finds on the port.
 cat > "$fw/manifest.json" <<MANIFEST
 {
   "name": "TFT Panel",
   "version": "$tag",
   "new_install_prompt_erase": true,
-  "builds": [
-    { "chipFamily": "ESP32-S3", "parts": [
-      { "path": "bootloader.bin", "offset": 0 },
-      { "path": "partitions.bin", "offset": 32768 },
-      { "path": "boot_app0.bin", "offset": 57344 },
-      { "path": "tft-panel-$tag.bin", "offset": 65536 }
-    ] }
+  "builds": [$builds
   ]
 }
 MANIFEST
+python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$fw/manifest.json"
+echo "built:"; ls -l "$out"
+
+git push -q origin "$tag"
+trap - ERR
+gh release create "$tag" --repo "$repo" --title "TFT Panel $tag" --notes "$notes" "${assets[@]}"
+
+# Website (docs + browser installer) on gh-pages: tools/site.sh with this release's firmware.
 tools/site.sh "$fw"
 echo "released $tag: https://github.com/$repo/releases/tag/$tag"

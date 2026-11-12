@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 
+#include "../board/board_pins.h"
+
 namespace settings {
 
 struct Settings {
@@ -19,7 +21,7 @@ struct Settings {
     uint8_t view = 0;      // last view chosen by a swipe: 0 = lyrics, 1 = cover
     uint8_t brightness = 100;  // backlight when awake, 10..100 %
     bool clock = true;     // big clock on the dimmed screen when nothing plays
-    uint8_t warmth = 75;   // colour warmth 0..100 %, against the panel's bluish white (Vincent: 76)
+    uint8_t warmth = board::DEFAULT_WARMTH;   // colour warmth 0..100 %, against a bluish panel white
     String tz;             // POSIX TZ string; empty = DEFAULT_TZ
 };
 

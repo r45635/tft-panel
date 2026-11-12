@@ -10,6 +10,7 @@
 #include <mbedtls/sha256.h>
 
 #include "../board/board.h"
+#include "../board/board_pins.h"
 #include "../version.h"
 
 // Defer Arduino's automatic "image valid" at boot: we decide in markHealthy().
@@ -127,7 +128,9 @@ void check() {
         return;
     }
     String tag = doc["tag_name"] | "";
-    String binName = "tft-panel-" + tag + ".bin", shaName = "tft-panel-" + tag + ".sha256";
+    // This board's files: tft-panel-<tag>.bin on the CrowPanel, tft-panel-<board>-<tag>.bin on the others.
+    String base = String(board::BOARD_ASSET) + "-" + tag;
+    String binName = base + ".bin", shaName = base + ".sha256";
     String bin, sha;
     for (JsonObject a : doc["assets"].as<JsonArray>()) {
         String name = a["name"] | "";

@@ -225,7 +225,7 @@ void pollSerial() {
 void setup() {
     Serial.begin(115200);
     delay(300);
-    Serial.printf("\n[tft-panel] boot, firmware %s\n", FW_VERSION);
+    Serial.printf("\n[tft-panel] boot, firmware %s, board %s\n", FW_VERSION, board::BOARD_NAME);
 
     board::cleanResetIfNeeded();   // before touching the display: see board.h
     g_ok = board::begin();

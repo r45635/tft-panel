@@ -6,8 +6,9 @@
 <link rel="icon" href="brand/icon-32.png">
 <link rel="apple-touch-icon" href="brand/icon-180.png">
 <title>Install TFT Panel</title>
-<!-- ESP Web Tools, pinned. It flashes at 115200 baud, which this board's CH340 handles. -->
-<script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+<!-- ESP Web Tools, pinned (10.4 knows the ESP32-P4). It flashes at 115200 baud, which the CrowPanel's
+     CH340 handles; the Waveshare's USB is native. It picks the build matching the chip it finds. -->
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
 <style>
   :root { --bg: #ffffff; --fg: #1d232a; --dim: #5b6672; --accent: #3b7a3b; --on-accent: #fff; --card: #f3f5f7; }
   @media (prefers-color-scheme: dark) {
@@ -35,12 +36,18 @@
 <main>
   <nav><a href="index.html">TFT Panel</a> · <a href="guide.html">User guide</a> · <b>Install</b></nav>
   <h1>Install TFT Panel</h1>
-  <p class="version">Firmware {{VERSION}} for the Elecrow CrowPanel 7" (DIS08070H, board V3.0)</p>
+  <p class="version">Firmware {{VERSION}} for the Elecrow CrowPanel 7" (DIS08070H, board V3.0) and the
+    Waveshare ESP32-P4-WIFI6-Touch-LCD-7B. The right version is picked for the screen you connect.</p>
 
   <ol>
     <li>Use <b>Chrome or Edge on a computer</b> (Windows, macOS, Linux). Phones and Safari/Firefox cannot do this.</li>
     <li>Connect the panel's <b>USB-C</b> port to the computer with a cable that carries data.</li>
-    <li>Click <b>Install</b>, pick the serial port (CH340 / <i>usbserial</i>), and confirm. It takes about 3 minutes.</li>
+    <li>Click <b>Install</b>, pick the serial port and confirm. It takes about 3 minutes on the CrowPanel, about 1 minute
+      on the Waveshare.
+      <ul>
+        <li>CrowPanel: <i>USB Serial</i> / <i>CH340</i> / <i>usbserial</i></li>
+        <li>Waveshare: use the USB-C port <i>USB 1.1</i> (not <i>USB to UART</i>); the port is <i>USB JTAG/serial debug unit</i> / <i>usbmodem</i></li>
+      </ul></li>
     <li>The panel restarts on its Wi-Fi setup screen: scan the first QR code with your phone to join it,
       then the second one to choose your Wi-Fi network.</li>
   </ol>
@@ -54,9 +61,9 @@
 
   <div class="card">
     <b>No serial port in the list?</b><br>
-    On Windows, install the CH340 USB driver from
-    <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html">WCH</a>, then unplug and replug the panel.
-    macOS and Linux already include it. Some USB-C cables only charge: try another one.
+    CrowPanel on Windows: install the CH340 USB driver from
+    <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html">WCH</a>, then unplug and replug the panel
+    (macOS and Linux already include it). The Waveshare needs no driver. Some USB-C cables only charge: try another one.
   </div>
 
   <div class="card">

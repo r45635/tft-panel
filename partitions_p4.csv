@@ -1,0 +1,8 @@
+# TFT Panel partition table, Waveshare ESP32-P4 7B (32 MB flash) — final: OTA cannot change it.
+# Two 6 MB app slots for OTA (rollback to the other one), coredump; the rest is left free.
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x600000,
+app1,     app,  ota_1,   0x610000, 0x600000,
+coredump, data, coredump,0xC10000, 0x10000,

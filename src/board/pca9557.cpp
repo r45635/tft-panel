@@ -1,5 +1,7 @@
 #include "pca9557.h"
 
+#if defined(BOARD_CROWPANEL7)
+
 bool Pca9557::present() {
     wire_.beginTransmission(addr_);
     return wire_.endTransmission() == 0;
@@ -40,3 +42,5 @@ bool Pca9557::setPinInput(uint8_t pin, bool input) {
     cfg_ = input ? (cfg_ | (1u << pin)) : (cfg_ & ~(1u << pin));
     return writeReg(REG_CONFIG, cfg_);
 }
+
+#endif  // BOARD_CROWPANEL7

@@ -1,5 +1,7 @@
 #include "settings_screen.h"
 
+#include "../layout.h"
+
 #include <Arduino.h>
 #include <esp_heap_caps.h>
 
@@ -10,6 +12,12 @@
 
 namespace settingsui {
 namespace {
+
+using layout::S;
+using layout::SCREEN_H;
+using layout::SCREEN_W;
+using layout::X;
+using layout::Y;
 
 constexpr uint32_t COL_BG = 0x0B0B0C, COL_ROW = 0x18181B, COL_BTN = 0x232326;
 constexpr uint32_t COL_TEXT = 0xF2F2F2, COL_MID = 0xAEAEB2, COL_DIM = 0x78787C, COL_ACCENT = 0x6DB56D;
@@ -55,12 +63,12 @@ void setText(lv_obj_t *l, const String &t) {
 
 lv_obj_t *button(lv_obj_t *parent, const char *text, lv_event_cb_t cb, lv_obj_t **labelOut = nullptr) {
     lv_obj_t *b = lv_button_create(parent);
-    lv_obj_set_style_radius(b, 22, 0);
+    lv_obj_set_style_radius(b, S(22), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(COL_BTN), 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
-    lv_obj_set_style_pad_hor(b, 20, 0);
-    lv_obj_set_style_pad_ver(b, 10, 0);
+    lv_obj_set_style_pad_hor(b, X(20), 0);
+    lv_obj_set_style_pad_ver(b, Y(10), 0);
     lv_obj_t *l = label(b, fonts::ui20, COL_TEXT, text);
     lv_obj_center(l);
     lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
@@ -76,10 +84,10 @@ lv_obj_t *row(const char *title, lv_obj_t **titleOut = nullptr, lv_obj_t **subti
     lv_obj_set_style_min_height(r, 64, 0);
     lv_obj_set_style_bg_color(r, lv_color_hex(COL_ROW), 0);
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(r, 10, 0);
-    lv_obj_set_style_pad_hor(r, 18, 0);
-    lv_obj_set_style_pad_ver(r, 8, 0);
-    lv_obj_set_style_pad_column(r, 12, 0);
+    lv_obj_set_style_radius(r, S(10), 0);
+    lv_obj_set_style_pad_hor(r, X(18), 0);
+    lv_obj_set_style_pad_ver(r, Y(8), 0);
+    lv_obj_set_style_pad_column(r, X(12), 0);
     lv_obj_set_scrollable(r, false);
     lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(r, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -105,7 +113,7 @@ lv_obj_t *row(const char *title, lv_obj_t **titleOut = nullptr, lv_obj_t **subti
 lv_obj_t *switchRow(const char *title, bool on, lv_event_cb_t cb) {
     lv_obj_t *r = row(title);
     lv_obj_t *sw = lv_switch_create(r);
-    lv_obj_set_size(sw, 64, 34);
+    lv_obj_set_size(sw, S(64), S(34));
     lv_obj_set_state(sw, LV_STATE_CHECKED, on);
     lv_obj_set_style_bg_color(sw, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw, cb, LV_EVENT_VALUE_CHANGED, nullptr);
@@ -118,7 +126,7 @@ lv_obj_t *dropdown(lv_obj_t *parent, const String &options, int selected, lv_eve
     lv_obj_t *d = lv_dropdown_create(parent);
     lv_dropdown_set_options(d, options.c_str());
     lv_dropdown_set_selected(d, selected);
-    lv_obj_set_width(d, 300);
+    lv_obj_set_width(d, X(300));
     lv_obj_set_style_text_font(d, fonts::ui20, 0);
     lv_obj_set_style_bg_color(d, lv_color_hex(COL_BTN), 0);
     lv_obj_set_style_text_color(d, lv_color_hex(COL_TEXT), 0);
@@ -150,7 +158,7 @@ void confirmForgetWifi() {
     lv_msgbox_add_text(mb, "The panel leaves this network and shows its setup QR codes again.");
     lv_obj_t *yes = lv_msgbox_add_footer_button(mb, "Forget");
     lv_obj_t *no = lv_msgbox_add_footer_button(mb, "Cancel");
-    lv_obj_set_width(mb, 560);
+    lv_obj_set_width(mb, X(560));
     lv_obj_set_style_text_font(mb, fonts::ui20, 0);
     lv_obj_add_event_cb(yes, [](lv_event_t *e) {
         lv_msgbox_close((lv_obj_t *)lv_event_get_user_data(e));
@@ -166,7 +174,7 @@ void buildRows() {
     // Brightness: live preview while dragging, saved on release.
     lv_obj_t *r = row("Brightness");
     g_brightness = lv_slider_create(r);
-    lv_obj_set_width(g_brightness, 300);
+    lv_obj_set_width(g_brightness, X(300));
     lv_slider_set_range(g_brightness, 10, 100);
     lv_slider_set_value(g_brightness, settings::brightness(), LV_ANIM_OFF);
     lv_obj_set_style_bg_color(g_brightness, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
@@ -182,7 +190,7 @@ void buildRows() {
     r = row("Colour warmth", nullptr, &wsub);
     lv_label_set_text(wsub, "Warmer counters the panel's bluish white.");
     g_warmth = lv_slider_create(r);
-    lv_obj_set_width(g_warmth, 300);
+    lv_obj_set_width(g_warmth, X(300));
     lv_slider_set_range(g_warmth, 0, 100);
     lv_slider_set_value(g_warmth, settings::warmth(), LV_ANIM_OFF);
     lv_obj_set_style_bg_color(g_warmth, lv_color_hex(0xFFB060), LV_PART_INDICATOR);
@@ -211,10 +219,10 @@ void buildRows() {
     lv_obj_set_size(box, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(box, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(box, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(box, 10, 0);
+    lv_obj_set_style_pad_column(box, X(10), 0);
     button(box, LV_SYMBOL_MINUS, [](lv_event_t *) { stepLead(-50); });
     g_leadValue = label(box, fonts::ui20, COL_TEXT);
-    lv_obj_set_width(g_leadValue, 90);
+    lv_obj_set_width(g_leadValue, X(90));
     lv_obj_set_style_text_align(g_leadValue, LV_TEXT_ALIGN_CENTER, 0);
     button(box, LV_SYMBOL_PLUS, [](lv_event_t *) { stepLead(+50); });
     showLead();
@@ -280,15 +288,16 @@ void buildRows() {
 lv_obj_t *patch(lv_obj_t *parent, int x, int y, int w, int h, uint32_t colour, const char *name) {
     lv_obj_t *o = lv_obj_create(parent);
     lv_obj_remove_style_all(o);
-    lv_obj_set_pos(o, x, y);
-    lv_obj_set_size(o, w, h);
+    // Design-grid rectangle, scaled edge by edge so neighbouring patches never leave a seam.
+    lv_obj_set_pos(o, X(x), Y(y));
+    lv_obj_set_size(o, X(x + w) - X(x), Y(y + h) - Y(y));
     lv_obj_set_style_bg_color(o, lv_color_hex(colour), 0);
     lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
     lv_obj_set_clickable(o, false);
     if (name) {
         uint32_t r = (colour >> 16) & 0xFF, g = (colour >> 8) & 0xFF, b = colour & 0xFF;
         lv_obj_t *l = label(o, fonts::ui16, r * 3 + g * 6 + b > 1200 ? 0x000000 : 0xFFFFFF, name);
-        lv_obj_align(l, LV_ALIGN_BOTTOM_LEFT, 6, -4);
+        lv_obj_align(l, LV_ALIGN_BOTTOM_LEFT, X(6), -Y(4));
     }
     return o;
 }
@@ -297,7 +306,7 @@ lv_obj_t *patch(lv_obj_t *parent, int x, int y, int w, int h, uint32_t colour, c
 void buildColourTest() {
     g_colourTest = lv_obj_create(lv_obj_get_parent(g_root));
     lv_obj_remove_style_all(g_colourTest);
-    lv_obj_set_size(g_colourTest, 800, 480);
+    lv_obj_set_size(g_colourTest, SCREEN_W, SCREEN_H);
     lv_obj_set_style_bg_color(g_colourTest, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(g_colourTest, LV_OPA_COVER, 0);
     lv_obj_set_scrollable(g_colourTest, false);
@@ -315,14 +324,14 @@ void buildColourTest() {
     lv_obj_set_style_bg_grad_dir(grad, LV_GRAD_DIR_HOR, 0);
 
     g_ctValue = label(g_colourTest, fonts::ui20, COL_TEXT, "");
-    lv_obj_set_pos(g_ctValue, 24, 400);
+    lv_obj_set_pos(g_ctValue, X(24), Y(400));
     g_ctSlider = lv_slider_create(g_colourTest);
-    lv_obj_set_size(g_ctSlider, 420, 16);
-    lv_obj_set_pos(g_ctSlider, 190, 406);
+    lv_obj_set_size(g_ctSlider, X(420), S(16));
+    lv_obj_set_pos(g_ctSlider, X(190), Y(406));
     lv_slider_set_range(g_ctSlider, 0, 100);
     lv_obj_set_style_bg_color(g_ctSlider, lv_color_hex(0xFFB060), LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(g_ctSlider, lv_color_hex(COL_TEXT), LV_PART_KNOB);
-    lv_obj_set_style_pad_all(g_ctSlider, 8, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(g_ctSlider, S(8), LV_PART_KNOB);
     lv_obj_add_event_cb(g_ctSlider, [](lv_event_t *) {
         int v = lv_slider_get_value(g_ctSlider);
         board::setWarmth(v);
@@ -333,7 +342,7 @@ void buildColourTest() {
         lv_slider_set_value(g_warmth, settings::warmth(), LV_ANIM_OFF);
     }, LV_EVENT_RELEASED, nullptr);
     lv_obj_t *done = button(g_colourTest, "Done", [](lv_event_t *) { lv_obj_set_hidden(g_colourTest, true); });
-    lv_obj_align(done, LV_ALIGN_BOTTOM_RIGHT, -20, -24);
+    lv_obj_align(done, LV_ALIGN_BOTTOM_RIGHT, -X(20), -Y(24));
     lv_obj_set_hidden(g_colourTest, true);
 }
 
@@ -343,32 +352,32 @@ void build(lv_obj_t *scr, const Hooks &hooks) {
     g_hooks = hooks;
     g_root = lv_obj_create(scr);
     lv_obj_remove_style_all(g_root);
-    lv_obj_set_size(g_root, 800, 480);
+    lv_obj_set_size(g_root, SCREEN_W, SCREEN_H);
     lv_obj_set_style_bg_color(g_root, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
     lv_obj_set_scrollable(g_root, false);
     lv_obj_set_clickable(g_root, true);   // modal
 
     lv_obj_t *h = label(g_root, fonts::lyricsOther, COL_TEXT, "Settings");
-    lv_obj_set_pos(h, 32, 20);
+    lv_obj_set_pos(h, X(32), Y(20));
     lv_obj_t *x = lv_button_create(g_root);
-    lv_obj_set_size(x, 64, 64);
+    lv_obj_set_size(x, S(64), S(64));
     lv_obj_set_style_radius(x, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_shadow_width(x, 0, 0);
     lv_obj_set_style_bg_color(x, lv_color_hex(COL_BTN), 0);
     lv_obj_set_style_bg_color(x, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
-    lv_obj_t *xl = label(x, &lv_font_montserrat_28, COL_TEXT, LV_SYMBOL_CLOSE);
+    lv_obj_t *xl = label(x, fonts::icons, COL_TEXT, LV_SYMBOL_CLOSE);
     lv_obj_center(xl);
-    lv_obj_align(x, LV_ALIGN_TOP_RIGHT, -20, 12);
+    lv_obj_align(x, LV_ALIGN_TOP_RIGHT, -X(20), Y(12));
     lv_obj_add_event_cb(x, [](lv_event_t *) { close(); }, LV_EVENT_CLICKED, nullptr);
 
     g_list = lv_obj_create(g_root);
     lv_obj_remove_style_all(g_list);
-    lv_obj_set_size(g_list, 760, 386);
-    lv_obj_set_pos(g_list, 20, 88);
+    lv_obj_set_size(g_list, SCREEN_W - 2 * X(20), Y(386));
+    lv_obj_set_pos(g_list, X(20), Y(88));
     lv_obj_set_flex_flow(g_list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(g_list, 8, 0);
-    lv_obj_set_style_pad_bottom(g_list, 16, 0);
+    lv_obj_set_style_pad_row(g_list, Y(8), 0);
+    lv_obj_set_style_pad_bottom(g_list, Y(16), 0);
     lv_obj_set_scroll_dir(g_list, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(g_list, LV_SCROLLBAR_MODE_ACTIVE);
     buildRows();

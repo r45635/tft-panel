@@ -67,16 +67,15 @@ void show() {
 
     char buf[512];
     snprintf(buf, sizeof buf,
+             "Board  %s\n"
              "PSRAM  %u KB    Flash  %u KB\n"
-             "LCD    %dx%d RGB565  pclk %u MHz\n"
+             "LCD    %dx%d RGB565\n"
              "I2C    %s\n"
-             "PCA9557 0x18  %s\n"
              "Touch  %s  addr 0x%02X  id \"%s\"  fw 0x%04X  %ux%u\n"
              "%s%s",
-             (unsigned)(info.psramBytes / 1024), (unsigned)(info.flashBytes / 1024),
-             board::LCD_H_RES, board::LCD_V_RES, (unsigned)(board::LCD_PCLK_HZ / 1000000),
+             board::BOARD_NAME, (unsigned)(info.psramBytes / 1024), (unsigned)(info.flashBytes / 1024),
+             board::LCD_H_RES, board::LCD_V_RES,
              info.i2cDevices.length() ? info.i2cDevices.c_str() : "(none)",
-             info.pca9557 ? "OK (touch reset done)" : "MISSING",
              info.touch ? "OK" : "MISSING", info.touchAddr, info.touchId, info.touchFw,
              info.touchXRes, info.touchYRes,
              info.error.length() ? "ERROR  " : "", info.error.c_str());

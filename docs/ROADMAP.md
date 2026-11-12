@@ -49,6 +49,19 @@
 - [x] Release script + browser installer (ESP Web Tools on GitHub Pages) — first release not published yet
 - [x] Settings screen, idle clock (SNTP + time zone), volume slider + mute, per-track lyrics offset
 
+## Second screen: Waveshare ESP32-P4 7B (2026-11-11)
+
+- [x] Board layer split per screen (`src/board/board_*.cpp`, `pins_*.h`), shared restart and colour warmth
+- [x] Waveshare ESP32-P4-WIFI6-Touch-LCD-7B: MIPI-DSI 1024×600 (EK79007, turned 180°), GT911, backlight,
+      Wi-Fi through the ESP32-C6 (factory C6 firmware works) — end to end with the companion
+- [x] Interface scaled from the 800×480 grid (`src/layout.h`), fonts and covers included
+- [x] Releases carry both boards; web installer picks by chip (ESP Web Tools 10.4.0)
+- [ ] Over-the-air update on the P4 from a real release (fake-older build, `ota install`)
+- [ ] Vincent's eye check of the P4 screen (colours, warmth, touch comfort)
+- [ ] Browser install of the P4 from the website (needs a person at the browser's port picker)
+- [ ] Optional: update the C6 coprocessor's esp_hosted firmware (factory one is old but works)
+- [ ] Use the P4's spare power later: hardware JPEG decoder for covers, PPA for the rotation, bigger fonts
+
 ## To discuss (estimated 2026-11-07, not started)
 
 - **Multi-language UI** — ~120 strings, 3–6 KB of flash per language, about a day for English +

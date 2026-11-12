@@ -4,8 +4,8 @@
 
 ![TFT Panel](docs/media/hero.png)
 
-TFT Panel is open firmware for the **Elecrow CrowPanel ESP32 Display 7.0"** (ESP32-S3, 800×480).
-It is a companion screen for the
+TFT Panel is open firmware for 7" ESP32 touch screens — the **Elecrow CrowPanel 7.0"** and the
+**Waveshare ESP32-P4 7B** (see [Hardware](#hardware)). It is a companion screen for the
 [TextFromTrack Roon Companion](https://github.com/r45635/roon.app.textfromtrack.com): the companion
 watches your Roon Core and finds the lyrics; the panel displays them line by line, with the cover,
 and gives you play/pause, skip, volume and zone selection at a touch.
@@ -17,7 +17,7 @@ and gives you play/pause, skip, volume and zone selection at a touch.
 - Same open HTTP API as the companion's web player.
 - MIT licence ([details](#licence)).
 
-*Roon is a trademark of Roon Labs. TFT Panel is an independent project, not affiliated with Roon Labs or Elecrow.*
+*Roon is a trademark of Roon Labs. TFT Panel is an independent project, not affiliated with Roon Labs, Elecrow or Waveshare.*
 
 <p align="center"><img src="docs/media/lyrics.gif" width="640" alt="Lyrics scrolling, then the cover view"></p>
 
@@ -25,20 +25,23 @@ and gives you play/pause, skip, volume and zone selection at a touch.
 
 ## Hardware
 
-| | |
-|---|---|
-| Board | Elecrow CrowPanel ESP32 Display 7.0", SKU **DIS08070H**, board **V3.0** |
-| MCU | ESP32-S3-WROOM-1-N4R8 (4 MB flash, 8 MB PSRAM) |
-| Screen | 800×480 RGB, GT911 capacitive touch |
+| | Elecrow CrowPanel 7.0" | Waveshare ESP32-P4 7B |
+|---|---|---|
+| Model | ESP32 Display 7.0", SKU **DIS08070H**, board **V3.0** | **ESP32-P4-WIFI6-Touch-LCD-7B** |
+| Chip | ESP32-S3 (4 MB flash, 8 MB PSRAM) | ESP32-P4 (32 MB flash, 32 MB PSRAM) + ESP32-C6 for Wi-Fi |
+| Screen | 800×480 RGB, GT911 touch | 1024×600 MIPI-DSI, GT911 touch |
+| Build | `pio run -e crowpanel7` | `pio run -e waveshare-p4-7b` |
 
-Details and pitfalls: [docs/HARDWARE.md](docs/HARDWARE.md).
+The interface is drawn on an 800×480 grid and scaled to the screen, so both look the same.
+Details, pin maps and pitfalls: [docs/HARDWARE.md](docs/HARDWARE.md).
 
 ## Install
 
 **First time — from your browser, no tools to install.** Open the
 [web installer](https://r45635.github.io/tft-panel/install.html) in Chrome or Edge on a computer, connect the
-panel's USB-C port, click *Install* and pick the serial port (about 3 minutes). On Windows you may
-need the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html).
+panel's USB-C port (on the Waveshare, the one marked *USB 1.1*), click *Install* and pick the serial
+port; the installer picks the firmware for the screen it finds. On Windows the CrowPanel may need the
+[CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html).
 
 **After that — over the air.** The panel checks for new releases by itself; when one is out, *Update*
 appears at the top of the screen. Tap it and confirm: the panel downloads it, checks its checksum and
@@ -50,9 +53,9 @@ Requires [PlatformIO](https://platformio.org/) (VS Code extension or `pio` CLI).
 pinned in `platformio.ini` (pioarduino = Arduino-ESP32 3.3 on ESP-IDF 5.5).
 
 ```bash
-pio run                                   # build
-pio run -t upload                         # flash over USB-C (CH340, 460800 baud)
-pio device monitor                        # serial log, 115200
+pio run -e crowpanel7 -t upload           # CrowPanel: flash over USB-C (CH340, 460800 baud)
+pio run -e waveshare-p4-7b -t upload      # Waveshare: flash over USB-C "USB 1.1" (native USB)
+pio device monitor                        # serial log and console, 115200
 ```
 
 ## First start

@@ -1,5 +1,7 @@
 #include "showcase.h"
 
+#include "../layout.h"
+
 #include <esp_heap_caps.h>
 
 #include <cmath>
@@ -113,12 +115,12 @@ net::Snapshot make(int32_t positionMs) {
     s.zones = zones;
     s.zonesSerial = 1;
     if (!g_cover.big) {
-        const int n = 384;
+        const int n = net::COVER_BIG_PX;
         uint8_t *rgb = (uint8_t *)heap_caps_malloc((size_t)n * n * 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (rgb) {
             paintArt(rgb, n);
             String err;
-            cover::buildFromRgb(rgb, n, n, net::COVER_THUMB_PX, true, 800, 480, g_cover, err);
+            cover::buildFromRgb(rgb, n, n, net::COVER_THUMB_PX, true, layout::SCREEN_W, layout::SCREEN_H, g_cover, err);
             heap_caps_free(rgb);
         }
     }

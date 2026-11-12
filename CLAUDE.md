@@ -1,7 +1,8 @@
 # TFT Panel — notes for agents
 
-ESP32-S3 firmware (CrowPanel 7" DIS08070H V3.0) showing synced lyrics + Roon controls, as a
-client of the TextFromTrack Roon Companion HTTP API. Public repo, MIT.
+ESP32 firmware showing synced lyrics + Roon controls on two 7" screens — Elecrow CrowPanel 7"
+DIS08070H V3.0 (ESP32-S3, env `crowpanel7`, the default) and Waveshare ESP32-P4-WIFI6-Touch-LCD-7B
+(env `waveshare-p4-7b`) — as a client of the TextFromTrack Roon Companion HTTP API. Public repo, MIT.
 
 Read first: `docs/ARCHITECTURE.md` (API contract, choices), `docs/HARDWARE.md` (pins, pitfalls,
 bring-up log), `docs/ROADMAP.md` (current phase).
@@ -9,14 +10,19 @@ bring-up log), `docs/ROADMAP.md` (current phase).
 ## Commands
 
 ```bash
-pio run                                              # build (first build ~6 min + framework rebuild ~2 min, then ~30 s)
-pio run -t upload --upload-port /dev/cu.usbserial-*  # flash; 921600 fails on this board, 460800 works
+pio run                                              # CrowPanel build (first build ~6 min + framework rebuild ~2 min, then ~30 s)
+pio run -t upload --upload-port /dev/cu.usbserial-*  # CrowPanel flash; 921600 fails on this board, 460800 works
+pio run -e waveshare-p4-7b -t upload --upload-port /dev/cu.usbmodem*   # Waveshare P4 (native USB, 921600 fine)
 pio device monitor                                   # 115200, exception decoder on
 PLATFORMIO_BUILD_FLAGS="-DTOUCH_DIAG" pio run -t upload   # touch reset diagnostic at boot
 ```
 
 From an agent shell (no TTY), read the serial log with pyserial from PlatformIO's Python:
-reset with `rts=True` → `False` (`dtr=False`), then read for a few seconds.
+CrowPanel: reset with `rts=True` → `False` (`dtr=False`), then read for a few seconds. Waveshare P4
+(USB-Serial/JTAG): open with **`dtr=True, rts=False`** — other states reset it on open, and a logger
+that reopens after each reset loops forever.
+🪤 Building `crowpanel7` after `waveshare-p4-7b` redoes the CrowPanel's framework rebuild (~2 min) and
+that first run can fail on a missing `.sconsign312.tmp`: run it again (release.sh retries).
 Changing `PLATFORMIO_BUILD_FLAGS` rebuilds the whole framework (~3 min).
 `custom_sdkconfig` (64-byte cache lines) makes pioarduino rebuild the IDF libraries into the
 **global** `~/.platformio/packages/framework-arduinoespressif32-libs`. 🪤 With pioarduino 55.03.312-1 its

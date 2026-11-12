@@ -1,7 +1,8 @@
+// Board layer of the Elecrow CrowPanel 7" V3.0 (ESP32-S3, RGB panel).
 #include "board.h"
 
-#include <esp_ota_ops.h>
-#include <esp_rom_sys.h>
+#if defined(BOARD_CROWPANEL7)
+
 #include <esp32s3/rom/cache.h>
 #include <algorithm>
 #include <esp_system.h>
@@ -18,6 +19,7 @@
 #include "board_pins.h"
 #include "gt911.h"
 #include "pca9557.h"
+#include "white_balance.h"
 
 namespace board {
 namespace {
@@ -177,27 +179,10 @@ bool createPanel() {
 
 volatile uint32_t g_flushCount = 0, g_flushUs = 0;
 
-// White balance: the panel's white is cool (bluish). Red stays, green and blue are scaled on
-// every pixel on its way to the framebuffer, through one table on the 11 G+B bits (4 KB,
-// internal RAM): ~1 lookup per pixel.
-uint16_t g_gbLut[2048];
-volatile bool g_balanceOn = false;
-
-// Hot loop (every flushed pixel): speed-optimised and in IRAM, two pixels per 32-bit word.
-IRAM_ATTR __attribute__((optimize("O2"))) void balance(uint16_t *p, size_t n) {
-    const uint16_t *lut = g_gbLut;
-    uint32_t *w = (uint32_t *)p;   // LVGL draw buffers are 4-byte aligned
-    for (size_t i = 0; i < n / 2; i++) {
-        uint32_t c = w[i];
-        w[i] = (c & 0xF800F800u) | lut[c & 0x07FF] | ((uint32_t)lut[(c >> 16) & 0x07FF] << 16);
-    }
-    if (n & 1) p[n - 1] = (p[n - 1] & 0xF800) | lut[p[n - 1] & 0x07FF];
-}
-
 void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
     // Synchronous CPU copy into the PSRAM framebuffer (num_fbs = 1).
     int64_t t0 = esp_timer_get_time();
-    if (g_balanceOn) balance((uint16_t *)px, (size_t)lv_area_get_width(area) * lv_area_get_height(area));
+    wb::apply((uint16_t *)px, (size_t)lv_area_get_width(area) * lv_area_get_height(area));
     const int w = lv_area_get_width(area);
     const uint16_t *src = (const uint16_t *)px;
     for (int y = area->y1; y <= area->y2; y++, src += w) memcpy(g_fb + y * LCD_H_RES + area->x1, src, w * 2);
@@ -252,62 +237,6 @@ bool createLvgl() {
 }
 
 }  // namespace
-
-namespace {
-constexpr uint32_t CLEAN_RESET_MAGIC = 0x7F7C1EA2;
-RTC_NOINIT_ATTR uint32_t s_cleanResetMagic;   // survives a system reset, not a power cycle
-RTC_NOINIT_ATTR uint32_t s_resetBefore;
-
-const char *reasonName(uint32_t r) {
-    switch ((esp_reset_reason_t)r) {
-        case ESP_RST_SW: return "software restart";
-        case ESP_RST_PANIC: return "crash (panic)";
-        case ESP_RST_INT_WDT: return "interrupt watchdog";
-        case ESP_RST_TASK_WDT: return "task watchdog";
-        case ESP_RST_WDT: return "watchdog";
-        default: return "other";
-    }
-}
-}  // namespace
-
-bool s_cleanResetDeferred = false;
-
-void restart() {
-    if (s_cleanResetMagic != CLEAN_RESET_MAGIC) s_resetBefore = ESP_RST_SW;
-    s_cleanResetMagic = CLEAN_RESET_MAGIC;
-    Serial.flush();
-    esp_rom_software_reset_system();
-    for (;;) {
-    }
-}
-
-bool cleanResetDeferred() { return s_cleanResetDeferred; }
-
-void cleanResetIfNeeded() {
-    if (s_cleanResetMagic == CLEAN_RESET_MAGIC) {   // second pass: the system reset is done
-        s_cleanResetMagic = 0;
-        Serial.printf("[board] full system reset done (the previous reset was a %s)\n", reasonName(s_resetBefore));
-        return;
-    }
-    esp_reset_reason_t r = esp_reset_reason();
-    bool cpuOnly = r == ESP_RST_SW || r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT ||
-                   r == ESP_RST_WDT;
-    if (!cpuOnly) return;
-    const esp_partition_t *running = esp_ota_get_running_partition();
-    esp_ota_img_states_t st;
-    if (running && esp_ota_get_state_partition(running, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY) {
-        // Booted by an older firmware's CPU-only restart right after an update: resetting now
-        // would count as a failed boot. Reset once the app has confirmed the image.
-        s_cleanResetDeferred = true;
-        Serial.printf("[board] %s before an unconfirmed update: full reset deferred until it is confirmed\n",
-                      reasonName(r));
-        return;
-    }
-    s_resetBefore = r;
-    s_cleanResetMagic = CLEAN_RESET_MAGIC;
-    Serial.printf("[board] %s left the display peripherals running: full system reset\n", reasonName(r));
-    restart();
-}
 
 bool begin() {
     // GPIO38 goes to the J4/J7 headers: keep it in a safe state.
@@ -497,8 +426,6 @@ bool lastTouch(uint16_t &x, uint16_t &y) {
     return g_touchDown;
 }
 
-uint16_t balanced(uint16_t c) { return g_balanceOn ? (c & 0xF800) | g_gbLut[c & 0x07FF] : c; }
-
 uint32_t luma(uint16_t c) { return ((c >> 11) & 0x1F) * 2 + ((c >> 5) & 0x3F) * 2 + (c & 0x1F); }
 
 void staticScreenBegin(const StaticScreen &s) {
@@ -533,7 +460,7 @@ void staticScreenBegin(const StaticScreen &s) {
     g_static.bg = bg;
     g_static.fg = fg;
     g_static.barBg = g_fb[(size_t)((s.barY0 + s.barY1) / 2) * LCD_H_RES + s.barX1 - 2];
-    g_static.barFg = balanced(s.barFg);
+    g_static.barFg = wb::colour(s.barFg);
     g_static.barFillX = s.barX0;
     g_static.on = true;
 }
@@ -554,15 +481,7 @@ void staticScreenEnd() {
 bool staticScreenActive() { return g_static.on; }
 
 void setWarmth(uint8_t percent) {
-    if (percent > 100) percent = 100;
-    // 100 % = blue -45 %, green -12 %: a warm white on this panel. Red stays at full scale.
-    uint32_t gainB = 256 - percent * 115 / 100, gainG = 256 - percent * 31 / 100;
-    g_balanceOn = false;   // the flush runs in this same (LVGL) thread: no race on the table
-    for (uint32_t v = 0; v < 2048; v++) {
-        uint32_t g = (v >> 5) & 0x3F, b = v & 0x1F;
-        g_gbLut[v] = (uint16_t)((((g * gainG) >> 8) << 5) | ((b * gainB) >> 8));
-    }
-    g_balanceOn = percent > 0;
+    wb::set(percent);
     if (g_disp) lv_obj_invalidate(lv_display_get_screen_active(g_disp));   // repaint with the new balance
 }
 
@@ -573,3 +492,5 @@ void setBacklight(uint8_t percent) {
 }
 
 }  // namespace board
+
+#endif  // BOARD_CROWPANEL7

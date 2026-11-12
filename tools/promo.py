@@ -17,7 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT_BOLD = os.path.join(ROOT, "assets/fonts/NotoSans-600.ttf")
 FONT_REG = os.path.join(ROOT, "assets/fonts/NotoSans-400.ttf")
 TAGLINE = "Synced lyrics and touch controls for your music, on a 7-inch screen."
-SUB = "Open firmware for the Elecrow CrowPanel 7\". Works with your own TextFromTrack companion for Roon."
+SUB = "Open firmware for 7\" ESP32 touch screens. Works with your own TextFromTrack companion for Roon."
 
 
 def font(path, size):

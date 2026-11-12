@@ -11,6 +11,8 @@
 #include "../net/web_update.h"
 #include "../net/settings.h"
 #include "../board/board.h"
+#include "../board/board_pins.h"
+#include "../layout.h"
 #include "fonts.h"
 #include "settings_screen.h"
 #include "showcase.h"
@@ -23,11 +25,18 @@ extern "C" const lv_image_dsc_t tft_icon;   // tft_icon.c (tools/tft_icon.py)
 namespace ui {
 namespace {
 
+using layout::S;
+using layout::SCREEN_H;
+using layout::SCREEN_W;
+using layout::X;
+using layout::Y;
+
 constexpr uint32_t COL_BG = 0x0B0B0C;
 constexpr uint32_t COL_TEXT = 0xF2F2F2;
 constexpr uint32_t COL_DIM = 0x78787C;
 constexpr uint32_t COL_MID = 0xAEAEB2;
 constexpr uint32_t COL_ACCENT = 0x6DB56D;
+constexpr uint32_t COL_PRIMARY = 0x3B7A3B;   // main button of a dialog: the accent, dark enough for white text
 constexpr uint32_t COL_ERROR = 0xFFB0A0;
 
 constexpr int LYRIC_ROWS = 5;   // 2 before, current, 2 after
@@ -38,8 +47,8 @@ lv_obj_t *g_bg = nullptr;                      // cover backdrop, behind everyth
 lv_obj_t *g_thumb = nullptr;                   // cover thumbnail left of the title
 std::shared_ptr<const Picture> g_shownBackdrop, g_shownThumb;
 uint32_t g_seenCoverSerial = UINT32_MAX;
-constexpr int TRACK_X = 24, TRACK_W = 752;     // title/artist box without a thumbnail
-constexpr int THUMB_GAP = 14;
+const int TRACK_X = X(24), TRACK_W = SCREEN_W - 2 * X(24);   // title/artist box without a thumbnail
+const int THUMB_GAP = X(14);
 
 // Header
 lv_obj_t *g_zone = nullptr, *g_status = nullptr;
@@ -164,7 +173,7 @@ void setText(lv_obj_t *l, const char *t) {
 // instead of being cut with "...". Slow, so it reads and costs few redraws.
 void marquee(lv_obj_t *l) {
     lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_SCROLL);
-    lv_obj_set_style_anim_duration(l, lv_anim_speed_clamped(35, 600, 30000), 0);
+    lv_obj_set_style_anim_duration(l, lv_anim_speed_clamped(S(35), 600, 30000), 0);
 }
 
 // Multi-line boxes (cover view): wrapped on up to `maxLines` (set by boundedLabel) when it
@@ -212,27 +221,27 @@ String qrEscape(const String &v) {
 void buildSetup() {
     g_setup = lv_obj_create(g_scr);
     lv_obj_remove_style_all(g_setup);
-    lv_obj_set_size(g_setup, 800, 480);
+    lv_obj_set_size(g_setup, SCREEN_W, SCREEN_H);
     lv_obj_set_style_bg_color(g_setup, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(g_setup, LV_OPA_COVER, 0);
     lv_obj_set_scrollable(g_setup, false);
 
     lv_obj_t *h = label(g_setup, fonts::lyricsOther, COL_TEXT);
     setText(h, "Set up TFT Panel");
-    lv_obj_set_pos(h, 40, 24);
+    lv_obj_set_pos(h, X(40), Y(24));
 
     auto qrBlock = [](int x, const char *step) {
         lv_obj_t *qr = lv_qrcode_create(g_setup);
-        lv_qrcode_set_size(qr, 200);
+        lv_qrcode_set_size(qr, S(200));
         lv_qrcode_set_dark_color(qr, lv_color_hex(0x000000));
         lv_qrcode_set_light_color(qr, lv_color_hex(0xFFFFFF));
         lv_obj_set_style_border_color(qr, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_border_width(qr, 8, 0);
-        lv_obj_set_pos(qr, x, 90);
+        lv_obj_set_style_border_width(qr, S(8), 0);
+        lv_obj_set_pos(qr, X(x), Y(90));
         lv_obj_t *t = label(g_setup, fonts::ui20, COL_MID);
         setText(t, step);
-        lv_obj_set_width(t, 260);
-        lv_obj_set_pos(t, x - 22, 312);
+        lv_obj_set_width(t, X(260));
+        lv_obj_set_pos(t, X(x) + S(100) - X(130), Y(312));   // centred under the code
         lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
         return qr;
     };
@@ -240,8 +249,8 @@ void buildSetup() {
     g_qrUrl = qrBlock(330, "2. Scan to open the setup page");
 
     g_setupText = label(g_setup, fonts::ui20, COL_TEXT);
-    lv_obj_set_pos(g_setupText, 580, 100);
-    lv_obj_set_width(g_setupText, 200);
+    lv_obj_set_pos(g_setupText, X(580), Y(100));
+    lv_obj_set_width(g_setupText, X(200));
     lv_label_set_long_mode(g_setupText, LV_LABEL_LONG_MODE_WRAP);
     setHidden(g_setup, true);
 }
@@ -257,14 +266,14 @@ void showControls(bool on) {
 
 lv_obj_t *roundButton(lv_obj_t *parent, const char *symbol, lv_obj_t **iconOut, void (*cb)(lv_event_t *)) {
     lv_obj_t *b = lv_button_create(parent);
-    lv_obj_set_size(b, 76, 76);
+    lv_obj_set_size(b, S(76), S(76));
     lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(0x232326), 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(b, LV_OPA_40, LV_STATE_DISABLED);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_t *l = lv_label_create(b);
-    lv_obj_set_style_text_font(l, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(l, fonts::icons, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(COL_TEXT), 0);
     setText(l, symbol);
     lv_obj_center(l);
@@ -312,11 +321,11 @@ void fillPicker() {
     auto add = [](const String &id, const String &text, bool current) {
         lv_obj_t *b = lv_button_create(g_pickerList);
         lv_obj_set_width(b, lv_pct(100));
-        lv_obj_set_style_radius(b, 10, 0);
+        lv_obj_set_style_radius(b, S(10), 0);
         lv_obj_set_style_shadow_width(b, 0, 0);
         lv_obj_set_style_bg_color(b, lv_color_hex(0x18181B), 0);
         lv_obj_set_style_bg_color(b, lv_color_hex(0x2C2C30), LV_STATE_PRESSED);
-        lv_obj_set_style_pad_ver(b, 16, 0);
+        lv_obj_set_style_pad_ver(b, Y(16), 0);
         lv_obj_t *l = label(b, fonts::ui20, current ? COL_ACCENT : COL_TEXT);
         lv_obj_set_width(l, lv_pct(100));
         marquee(l);
@@ -341,7 +350,7 @@ void onZone(lv_event_t *) {
 void buildControls() {
     g_controls = lv_obj_create(g_scr);
     lv_obj_remove_style_all(g_controls);
-    lv_obj_set_size(g_controls, 800, 112);
+    lv_obj_set_size(g_controls, SCREEN_W, Y(112));
     lv_obj_align(g_controls, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_bg_color(g_controls, lv_color_hex(0x0A0A0B), 0);
     lv_obj_set_style_bg_opa(g_controls, LV_OPA_90, 0);
@@ -350,13 +359,13 @@ void buildControls() {
     lv_obj_set_flex_align(g_controls, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     g_btnZone = lv_button_create(g_controls);
-    lv_obj_set_size(g_btnZone, 150, 64);
-    lv_obj_set_style_radius(g_btnZone, 32, 0);
+    lv_obj_set_size(g_btnZone, X(150), S(64));
+    lv_obj_set_style_radius(g_btnZone, S(32), 0);
     lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(0x232326), 0);
     lv_obj_set_style_bg_color(g_btnZone, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
     lv_obj_set_style_shadow_width(g_btnZone, 0, 0);
     g_zoneBtnLabel = label(g_btnZone, fonts::ui16, COL_TEXT);
-    lv_obj_set_width(g_zoneBtnLabel, 124);
+    lv_obj_set_width(g_zoneBtnLabel, X(124));
     marquee(g_zoneBtnLabel);
     lv_obj_set_style_text_align(g_zoneBtnLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(g_zoneBtnLabel);
@@ -367,9 +376,9 @@ void buildControls() {
     g_btnNext = roundButton(g_controls, LV_SYMBOL_NEXT, nullptr, onNext);
     g_btnVolDown = roundButton(g_controls, LV_SYMBOL_MINUS, nullptr, onVolDown);
     g_volLabel = label(g_controls, fonts::ui20, COL_MID);
-    lv_obj_set_width(g_volLabel, 80);
-    lv_obj_set_height(g_volLabel, 64);   // a finger-sized target: a tap opens the volume slider
-    lv_obj_set_style_pad_top(g_volLabel, 20, 0);
+    lv_obj_set_width(g_volLabel, X(80));
+    lv_obj_set_height(g_volLabel, S(64));   // a finger-sized target: a tap opens the volume slider
+    lv_obj_set_style_pad_top(g_volLabel, S(20), 0);
     lv_obj_set_clickable(g_volLabel, true);
     lv_obj_add_event_cb(g_volLabel, [](lv_event_t *) {
         showControls(false);
@@ -388,20 +397,20 @@ void buildControls() {
     // Zone picker: full-screen list.
     g_picker = lv_obj_create(g_scr);
     lv_obj_remove_style_all(g_picker);
-    lv_obj_set_size(g_picker, 800, 480);
+    lv_obj_set_size(g_picker, SCREEN_W, SCREEN_H);
     lv_obj_set_style_bg_color(g_picker, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(g_picker, LV_OPA_COVER, 0);
     lv_obj_t *h = label(g_picker, fonts::lyricsOther, COL_TEXT);
     setText(h, "Zone");
-    lv_obj_set_pos(h, 32, 20);
+    lv_obj_set_pos(h, X(32), Y(20));
     lv_obj_t *close = roundButton(g_picker, LV_SYMBOL_CLOSE, nullptr, [](lv_event_t *) { closePicker(); });
-    lv_obj_align(close, LV_ALIGN_TOP_RIGHT, -20, 12);
+    lv_obj_align(close, LV_ALIGN_TOP_RIGHT, -X(20), Y(12));
     g_pickerList = lv_obj_create(g_picker);
     lv_obj_remove_style_all(g_pickerList);
-    lv_obj_set_size(g_pickerList, 760, 370);
-    lv_obj_set_pos(g_pickerList, 20, 100);
+    lv_obj_set_size(g_pickerList, SCREEN_W - 2 * X(20), Y(370));
+    lv_obj_set_pos(g_pickerList, X(20), Y(100));
     lv_obj_set_flex_flow(g_pickerList, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(g_pickerList, 8, 0);
+    lv_obj_set_style_pad_row(g_pickerList, Y(8), 0);
     lv_obj_set_scroll_dir(g_pickerList, LV_DIR_VER);
     setHidden(g_picker, true);
 }
@@ -433,8 +442,8 @@ void updateControls() {
     setText(g_volLabel, buf);
 }
 
-constexpr int CV_COVER_X = 40, CV_COVER_Y = 56;
-constexpr int CV_COL_X = CV_COVER_X + net::COVER_BIG_PX + 32, CV_COL_W = 800 - 24 - CV_COL_X;
+const int CV_COVER_X = X(40), CV_COVER_Y = Y(56);
+const int CV_COL_X = CV_COVER_X + net::COVER_BIG_PX + X(32), CV_COL_W = SCREEN_W - X(24) - CV_COL_X;
 
 lv_obj_t *boundedLabel(lv_obj_t *parent, const lv_font_t *font, uint32_t colour, int maxLines) {
     lv_obj_t *l = label(parent, font, colour);
@@ -463,43 +472,43 @@ void buildCoverView() {
 
     // Right column, top to bottom in a flex column so wrapped titles push the rest down.
     // Budget (348 px): title 2 x 60 + artist 2 x 41 + album 27 + lyric 2 x 27 + gaps fits.
-    int barY = CV_COVER_Y + net::COVER_BIG_PX - 26;
+    int barY = CV_COVER_Y + net::COVER_BIG_PX - Y(26);
     lv_obj_t *col = lv_obj_create(g_coverView);
     lv_obj_remove_style_all(col);
     lv_obj_set_pos(col, CV_COL_X, CV_COVER_Y);
-    lv_obj_set_size(col, CV_COL_W, barY - 10 - CV_COVER_Y);
+    lv_obj_set_size(col, CV_COL_W, barY - Y(10) - CV_COVER_Y);
     lv_obj_set_scrollable(col, false);
     lv_obj_set_clickable(col, false);
     lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(col, 10, 0);
+    lv_obj_set_style_pad_row(col, Y(10), 0);
     g_cvTitle = boundedLabel(col, fonts::lyricsCurrent, COL_TEXT, 2);
     g_cvArtist = boundedLabel(col, fonts::lyricsOther, COL_MID, 2);
     g_cvAlbum = boundedLabel(col, fonts::ui20, COL_DIM, 1);
     lv_obj_t *gap = lv_obj_create(col);   // breathing space before the lyric line
     lv_obj_remove_style_all(gap);
-    lv_obj_set_size(gap, 1, 12);
+    lv_obj_set_size(gap, 1, Y(12));
     g_cvLyric = boundedLabel(col, fonts::ui20, COL_MID, 2);
 
     g_cvBar = progressBar(g_coverView);
-    lv_obj_set_size(g_cvBar, CV_COL_W, 4);
+    lv_obj_set_size(g_cvBar, CV_COL_W, S(4));
     lv_obj_set_pos(g_cvBar, CV_COL_X, barY);
     g_cvElapsed = label(g_coverView, fonts::ui16, COL_DIM);
-    lv_obj_set_pos(g_cvElapsed, CV_COL_X, barY + 10);
+    lv_obj_set_pos(g_cvElapsed, CV_COL_X, barY + Y(10));
     g_cvTotal = label(g_coverView, fonts::ui16, COL_DIM);
-    lv_obj_set_width(g_cvTotal, 80);
+    lv_obj_set_width(g_cvTotal, X(80));
     lv_obj_set_style_text_align(g_cvTotal, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_pos(g_cvTotal, CV_COL_X + CV_COL_W - 80, barY + 10);
+    lv_obj_set_pos(g_cvTotal, CV_COL_X + CV_COL_W - X(80), barY + Y(10));
 }
 
 void buildPageDots() {
     for (int i = 0; i < VIEW_COUNT; i++) {
         lv_obj_t *d = lv_obj_create(g_scr);
         lv_obj_remove_style_all(d);
-        lv_obj_set_size(d, 8, 8);
+        lv_obj_set_size(d, S(8), S(8));
         lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(d, lv_color_hex(COL_DIM), 0);
-        lv_obj_set_pos(d, 400 - VIEW_COUNT * 7 + 3 + i * 14, 18);
+        lv_obj_set_pos(d, SCREEN_W / 2 - VIEW_COUNT * S(7) + S(3) + i * S(14), Y(18));
         lv_obj_set_clickable(d, false);
         g_pageDots[i] = d;
     }
@@ -571,12 +580,12 @@ void backlightExec(void *, int32_t v);
 
 lv_obj_t *textButton(lv_obj_t *parent, const char *text, uint32_t bg, void (*cb)(lv_event_t *)) {
     lv_obj_t *b = lv_button_create(parent);
-    lv_obj_set_style_radius(b, 28, 0);
+    lv_obj_set_style_radius(b, S(28), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(bg), 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
-    lv_obj_set_style_pad_hor(b, 28, 0);
-    lv_obj_set_style_pad_ver(b, 14, 0);
+    lv_obj_set_style_pad_hor(b, X(28), 0);
+    lv_obj_set_style_pad_ver(b, Y(14), 0);
     lv_obj_t *l = label(b, fonts::ui20, COL_TEXT);
     setText(l, text);
     lv_obj_center(l);
@@ -587,7 +596,7 @@ lv_obj_t *textButton(lv_obj_t *parent, const char *text, uint32_t bg, void (*cb)
 lv_obj_t *fullScreen(lv_opa_t opa) {
     lv_obj_t *o = lv_obj_create(g_scr);
     lv_obj_remove_style_all(o);
-    lv_obj_set_size(o, 800, 480);
+    lv_obj_set_size(o, SCREEN_W, SCREEN_H);
     lv_obj_set_style_bg_color(o, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(o, opa, 0);
     lv_obj_set_scrollable(o, false);
@@ -667,11 +676,11 @@ lv_obj_t *popupBox(int h) {
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t *box = lv_obj_create(dim);
     lv_obj_remove_style_all(box);
-    lv_obj_set_size(box, 680, h);
-    lv_obj_align(box, LV_ALIGN_BOTTOM_MID, 0, -24);
+    lv_obj_set_size(box, X(680), Y(h));
+    lv_obj_align(box, LV_ALIGN_BOTTOM_MID, 0, -Y(24));
     lv_obj_set_style_bg_color(box, lv_color_hex(0x18181B), 0);
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(box, 16, 0);
+    lv_obj_set_style_radius(box, S(16), 0);
     lv_obj_set_scrollable(box, false);
     lv_obj_set_clickable(box, true);
     return box;
@@ -681,19 +690,19 @@ void buildVolumePopup() {
     lv_obj_t *box = popupBox(220);
     g_volPopup = lv_obj_get_parent(box);
     g_volTitle = label(box, fonts::ui20, COL_MID);
-    lv_obj_set_width(g_volTitle, 460);
+    lv_obj_set_width(g_volTitle, X(460));
     lv_label_set_long_mode(g_volTitle, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_pos(g_volTitle, 28, 22);
+    lv_obj_set_pos(g_volTitle, X(28), Y(22));
     g_volValue = label(box, fonts::lyricsOther, COL_TEXT);
-    lv_obj_set_width(g_volValue, 160);
+    lv_obj_set_width(g_volValue, X(160));
     lv_obj_set_style_text_align(g_volValue, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(g_volValue, LV_ALIGN_TOP_RIGHT, -28, 14);
+    lv_obj_align(g_volValue, LV_ALIGN_TOP_RIGHT, -X(28), Y(14));
     g_volSlider = lv_slider_create(box);
-    lv_obj_set_size(g_volSlider, 600, 22);
-    lv_obj_align(g_volSlider, LV_ALIGN_TOP_MID, 0, 90);
+    lv_obj_set_size(g_volSlider, X(600), S(22));
+    lv_obj_align(g_volSlider, LV_ALIGN_TOP_MID, 0, Y(90));
     lv_obj_set_style_bg_color(g_volSlider, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(g_volSlider, lv_color_hex(COL_TEXT), LV_PART_KNOB);
-    lv_obj_set_style_pad_all(g_volSlider, 10, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(g_volSlider, S(10), LV_PART_KNOB);
     lv_obj_add_event_cb(g_volSlider, onVolSlider, LV_EVENT_VALUE_CHANGED, nullptr);
     lv_obj_add_event_cb(g_volSlider, onVolSlider, LV_EVENT_RELEASED, nullptr);
     lv_obj_t *mute = textButton(box, "Mute", 0x232326, [](lv_event_t *) {
@@ -703,9 +712,9 @@ void buildVolumePopup() {
         if (live()) net::mute(!muted);
     });
     g_muteLabel = lv_obj_get_child(mute, 0);
-    lv_obj_align(mute, LV_ALIGN_BOTTOM_LEFT, 28, -20);
-    lv_obj_t *done = textButton(box, "Done", 0x1F6F9E, [](lv_event_t *) { setHidden(g_volPopup, true); });
-    lv_obj_align(done, LV_ALIGN_BOTTOM_RIGHT, -28, -20);
+    lv_obj_align(mute, LV_ALIGN_BOTTOM_LEFT, X(28), -Y(20));
+    lv_obj_t *done = textButton(box, "Done", COL_PRIMARY, [](lv_event_t *) { setHidden(g_volPopup, true); });
+    lv_obj_align(done, LV_ALIGN_BOTTOM_RIGHT, -X(28), -Y(20));
 }
 
 int32_t effectiveOffset() {
@@ -739,20 +748,20 @@ void buildOffsetPopup() {
     g_offPopup = lv_obj_get_parent(box);
     lv_obj_t *t = label(box, fonts::ui20, COL_MID);
     setText(t, "Lyrics timing for this track");
-    lv_obj_set_pos(t, 28, 22);
+    lv_obj_set_pos(t, X(28), Y(22));
     g_offValue = label(box, fonts::lyricsOther, COL_TEXT);
-    lv_obj_align(g_offValue, LV_ALIGN_TOP_RIGHT, -28, 14);
+    lv_obj_align(g_offValue, LV_ALIGN_TOP_RIGHT, -X(28), Y(14));
     lv_obj_t *row = lv_obj_create(box);
     lv_obj_remove_style_all(row);
-    lv_obj_set_size(row, 640, 80);
-    lv_obj_align(row, LV_ALIGN_BOTTOM_MID, 0, -14);
+    lv_obj_set_size(row, X(640), Y(80));
+    lv_obj_align(row, LV_ALIGN_BOTTOM_MID, 0, -Y(14));
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scrollable(row, false);
     textButton(row, "Earlier", 0x232326, [](lv_event_t *) { stepOffset(-250); });
     textButton(row, "Later", 0x232326, [](lv_event_t *) { stepOffset(+250); });
     textButton(row, "Reset", 0x232326, [](lv_event_t *) { stepOffset(0); });
-    textButton(row, "Done", 0x1F6F9E, [](lv_event_t *) { setHidden(g_offPopup, true); });
+    textButton(row, "Done", COL_PRIMARY, [](lv_event_t *) { setHidden(g_offPopup, true); });
 }
 
 void onLongPress(lv_event_t *) {
@@ -783,15 +792,15 @@ void tickPopups(uint32_t now) {
 void buildCodePopup() {
     g_codePopup = fullScreen(LV_OPA_90);
     lv_obj_t *t = label(g_codePopup, fonts::ui20, COL_MID);
-    lv_obj_set_width(t, 640);
+    lv_obj_set_width(t, X(640));
     lv_label_set_long_mode(t, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
     setText(t, "Firmware update from a browser\n\nType this code on the page to allow the upload (valid 5 minutes):");
-    lv_obj_align(t, LV_ALIGN_CENTER, 0, -110);
+    lv_obj_align(t, LV_ALIGN_CENTER, 0, -Y(110));
     g_codeValue = label(g_codePopup, fonts::clock, COL_TEXT);
-    lv_obj_align(g_codeValue, LV_ALIGN_CENTER, 0, 10);
+    lv_obj_align(g_codeValue, LV_ALIGN_CENTER, 0, Y(10));
     lv_obj_t *cancel = textButton(g_codePopup, "Cancel", 0x232326, [](lv_event_t *) { webupdate::cancelCode(); });
-    lv_obj_align(cancel, LV_ALIGN_CENTER, 0, 150);
+    lv_obj_align(cancel, LV_ALIGN_CENTER, 0, Y(150));
 }
 
 void tickCode() {
@@ -811,32 +820,32 @@ void tickCode() {
 void buildClock() {
     g_clock = lv_obj_create(g_scr);
     lv_obj_remove_style_all(g_clock);
-    lv_obj_set_size(g_clock, 800, 480);
+    lv_obj_set_size(g_clock, SCREEN_W, SCREEN_H);
     lv_obj_set_style_bg_color(g_clock, lv_color_hex(0x05070A), 0);
     lv_obj_set_style_bg_opa(g_clock, LV_OPA_80, 0);
     lv_obj_set_scrollable(g_clock, false);
     lv_obj_set_clickable(g_clock, false);   // a tap goes through: it wakes the screen as usual
     g_clockTime = label(g_clock, fonts::clock, COL_TEXT);
-    lv_obj_align(g_clockTime, LV_ALIGN_CENTER, 0, -40);
+    lv_obj_align(g_clockTime, LV_ALIGN_CENTER, 0, -Y(40));
     g_clockDate = label(g_clock, fonts::lyricsOther, COL_MID);
-    lv_obj_align(g_clockDate, LV_ALIGN_CENTER, 0, 70);
+    lv_obj_align(g_clockDate, LV_ALIGN_CENTER, 0, Y(70));
     g_clockTrack = label(g_clock, fonts::ui20, COL_DIM);
-    lv_obj_set_width(g_clockTrack, 700);
+    lv_obj_set_width(g_clockTrack, X(700));
     marquee(g_clockTrack);
     lv_obj_set_style_text_align(g_clockTrack, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(g_clockTrack, LV_ALIGN_BOTTOM_MID, 0, -36);
+    lv_obj_align(g_clockTrack, LV_ALIGN_BOTTOM_MID, 0, -Y(36));
     lv_obj_set_hidden(g_clock, true);
 }
 
 void buildOta() {
     g_otaBadge = lv_button_create(g_scr);
-    lv_obj_set_height(g_otaBadge, 30);
-    lv_obj_set_style_radius(g_otaBadge, 15, 0);
+    lv_obj_set_height(g_otaBadge, S(30));
+    lv_obj_set_style_radius(g_otaBadge, S(15), 0);
     lv_obj_set_style_shadow_width(g_otaBadge, 0, 0);
-    lv_obj_set_style_pad_hor(g_otaBadge, 14, 0);
+    lv_obj_set_style_pad_hor(g_otaBadge, X(14), 0);
     lv_obj_set_style_pad_ver(g_otaBadge, 0, 0);
     lv_obj_set_style_bg_color(g_otaBadge, lv_color_hex(COL_ACCENT), 0);
-    lv_obj_set_pos(g_otaBadge, 430, 7);
+    lv_obj_set_pos(g_otaBadge, X(430), Y(7));
     g_otaBadgeLabel = label(g_otaBadge, fonts::ui16, 0x15161A);
     lv_obj_center(g_otaBadgeLabel);
     lv_obj_add_event_cb(g_otaBadge, [](lv_event_t *) { setHidden(g_otaConfirm, false); }, LV_EVENT_CLICKED, nullptr);
@@ -844,30 +853,30 @@ void buildOta() {
 
     g_otaConfirm = fullScreen(LV_OPA_90);
     g_otaConfirmText = label(g_otaConfirm, fonts::ui20, COL_TEXT);
-    lv_obj_set_width(g_otaConfirmText, 620);
+    lv_obj_set_width(g_otaConfirmText, X(620));
     lv_label_set_long_mode(g_otaConfirmText, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_style_text_align(g_otaConfirmText, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(g_otaConfirmText, LV_ALIGN_CENTER, 0, -60);
-    lv_obj_t *install = textButton(g_otaConfirm, "Install now", 0x1F6F9E, [](lv_event_t *) {
+    lv_obj_align(g_otaConfirmText, LV_ALIGN_CENTER, 0, -Y(60));
+    lv_obj_t *install = textButton(g_otaConfirm, "Install now", COL_PRIMARY, [](lv_event_t *) {
         setHidden(g_otaConfirm, true);
         if (live()) ota::requestInstall();
     });
-    lv_obj_align(install, LV_ALIGN_CENTER, -110, 90);
+    lv_obj_align(install, LV_ALIGN_CENTER, -X(110), Y(90));
     lv_obj_t *later = textButton(g_otaConfirm, "Later", 0x232326, [](lv_event_t *) { setHidden(g_otaConfirm, true); });
-    lv_obj_align(later, LV_ALIGN_CENTER, 110, 90);
+    lv_obj_align(later, LV_ALIGN_CENTER, X(110), Y(90));
 
     g_otaProgress = fullScreen(LV_OPA_COVER);
     g_otaProgressText = label(g_otaProgress, fonts::lyricsOther, COL_TEXT);
-    lv_obj_set_width(g_otaProgressText, 680);
+    lv_obj_set_width(g_otaProgressText, X(680));
     lv_label_set_long_mode(g_otaProgressText, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_style_text_align(g_otaProgressText, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(g_otaProgressText, LV_ALIGN_CENTER, 0, -50);
+    lv_obj_align(g_otaProgressText, LV_ALIGN_CENTER, 0, -Y(50));
     g_otaBar = progressBar(g_otaProgress);
     lv_bar_set_range(g_otaBar, 0, 100);
-    lv_obj_set_size(g_otaBar, 520, 8);
-    lv_obj_align(g_otaBar, LV_ALIGN_CENTER, 0, 40);
+    lv_obj_set_size(g_otaBar, X(520), S(8));
+    lv_obj_align(g_otaBar, LV_ALIGN_CENTER, 0, Y(40));
     g_otaClose = textButton(g_otaProgress, "Close", 0x232326, [](lv_event_t *) { setHidden(g_otaProgress, true); });
-    lv_obj_align(g_otaClose, LV_ALIGN_CENTER, 0, 120);
+    lv_obj_align(g_otaClose, LV_ALIGN_CENTER, 0, Y(120));
 }
 
 void applyOta() {
@@ -899,6 +908,7 @@ void applyOta() {
                                                          lv_color_to_u16(acc)});
         }
         board::staticScreenProgress(g_ota.percent);
+        if (!board::HAS_STATIC_SCREEN) lv_bar_set_value(g_otaBar, g_ota.percent, LV_ANIM_OFF);   // live screen
     } else if (failedNow) {
         board::staticScreenEnd();
         setHidden(g_otaBar, true);
@@ -908,6 +918,11 @@ void applyOta() {
 }
 
 void build() {
+    // LVGL's theme colours (slider tracks, switches, dropdowns, message boxes): the brand green,
+    // not the default blue.
+    lv_display_t *disp = lv_display_get_default();
+    lv_display_set_theme(disp, lv_theme_default_init(disp, lv_color_hex(COL_ACCENT), lv_color_hex(COL_PRIMARY), false,
+                                                     LV_FONT_DEFAULT));
     g_scr = lv_obj_create(nullptr);
     lv_obj_set_style_bg_color(g_scr, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_text_color(g_scr, lv_color_hex(COL_TEXT), 0);
@@ -915,27 +930,27 @@ void build() {
 
     g_bg = lv_image_create(g_scr);
     lv_obj_set_pos(g_bg, 0, 0);
-    lv_obj_set_size(g_bg, 800, 480);
+    lv_obj_set_size(g_bg, SCREEN_W, SCREEN_H);
     lv_obj_set_clickable(g_bg, false);
     lv_obj_set_hidden(g_bg, true);
 
     // The TextFromTrack mark before the zone name, like the companion's desktop UI.
     lv_obj_t *mark = lv_image_create(g_scr);
     lv_image_set_src(mark, &tft_icon);
-    lv_obj_set_pos(mark, 24, 11);
+    lv_obj_set_pos(mark, X(24), Y(11));
     lv_obj_set_clickable(mark, false);
     g_zone = label(g_scr, fonts::ui16, COL_MID);
-    lv_obj_set_pos(g_zone, 24 + 24 + 8, 12);
+    lv_obj_set_pos(g_zone, X(24) + tft_icon.header.w + S(8), Y(12));
     g_status = label(g_scr, fonts::ui16, COL_DIM);
-    lv_obj_set_width(g_status, 460);
+    lv_obj_set_width(g_status, X(460));
     lv_obj_set_style_text_align(g_status, LV_TEXT_ALIGN_RIGHT, 0);
     marquee(g_status);
-    lv_obj_align(g_status, LV_ALIGN_TOP_RIGHT, -24, 12);
+    lv_obj_align(g_status, LV_ALIGN_TOP_RIGHT, -X(24), Y(12));
 
     auto viewBox = []() {
         lv_obj_t *v = lv_obj_create(g_scr);
         lv_obj_remove_style_all(v);
-        lv_obj_set_size(v, 800, 480);
+        lv_obj_set_size(v, SCREEN_W, SCREEN_H);
         lv_obj_set_scrollable(v, false);
         lv_obj_set_clickable(v, false);   // taps and swipes reach the screen
         return v;
@@ -943,7 +958,7 @@ void build() {
     g_lyricsView = viewBox();
 
     g_thumb = lv_image_create(g_lyricsView);
-    lv_obj_set_pos(g_thumb, TRACK_X, 37);
+    lv_obj_set_pos(g_thumb, TRACK_X, Y(37));
     lv_obj_set_size(g_thumb, net::COVER_THUMB_PX, net::COVER_THUMB_PX);
     lv_image_set_inner_align(g_thumb, LV_IMAGE_ALIGN_CENTER);
     lv_obj_set_clickable(g_thumb, false);
@@ -952,16 +967,16 @@ void build() {
     g_title = label(g_lyricsView, fonts::ui20, COL_TEXT);
     lv_obj_set_width(g_title, TRACK_W);
     marquee(g_title);
-    lv_obj_set_pos(g_title, TRACK_X, 40);
+    lv_obj_set_pos(g_title, TRACK_X, Y(40));
     g_artist = label(g_lyricsView, fonts::ui16, COL_MID);
     lv_obj_set_width(g_artist, TRACK_W);
     marquee(g_artist);
-    lv_obj_set_pos(g_artist, TRACK_X, 68);
+    lv_obj_set_pos(g_artist, TRACK_X, Y(68));
 
     g_stage = lv_obj_create(g_lyricsView);
     lv_obj_remove_style_all(g_stage);
-    lv_obj_set_size(g_stage, 760, 340);
-    lv_obj_set_pos(g_stage, 20, 98);
+    lv_obj_set_size(g_stage, SCREEN_W - 2 * X(20), Y(340));
+    lv_obj_set_pos(g_stage, X(20), Y(98));
     lv_obj_set_scrollable(g_stage, false);
     g_rowsBox = lv_obj_create(g_stage);
     lv_obj_remove_style_all(g_rowsBox);
@@ -970,7 +985,7 @@ void build() {
     lv_obj_set_clickable(g_rowsBox, false);
     lv_obj_set_flex_flow(g_rowsBox, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(g_rowsBox, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(g_rowsBox, 10, 0);
+    lv_obj_set_style_pad_row(g_rowsBox, Y(10), 0);
     // Fixed budget so the stage never overflows: neighbours on one line, the current line on
     // at most two; longer text ends with "…". 4 x 41 + 2 x 60 + gaps fits the 340 px stage.
     for (int i = 0; i < LYRIC_ROWS; i++) {
@@ -978,7 +993,7 @@ void build() {
         const lv_font_t *font = cur ? fonts::lyricsCurrent : fonts::lyricsOther;
         lv_obj_t *l = label(g_rowsBox, font, cur ? COL_TEXT : COL_DIM);
         int32_t lh = lv_font_get_line_height(font);
-        lv_obj_set_width(l, 760);
+        lv_obj_set_width(l, SCREEN_W - 2 * X(20));
         lv_obj_set_height(l, LV_SIZE_CONTENT);
         lv_obj_set_style_max_height(l, cur ? 2 * lh : lh, 0);
         lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
@@ -987,21 +1002,21 @@ void build() {
     }
 
     g_message = label(g_lyricsView, fonts::lyricsOther, COL_MID);
-    lv_obj_set_width(g_message, 700);
+    lv_obj_set_width(g_message, X(700));
     lv_label_set_long_mode(g_message, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_style_text_align(g_message, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(g_message, LV_ALIGN_CENTER, 0, 10);
+    lv_obj_align(g_message, LV_ALIGN_CENTER, 0, Y(10));
 
     g_bar = lv_bar_create(g_lyricsView);
-    lv_obj_set_size(g_bar, 640, 4);
-    lv_obj_align(g_bar, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_set_size(g_bar, X(640), S(4));
+    lv_obj_align(g_bar, LV_ALIGN_BOTTOM_MID, 0, -Y(20));
     lv_bar_set_range(g_bar, 0, 1000);
     lv_obj_set_style_bg_color(g_bar, lv_color_hex(0x2E2E32), LV_PART_MAIN);
     lv_obj_set_style_bg_color(g_bar, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
     g_elapsed = label(g_lyricsView, fonts::ui16, COL_DIM);
-    lv_obj_align(g_elapsed, LV_ALIGN_BOTTOM_LEFT, 24, -10);
+    lv_obj_align(g_elapsed, LV_ALIGN_BOTTOM_LEFT, X(24), -Y(10));
     g_total = label(g_lyricsView, fonts::ui16, COL_DIM);
-    lv_obj_align(g_total, LV_ALIGN_BOTTOM_RIGHT, -24, -10);
+    lv_obj_align(g_total, LV_ALIGN_BOTTOM_RIGHT, -X(24), -Y(10));
 
     g_coverView = viewBox();
     buildCoverView();
@@ -1069,9 +1084,9 @@ void placeTrackText(bool withThumb) {
     int x = withThumb ? TRACK_X + net::COVER_THUMB_PX + THUMB_GAP : TRACK_X;
     if (lv_obj_get_x(g_title) == x) return;
     int w = TRACK_W - (x - TRACK_X);
-    lv_obj_set_pos(g_title, x, 40);
+    lv_obj_set_pos(g_title, x, Y(40));
     lv_obj_set_width(g_title, w);
-    lv_obj_set_pos(g_artist, x, 68);
+    lv_obj_set_pos(g_artist, x, Y(68));
     lv_obj_set_width(g_artist, w);
 }
 

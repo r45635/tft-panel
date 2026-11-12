@@ -1,4 +1,13 @@
-# Hardware — Elecrow CrowPanel ESP32 Display 7.0" (DIS08070H, board V3.0)
+# Hardware
+
+TFT Panel runs on two 7" boards. Each has its own board layer in `src/board/` (one PlatformIO
+environment each); everything above it is shared, and the interface is drawn on an 800×480 grid
+scaled to the screen (`src/layout.h`).
+
+- [Elecrow CrowPanel ESP32 Display 7.0" (DIS08070H, board V3.0)](#elecrow-crowpanel-esp32-display-70-dis08070h-board-v30) — env `crowpanel7`
+- [Waveshare ESP32-P4-WIFI6-Touch-LCD-7B](#waveshare-esp32-p4-wifi6-touch-lcd-7b) — env `waveshare-p4-7b`
+
+## Elecrow CrowPanel ESP32 Display 7.0" (DIS08070H, board V3.0)
 
 Authoritative sources, in this order:
 1. What the board does on the bench (bring-up logs below).
@@ -7,9 +16,9 @@ Authoritative sources, in this order:
 3. Elecrow's prose "Hardware Driver Guide" (`Eagle_SCH&PCB/V3.0/readme.md`) — useful, but wrong
    in places (see Pitfalls).
 
-Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
+Pin map in code: [`src/board/pins_crowpanel7.h`](../src/board/pins_crowpanel7.h).
 
-## Summary
+### Summary
 
 | Block | Part | Interface / pins |
 |---|---|---|
@@ -24,7 +33,7 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
 | Audio | NS4168 I2S amp | DOUT 17, BCLK 42, LRCLK 18 |
 | USB | CH340C → UART0 | auto-reset via DTR/RTS; no native USB on the connector |
 
-## Bring-up log
+### Bring-up log
 
 - **2026-11-07 (Mac Studio, `/dev/cu.usbserial-8310`)** — chip ESP32-S3 rev v0.2, PSRAM 8 MB,
   flash 4 MB detected. Flash at 921600 baud fails ("Unable to verify flash chip connection");
@@ -54,7 +63,7 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
 - **2026-11-07, touch fixed** — Vincent reseated the touch flex: GT911 answers at 0x5D from boot,
   `touchdiag` finds it at once. Our reset sequence was right all along.
 
-## Pitfalls
+### Pitfalls
 
 - ✅ **Root cause (2026-11-07): the touch flex was not seated** in its latch connector (top centre, back of
   the board, thin black flex — not the wide orange LCD flex J2). After reseating: PCA9557 input reads
@@ -124,7 +133,61 @@ Pin map in code: [`src/board/board_pins.h`](../src/board/board_pins.h).
   companion's own JPEG (`/api/roon/image/<key>`) with `warmth 0`, not by eye on the bluish panel.
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.
 
-## Touch diagnostic
+### Touch diagnostic
 
 `PLATFORMIO_BUILD_FLAGS="-DTOUCH_DIAG" pio run -t upload` runs several reset variants at boot and
 prints the PCA9557 registers plus an I2C scan after each (`[diag]` lines on the serial port).
+
+## Waveshare ESP32-P4-WIFI6-Touch-LCD-7B
+
+Sources: what the board does on the bench (below), and Waveshare's BSP
+`waveshare/esp32_p4_wifi6_touch_lcd_7b` 3.0.1 (Apache-2.0, Espressif component registry) with the
+`espressif/esp_lcd_ek79007` driver 2.0.2 (Apache-2.0) for the panel's init sequence.
+Pin map in code: [`src/board/pins_waveshare_p4_7b.h`](../src/board/pins_waveshare_p4_7b.h).
+
+### Summary
+
+| Block | Part | Interface / pins |
+|---|---|---|
+| MCU | ESP32-P4 rev v3.2, 400 MHz dual core | 32 MB flash (QIO), 32 MB PSRAM (own bus, 250 MHz) |
+| Wi-Fi | ESP32-C6 coprocessor, esp_hosted over SDIO | CLK 18, CMD 19, D0–D3 14–17, C6 reset 54 (Arduino's defaults) |
+| LCD | 7" 1024×600, EK79007, **mounted upside down** | MIPI-DSI 2 lanes, 1000 Mbps/lane, DPI 52 MHz, RGB565; D-PHY powered by LDO channel 3 at 2.5 V; reset GPIO33 |
+| LCD timings | | H 10/160/160 (sync/back/front) · V 1/23/12 |
+| Backlight | | GPIO32, LEDC PWM 5 kHz, **inverted** (active low) |
+| I2C | | SDA 7, SCL 8: GT911 0x5D, ES8311 codec 0x18, ES7210 mic ADC 0x40 |
+| Touch | GT911 (id "911", config 1024×600) | RST and INT not wired: address fixed at 0x5D |
+| USB | two USB-C: *USB 1.1* = the P4's USB-Serial/JTAG (console, flash), *USB to UART* = UART0 (GPIO37/38) | plus a USB-A host port |
+
+### Bring-up log
+
+- **2026-11-11 (Mac Studio, `/dev/cu.usbmodem83101`)** — factory firmware: Waveshare's
+  ESP-Brookesia phone demo (`esp32-p4-lcd-7b-brookesia`, IDF 5.5.5). Back up the full 32 MB before
+  the first write (`esptool read-flash 0 ALL factory.bin`, then `verify-flash`): `esptool
+  write-flash 0 factory.bin` puts the demo back. Done and verified on this board (kept outside the repo).
+- A bare spike (DSI bus + DBI commands + DPI panel, GT911 polling, `WiFi.scanNetworks`) worked first
+  time: colour bars, touch, 11 networks — through the **factory C6 firmware**, which does not answer
+  esp_hosted's version request (Arduino logs "Slave firmware version: 0.0.0" and an update URL) but
+  carries Wi-Fi fine: STA, soft-AP setup portal, mDNS discovery of the companion, HTTP and TLS.
+- The image was upside down (colour bars reversed). The EK79007's MADCTL flip (0x36) has no
+  effect in video mode: the board layer turns each flushed area by 180° (a rectangle turned 180°
+  is its pixels in reverse order) and draws it at the mirrored position. Touch needs nothing: the
+  GT911 already reports in the viewer's orientation (checked at the four corners).
+- TFT Panel itself: Wi-Fi setup from the phone, companion, zones, synced lyrics, covers
+  (480 px JPEG decoded in ~1 s), screenshots, `restart` (full system reset) all work.
+
+### Pitfalls
+
+- **Opening the USB console resets the P4** when DTR/RTS toggle (reset reason `CHIP_USB_UART_RESET`);
+  a logger that reopens the port after each reset then loops. Open it with **DTR high, RTS low**.
+- The console is the native USB (`ARDUINO_USB_CDC_ON_BOOT=1`): nothing on the *USB to UART* port
+  after the ROM boot messages.
+- `esp_read_mac(ESP_MAC_WIFI_STA)` fails on the P4 (Wi-Fi lives in the C6): names (AP SSID,
+  mDNS host) come from the base MAC, `esp_efuse_mac_get_default`, which is the same value on the S3.
+- The panel's white is neutral, unlike the CrowPanel's bluish one: colour warmth defaults to 0 here
+  (75 % on the CrowPanel), per board (`DEFAULT_WARMTH`).
+- Flash writes do not stall the display (PSRAM has its own bus): no frozen update screen
+  (`HAS_STATIC_SCREEN = false`), the progress bar stays live.
+- ESP Web Tools learned the ESP32-P4 in 10.4.0; 10.2 does not list it.
+- Building this environment and `crowpanel7` one after the other makes pioarduino redo the
+  CrowPanel's framework rebuild (~2 min), whose first pass can fail on a missing `.sconsign` file;
+  run it again. `tools/release.sh` does.

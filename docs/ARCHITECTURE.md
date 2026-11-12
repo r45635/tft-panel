@@ -43,9 +43,25 @@ Rules learned on the watch client:
 
 | Layer | Path | Role |
 |---|---|---|
-| Board | `src/board/` | pins, PCA9557, GT911, RGB panel (`esp_lcd`), LVGL glue, backlight |
-| Net | `src/net/` | settings (NVS), Wi-Fi + setup portal, mDNS discovery, companion polling |
-| App | `src/app/` | lyrics model (LRC), fonts, screens (setup, now playing; bring-up via `bringup`) |
+| Board | `src/board/` | one layer per screen behind `board.h`: pins, touch, panel driver (`esp_lcd`), LVGL glue, backlight, colour warmth |
+| Layout | `src/layout.h` | screen size and the 800×480 design grid's scaling (`X`, `Y`, `S`) |
+| Net | `src/net/` | settings (NVS), Wi-Fi + setup portal, mDNS discovery, companion polling, OTA |
+| App | `src/app/` | lyrics model (LRC), fonts, covers, screens (setup, now playing, settings; bring-up via `bringup`) |
+
+**Boards.** `board.h` is the only interface the rest of the firmware sees; each board compiles
+its own file, chosen by the environment's `-DBOARD_…` flag: `board_crowpanel7.cpp` (ESP32-S3, RGB
+panel fed from bounce buffers, frozen update screen) and `board_waveshare_p4_7b.cpp` (ESP32-P4,
+MIPI-DSI panel fed by the 2D-DMA from two internal-RAM strips, image turned 180° on the way). Shared
+by both: `restart.cpp` (clean resets), `white_balance.cpp` (warmth table), `gt911.cpp`. Per-board
+constants (`pins_*.h`): resolution, `BOARD_NAME`, the release asset name `BOARD_ASSET`,
+`HAS_STATIC_SCREEN`, `DEFAULT_WARMTH`. Wi-Fi on the P4 goes through the on-board ESP32-C6
+(esp_hosted, transparent to `WiFi.h`).
+
+**Scaling.** Layout code is written on the 800×480 grid: `X()` for horizontal positions and widths,
+`Y()` for vertical ones, `S()` for things that keep their proportions (fonts, icons, round
+buttons, covers, radii). Identity on the CrowPanel; on 1024×600, ×1.28 / ×1.25 / ×1.25. Fonts are
+rendered at run time (tiny_ttf), so a scaled size costs nothing; LVGL's symbol fonts are fixed
+sizes, so the P4 build adds Montserrat 18/24/36 for them.
 
 Threads: the **net task** (core 0, next to the Wi-Fi stack) owns every network call and publishes
 an immutable `net::Snapshot` under a mutex, with a version counter. **LVGL runs only in `loop()`**

@@ -253,7 +253,7 @@ bool loadCover(const String &base, const String &imageKey, int px, bool withBig,
         why = "not loaded: " + r.message;
         return false;
     }
-    bool ok = cover::build(jpeg, len, withBig, COVER_THUMB_PX, settings::backdrop(), 800, 480, c, why);
+    bool ok = cover::build(jpeg, len, withBig, COVER_THUMB_PX, settings::backdrop(), layout::SCREEN_W, layout::SCREEN_H, c, why);
     heap_caps_free(jpeg);
     if (!ok) why = "not usable: " + why;
     return ok;
@@ -335,11 +335,15 @@ void reportCompanionFailure(const char *what, const HttpResult &r) {
 // ---- Companion discovery ----
 }  // namespace
 
+// The chip's base MAC from eFuse: valid before Wi-Fi starts, and on the P4 (whose Wi-Fi is
+// a separate ESP32-C6) the same identity as on the S3, where it is also the station MAC.
+void baseMac(uint8_t mac[6]) { esp_efuse_mac_get_default(mac); }
+
 String hostName() {
-    String mac = WiFi.macAddress();
-    mac.replace(":", "");
-    String host = "tft-panel-" + mac.substring(8);
-    host.toLowerCase();
+    uint8_t mac[6];
+    baseMac(mac);
+    char host[24];
+    snprintf(host, sizeof host, "tft-panel-%02x%02x", mac[4], mac[5]);
     return host;
 }
 
@@ -843,7 +847,7 @@ void begin() {
     g_lock = xSemaphoreCreateMutex();
     g_commands = xQueueCreate(8, sizeof(Command));
     uint8_t mac[6] = {0};
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);   // eFuse MAC: valid before Wi-Fi starts
+    baseMac(mac);
     char suffix[5];
     snprintf(suffix, sizeof suffix, "%02X%02X", mac[4], mac[5]);
     g_apSsid = String("TFT-Panel-") + suffix;

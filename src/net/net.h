@@ -9,14 +9,15 @@
 
 #include "../app/cover.h"
 #include "../app/lyrics.h"
+#include "../layout.h"
 
 namespace net {
 
 // Cover thumbnail size (px, square box) — also the size fetched from the companion.
-constexpr int COVER_THUMB_PX = 56;
+constexpr int COVER_THUMB_PX = layout::S(56);
 // Big cover on the cover view (px, square box), fetched once per track; thumbnail and
 // backdrop are derived from it.
-constexpr int COVER_BIG_PX = 384;
+constexpr int COVER_BIG_PX = layout::S(384);
 
 enum class Phase : uint8_t {
     Setup,            // no Wi-Fi configured: setup portal only
