@@ -206,6 +206,20 @@ Pin map in code: [`src/board/pins_waveshare_p4_7b.h`](../src/board/pins_waveshar
   CrowPanel's framework rebuild (~2 min), whose first pass can fail on a missing `.sconsign` file;
   run it again. `tools/release.sh` does.
 
+## Power use (not measured)
+
+Nobody has put a meter on either panel yet. Both take 5 V over USB-C, and the backlight is most
+of the draw.
+- Waveshare P4 7B: a user on the Espressif forum measured a P4 board with a 7" 1024×600 panel at
+  ~770 mA with the backlight on, ~270 mA with it off (about 3.9 W and 1.4 W at 5 V). No figure
+  from Waveshare.
+- CrowPanel 7": no published figure; expect the same order (2-4 W with the screen lit).
+- When the screen turns off (Settings, "sleep"), the firmware only fades the backlight to 0: Wi-Fi,
+  the CPU and the panel keep running, so the panel follows the music and wakes at once. No CPU or
+  Wi-Fi power saving is set.
+- To measure: a USB-C power meter between the charger and the panel, readings at 100 %, at the
+  usual brightness, and with the screen off; record them here.
+
 ## Other boards
 
 Not supported. A board with the same chip is not enough: the display controller, its timings, the

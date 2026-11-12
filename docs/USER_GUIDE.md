@@ -103,7 +103,8 @@ Not on the CrowPanel for now.
 
 ![Library](images/library.png)
 
-- **Search**: type an artist, album or track on the keyboard, then **Search**. The results come
+- **Search**: the green cursor blinks in the field; type an artist, album or track on the
+  keyboard, then **Search**. The results come
   by kind (artists, albums, tracks…); tap one to open it.
 - **Browse**: Roon's own menus — Library (artists, albums, tracks, composers, tags), playlists,
   radio, genres.

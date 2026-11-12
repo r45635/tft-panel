@@ -74,7 +74,9 @@
 
 - [x] Search and browse Roon's library from the panel, play / queue / radio on the followed zone
       (own Roon browse session; `docs/ARCHITECTURE.md`)
-- [ ] Vincent's finger test, and a Play Now with his OK
+- [x] Vincent's finger test on the P4 (2026-11-12): search, results and playback work
+- [x] Text fields show a visible blinking green cursor while they wait for typing (v0.1.15; the
+      theme's thin cursor did not blink when the field was focused by the code)
 - [ ] CrowPanel: later if it works well (~207 KB of flash left; lists slower there)
 
 ## Other boards (not started)
