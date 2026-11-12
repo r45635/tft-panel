@@ -6,6 +6,7 @@ scaled to the screen (`src/layout.h`).
 
 - [Elecrow CrowPanel ESP32 Display 7.0" (DIS08070H, board V3.0)](#elecrow-crowpanel-esp32-display-70-dis08070h-board-v30) — env `crowpanel7`
 - [Waveshare ESP32-P4-WIFI6-Touch-LCD-7B](#waveshare-esp32-p4-wifi6-touch-lcd-7b) — env `waveshare-p4-7b`
+- [Other boards](#other-boards) — not supported; what adding one takes
 
 ## Elecrow CrowPanel ESP32 Display 7.0" (DIS08070H, board V3.0)
 
@@ -204,3 +205,35 @@ Pin map in code: [`src/board/pins_waveshare_p4_7b.h`](../src/board/pins_waveshar
 - Building this environment and `crowpanel7` one after the other makes pioarduino redo the
   CrowPanel's framework rebuild (~2 min), whose first pass can fail on a missing `.sconsign` file;
   run it again. `tools/release.sh` does.
+
+## Other boards
+
+Not supported. A board with the same chip is not enough: the display controller, its timings, the
+pins (backlight, LCD reset, I2C, sometimes the SDIO link to the Wi-Fi chip) and the panel's
+orientation all differ, and the firmware would leave the screen dark. The web installer and the
+OTA pick firmware by chip family and board name only, so it must never be used on a look-alike.
+
+What adding a board takes: a `pins_<board>.h` and a `board_<board>.cpp` behind `board.h`, an
+environment in `platformio.ini`, a `BOARD_ASSET` for its release files, and on the website a way to
+choose between boards with the same chip. Then a bring-up **on the real board**: colour bars and
+orientation, touch at the four corners, backlight, Wi-Fi to the Internet, an OTA. Nothing is
+published for a board that has not run.
+
+### Guition JC1060P470C (asked about 2026-11-11)
+
+| | Waveshare 7B (supported) | Guition JC1060P470C |
+|---|---|---|
+| Chip | ESP32-P4 | ESP32-P4 |
+| Screen | 1024×600 MIPI-DSI, **EK79007** | 1024×600 MIPI-DSI, **JD9165** |
+| Touch | GT911 | GT911 |
+| PSRAM / flash | 32 MB / 32 MB | 32 MB / **16 MB** |
+| Wi-Fi | ESP32-C6 (esp_hosted) | ESP32-C6 (esp_hosted) |
+
+Reusable as is: the 1024×600 scaled interface, GT911, the C6 firmware update at boot, updates
+received whole before writing; 16 MB is enough (the P4 partition table ends at 12.6 MB, but the
+environment must declare 16 MB). To do: the JD9165 init sequence and timings (Espressif's
+`esp_lcd_jd9165` driver, Apache-2.0), the pin map (community configs mention backlight GPIO23 and
+LCD reset GPIO5 — unverified), the orientation, and a board choice on the install page.
+**Blocked on hardware**: nobody on the project has one. A user with the board who can flash a test
+build and send back the USB console log and photos would be enough to start.
+

@@ -38,6 +38,12 @@
   <h1>Install TFT Panel</h1>
   <p class="version">Firmware {{VERSION}} for the Elecrow CrowPanel 7" (DIS08070H, board V3.0) and the
     Waveshare ESP32-P4-WIFI6-Touch-LCD-7B. The right version is picked for the screen you connect.</p>
+  <div class="card">
+    <b>Only these two screens.</b><br>
+    The installer recognises the chip, not the screen: any other ESP32-P4 board (for example the Guition
+    JC1060P470C) would get the Waveshare firmware and its display would stay dark. Other boards are not
+    supported yet — see <a href="https://github.com/r45635/tft-panel/blob/main/docs/HARDWARE.md#other-boards">other boards</a>.
+  </div>
 
   <ol>
     <li>Use <b>Chrome or Edge on a computer</b> (Windows, macOS, Linux). Phones and Safari/Firefox cannot do this.</li>

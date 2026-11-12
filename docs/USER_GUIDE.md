@@ -14,6 +14,10 @@ zones and cover are invented.*
 - One of these screens, and a USB-C cable that carries data:
   - **Elecrow CrowPanel ESP32 Display 7.0"** (DIS08070H), board **V3.0**;
   - **Waveshare ESP32-P4-WIFI6-Touch-LCD-7B** (1024×600).
+
+  Other screens are not supported, even look-alikes with the same ESP32-P4 chip (for example the
+  Guition JC1060P470C): their display needs different settings, and the installer would give them the
+  Waveshare firmware. Their screen would stay dark.
 - A **Roon** system, and the free **TextFromTrack companion** running on a computer of the same
   network: it finds the lyrics and tells the panel what plays.
 - Your **Wi-Fi** network name and password (2.4 GHz).

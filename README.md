@@ -33,6 +33,12 @@ and gives you play/pause, skip, volume and zone selection at a touch.
 | Build | `pio run -e crowpanel7` | `pio run -e waveshare-p4-7b` |
 
 The interface is drawn on an 800×480 grid and scaled to the screen, so both look the same.
+
+**Other screens are not supported**, even with the same chip: a look-alike ESP32-P4 7" board such as the
+Guition JC1060P470C uses another LCD controller (JD9165) and other pins, and would stay dark with this
+firmware. Don't use the web installer on it — it picks the firmware by chip, so any ESP32-P4 board gets
+the Waveshare one. Adding a board takes a new board layer and **someone with the board to test it**:
+see [Other boards](docs/HARDWARE.md#other-boards).
 Details, pin maps and pitfalls: [docs/HARDWARE.md](docs/HARDWARE.md).
 
 ## Install

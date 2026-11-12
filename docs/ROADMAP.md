@@ -63,6 +63,12 @@
 - [x] C6 coprocessor firmware installed at boot from the P4 image (the factory one carried no Internet)
 - [ ] Use the P4's spare power later: hardware JPEG decoder for covers, PPA for the rotation, bigger fonts
 
+## Other boards (not started)
+
+- **Guition JC1060P470C** (ESP32-P4, JD9165, 16 MB flash) — asked by a user 2026-11-11; about half a day
+  of code, but blocked until someone can test on the board. Details: `docs/HARDWARE.md#other-boards`.
+- Install page: a board choice for boards that share a chip (needed as soon as a second P4 board is added).
+
 ## To discuss (estimated 2026-11-07, not started)
 
 - **Multi-language UI** — ~120 strings, 3–6 KB of flash per language, about a day for English +
