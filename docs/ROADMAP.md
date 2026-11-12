@@ -63,7 +63,10 @@
 - [x] C6 coprocessor firmware installed at boot from the P4 image (the factory one carried no Internet)
 - [x] PPA turns the image 180° (was the CPU), no permanent screenshot copy, faster warmth: lyric
       slides ~15 → ~20 fps (`docs/HARDWARE.md`, render speed)
-- [ ] Use the P4's spare power later: hardware JPEG decoder for covers and library thumbnails, bigger fonts
+- [ ] Hardware JPEG decoder: measured 2026-11-12, not worth it yet — a 480 px cover decodes in
+      147 ms of ~750 ms (HTTP ~170, resampling big cover + thumbnail + full-screen backdrop ~430);
+      library thumbnails are 70 px, bound by the companion's HTTP answer
+- [ ] Bigger fonts on the P4 if Vincent wants them (the UI is scaled 1.25× from the 800×480 grid)
 
 ## Wi-Fi setup (2026-11-11)
 
