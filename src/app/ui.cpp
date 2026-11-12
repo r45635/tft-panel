@@ -15,6 +15,7 @@
 #include "../layout.h"
 #include "fonts.h"
 #include "settings_screen.h"
+#include "library_screen.h"
 #include "wifi_screen.h"
 #include "showcase.h"
 #include "../version.h"
@@ -394,6 +395,11 @@ void buildControls() {
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_text_align(g_volLabel, LV_TEXT_ALIGN_CENTER, 0);
     g_btnVolUp = roundButton(g_controls, LV_SYMBOL_PLUS, nullptr, onVolUp);
+    if (board::HAS_LIBRARY)   // the music library (search, browse, play)
+        roundButton(g_controls, LV_SYMBOL_DIRECTORY, nullptr, [](lv_event_t *) {
+            showControls(false);
+            libui::open();
+        });
     roundButton(g_controls, LV_SYMBOL_SETTINGS, nullptr, [](lv_event_t *) {
         showControls(false);
         settingsui::open();
@@ -573,7 +579,7 @@ void chooseView(View v) {
 
 void onGesture(lv_event_t *) {
     lv_indev_t *indev = lv_indev_active();
-    if (!indev || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen() || wifiui::isOpen()) return;
+    if (!indev || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen() || wifiui::isOpen() || libui::isOpen()) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     if (dir != LV_DIR_LEFT && dir != LV_DIR_RIGHT) return;
     // No click at the end of a swipe, on the screen or on a button the finger started on.
@@ -773,7 +779,7 @@ void buildOffsetPopup() {
 
 void onLongPress(lv_event_t *) {
     lv_indev_t *indev = lv_indev_active();
-    if (g_view != View::Lyrics || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen() || wifiui::isOpen()) return;
+    if (g_view != View::Lyrics || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen() || wifiui::isOpen() || libui::isOpen()) return;
     if (g_s.lyricsStatus != net::LyricsStatus::Found || !g_s.lyrics || !g_s.lyrics->synced) return;
     if (indev) lv_indev_wait_release(indev);   // no tap (controls toggle) at the release
     showControls(false);
@@ -1041,6 +1047,7 @@ void build() {
         []() { setHidden(g_otaConfirm, false); },
         []() { wifiui::open(); },
     });
+    if (board::HAS_LIBRARY) libui::build(g_scr);
     wifiui::build(g_scr);
     buildVolumePopup();
     buildOffsetPopup();
@@ -1351,7 +1358,7 @@ void tickClock() {
 void tickSleep(uint32_t now) {
     hookTouch();
     bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch ||
-                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress) || settingsui::isOpen() || wifiui::isOpen() ||
+                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress) || settingsui::isOpen() || wifiui::isOpen() || libui::isOpen() ||
                 !isHidden(g_volPopup) || !isHidden(g_offPopup) || !isHidden(g_codePopup);
     if (busy) g_activeAt = now;
     uint32_t idle = now - g_activeAt;
@@ -1437,6 +1444,7 @@ bool showcase(const String &what) {
     if (what == "none") {
         settingsui::close();
         wifiui::close();
+        if (board::HAS_LIBRARY) libui::close();
         for (lv_obj_t *o : {g_volPopup, g_offPopup, g_codePopup, g_otaConfirm, g_otaProgress, g_otaBadge, g_clock})
             setHidden(o, true);
         closePicker();
@@ -1486,6 +1494,8 @@ bool showcase(const String &what) {
     } else if (what == "setup") {
         showcase::fakePortal(g_s);
         applySnapshot();
+    } else if ((what == "library" || what == "library-actions") && board::HAS_LIBRARY) {
+        libui::showcase(g_s.thumb, what == "library-actions");
     } else if (what == "wifi" || what == "wifi-password") {
         wifiui::showcase(what == "wifi-password");
     } else if (what == "code") {
@@ -1517,6 +1527,7 @@ void tick() {
         applySnapshot();
         syncVolumePopup();
         wifiui::refresh(g_s);
+        if (board::HAS_LIBRARY) libui::refresh(g_s);
         g_seenOtaVersion = UINT32_MAX;   // badge visibility depends on the portal state
     }
     static uint32_t lastRefresh = 0;
@@ -1532,11 +1543,16 @@ void tick() {
         settingsui::refresh(g_s, g_ota);
     }
     tickPopups(now);
+    if (board::HAS_LIBRARY) libui::tick(now);
     if (!isHidden(g_controls) && isHidden(g_picker) && now - g_controlsShownAt > CONTROLS_HIDE_MS)
         showControls(false);
     if (g_errorShown && now - g_s.commandErrorAt >= COMMAND_ERROR_MS) applySnapshot();
     tickLyrics(now);
     tickProgress(now);
+}
+
+void openLibrary() {
+    if (board::HAS_LIBRARY) libui::open();
 }
 
 }  // namespace ui

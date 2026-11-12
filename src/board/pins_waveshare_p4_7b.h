@@ -17,6 +17,8 @@ constexpr uint8_t DEFAULT_WARMTH = 0;
 // Firmware updates are received whole into PSRAM, then written to flash: flash writes stall the
 // SDIO link to the Wi-Fi chip, which then stops answering (a streamed download died at 240 KB).
 constexpr bool OTA_DOWNLOAD_FIRST = true;
+// Music library browsing (search, browse, play) from the panel.
+constexpr bool HAS_LIBRARY = true;
 
 // ---- MIPI-DSI LCD (1024x600, EK79007, 2 lanes), mounted upside down: the image is rotated
 // 180 degrees on its way to the panel (the controller's MADCTL flip has no effect in video mode).

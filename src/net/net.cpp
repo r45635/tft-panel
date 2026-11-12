@@ -10,7 +10,10 @@
 #include <esp_sntp.h>
 
 #include "../board/board.h"
+#include "../board/board_pins.h"
 #include "coprocessor.h"
+#include "library.h"
+#include "net_internal.h"
 #include "ota.h"
 #include "portal.h"
 #include "web_update.h"
@@ -18,6 +21,8 @@
 #include "settings.h"
 
 namespace net {
+using namespace internal;
+
 namespace {
 
 // ---- Timings ----
@@ -50,7 +55,7 @@ String g_imageKey;          // cover currently shown (or attempted)
 bool g_backdropWanted = true;
 uint32_t g_lastZonesAt = 0, g_lastNowPlayingAt = 0;
 
-enum class CmdType : uint8_t { Control, Volume, Zone, VolumeSet, Mute, Offset };
+enum class CmdType : uint8_t { Control, Volume, Zone, VolumeSet, Mute, Offset, Library };
 struct Command {
     CmdType type;
     int8_t direction;
@@ -117,6 +122,10 @@ const char *disconnectReasonText(uint8_t r) {
 // ---- HTTP ----
 
 // JSON documents in PSRAM: internal RAM is reserved for the Wi-Fi/lwIP stack.
+}  // namespace
+
+namespace internal {
+
 struct PsramAllocator : ArduinoJson::Allocator {
     void *allocate(size_t n) override { return heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); }
     void deallocate(void *p) override { heap_caps_free(p); }
@@ -128,12 +137,6 @@ ArduinoJson::Allocator *psram() {
     static PsramAllocator a;
     return &a;
 }
-
-struct HttpResult {
-    int code = 0;          // HTTP status, or < 0 for a transport error
-    String errorCode;      // companion error.code when present
-    String message;        // short human-readable reason
-};
 
 // GET when `body` is null, else POST it as JSON.
 HttpResult request(const String &path, const JsonDocument *body, JsonDocument &doc, uint32_t timeoutMs) {
@@ -178,11 +181,18 @@ HttpResult request(const String &path, const JsonDocument *body, JsonDocument &d
     return r;
 }
 
+}  // namespace internal
+
+namespace {
+
 HttpResult getJson(const String &path, JsonDocument &doc, uint32_t timeoutMs) {
     return request(path, nullptr, doc, timeoutMs);
 }
 
-// GETs a binary body into a PSRAM buffer the caller frees (heap_caps_free).
+}  // namespace
+
+namespace internal {
+
 HttpResult getBytes(const String &base, const String &path, uint8_t *&buf, size_t &len, size_t maxLen,
                     uint32_t timeoutMs) {
     HttpResult r;
@@ -237,6 +247,26 @@ HttpResult getBytes(const String &base, const String &path, uint8_t *&buf, size_
     }
     return r;
 }
+
+const String &baseUrl() { return g_baseUrl; }
+
+String followedZoneId() {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    String z = g_snap.zoneId;
+    xSemaphoreGive(g_lock);
+    return z;
+}
+
+void publishLibrary(std::shared_ptr<const LibraryPage> page) {
+    update([&](Snapshot &s) {
+        s.library = std::move(page);
+        s.librarySerial++;
+    });
+}
+
+}  // namespace internal
+
+namespace {
 
 void setCover(cover::Cover c) {
     update([&](Snapshot &s) {
@@ -628,6 +658,10 @@ void commandFailed(const String &what, const HttpResult &r) {
 }
 
 void runCommand(const Command &c) {
+    if (c.type == CmdType::Library) {   // its own module: browse session, levels, thumbnails
+        if (board::HAS_LIBRARY) lib::run((LibOp)c.direction, (int)c.value, String(c.arg));
+        return;
+    }
     String zoneId;
     std::vector<OutputInfo> outputs;
     xSemaphoreTake(g_lock, portMAX_DELAY);
@@ -875,6 +909,7 @@ void task(void *) {
             g_lastNowPlayingAt = now ? now : 1;
             pollNowPlaying();
         }
+        if (board::HAS_LIBRARY) lib::tick();   // next thumbnail while the library is open
         delay(10);
     }
 }
@@ -936,5 +971,8 @@ void selectZone(const String &zoneId) { enqueue(CmdType::Zone, zoneId.c_str(), 0
 void volumeSet(float value) { enqueue(CmdType::VolumeSet, nullptr, 0, value); }
 void mute(bool on) { enqueue(CmdType::Mute, nullptr, on ? 1 : 0); }
 void setOffset(int32_t ms) { enqueue(CmdType::Offset, nullptr, 0, (float)ms); }
+void library(LibOp op, int index, const String &text) {
+    if (board::HAS_LIBRARY) enqueue(CmdType::Library, text.c_str(), (int8_t)op, (float)index);
+}
 
 }  // namespace net

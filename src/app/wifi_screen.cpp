@@ -8,6 +8,7 @@
 #include "../layout.h"
 #include "../net/settings.h"
 #include "fonts.h"
+#include "keyboard.h"
 
 namespace wifiui {
 namespace {
@@ -217,22 +218,7 @@ void buildPassword() {
     g_passError = label(g_passPage, fonts::ui16, COL_ERROR);
     lv_obj_set_pos(g_passError, X(36), Y(128));
 
-    g_kb = lv_keyboard_create(g_passPage);
-    lv_obj_set_size(g_kb, SCREEN_W, Y(300));
-    lv_obj_align(g_kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_keyboard_set_textarea(g_kb, g_ta);
-    lv_obj_set_style_bg_color(g_kb, lv_color_hex(0x0A0A0B), 0);
-    lv_obj_set_style_pad_all(g_kb, S(6), 0);
-    lv_obj_set_style_pad_gap(g_kb, S(6), 0);
-    lv_obj_set_style_text_font(g_kb, fonts::ui20, LV_PART_ITEMS);
-    lv_obj_set_style_text_color(g_kb, lv_color_hex(COL_TEXT), LV_PART_ITEMS);
-    lv_obj_set_style_bg_color(g_kb, lv_color_hex(0x2A2A2E), LV_PART_ITEMS);
-    // Mode, delete, arrows and OK keys are "checked" buttons: LVGL's theme draws them light.
-    lv_obj_set_style_bg_color(g_kb, lv_color_hex(0x3A3A40), LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_text_color(g_kb, lv_color_hex(COL_TEXT), LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(g_kb, lv_color_hex(COL_ACCENT), LV_PART_ITEMS | LV_STATE_PRESSED);
-    lv_obj_set_style_radius(g_kb, S(8), LV_PART_ITEMS);
-    lv_obj_set_style_shadow_width(g_kb, 0, LV_PART_ITEMS);
+    g_kb = keyboard::create(g_passPage, g_ta, Y(300));
     // The keyboard's OK key connects, its keyboard key goes back to the list.
     lv_obj_add_event_cb(g_kb, [](lv_event_t *) { connect(); }, LV_EVENT_READY, nullptr);
     lv_obj_add_event_cb(g_kb, [](lv_event_t *) { showPage(g_listPage); }, LV_EVENT_CANCEL, nullptr);

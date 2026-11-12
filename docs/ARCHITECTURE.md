@@ -84,6 +84,27 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
    The portal takes port 80 from the update page first (it waits for `webupdate::serving()` to drop).
 3. Stored Wi-Fi failing for 60 s → the AP comes back next to the station, so a changed password can be fixed.
 
+### Music library (HAS_LIBRARY boards: the Waveshare P4)
+
+`src/net/library.cpp` (net task) talks to the companion with **`POST /api/roon/browse` and
+`/browse/load` only**, always with the panel's own `multi_session_key` (its host name), so its
+browse stack in Roon is its own: it never moves the desktop app's or the web player's. Never
+`GET /search` or `POST /play-item`: they use Roon's shared default session. Every step on an item
+carries `zone_or_output_id` = the followed zone, so actions play there.
+
+- Search: hierarchy `search` opened with `pop_all` + `input`; empty categories ("0 …") hidden.
+  Browse: hierarchy `browse` from Roon's root.
+- Levels: the panel keeps the shown levels and Roon's current level; an action menu leaves Roon one
+  level deeper, popped (`pop_levels`) before the next step. An album behind a single-item level is
+  opened at once (Back pops both). Pages of 50 (`offset`), "Show more".
+- Actions: an `action_list` item opened with the zone lists Roon's `action`s (sometimes one level
+  deeper); running one is `POST /browse {item_key, zone_or_output_id}`.
+- A 502 (stale `item_key`) reopens the hierarchy. Thumbnails (`/api/roon/image/<key>`, the list's
+  image for tracks) load one by one while the screen is open, LRU cache of 150 in PSRAM.
+- Published as `Snapshot::library` (copy-on-write); `src/app/library_screen.cpp` draws it; UI
+  commands go through `net::library(op, index, text)`. Console: `lib search <text> | browse |
+  open <n> | back | more | actions <n> | show | ui` (`lib action <n>` plays: not while someone listens).
+
 ### Following the playback
 
 - Zone: the pinned one (`zone <id>` on the console) or, by default, keep the current zone while it

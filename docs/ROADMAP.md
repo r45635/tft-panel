@@ -70,6 +70,13 @@
 - [x] Fixed: the portal could not bind port 80 when opened with Wi-Fi up (the update page held it)
 - [ ] Vincent's finger test of the on-screen flow (pick, type, connect)
 
+## Music library (Waveshare P4, 2026-11-11)
+
+- [x] Search and browse Roon's library from the panel, play / queue / radio on the followed zone
+      (own Roon browse session; `docs/ARCHITECTURE.md`)
+- [ ] Vincent's finger test, and a Play Now with his OK
+- [ ] CrowPanel: later if it works well (~207 KB of flash left; lists slower there)
+
 ## Other boards (not started)
 
 - **Guition JC1060P470C** (ESP32-P4, JD9165, 16 MB flash) — asked by a user 2026-11-11; about half a day
@@ -82,12 +89,6 @@
   French (UI + setup portal), then mostly translation. Latin Extended-A already covers FR, DE, ES,
   IT, PT, NL, PL, CS, SV… Greek / Cyrillic: +30–50 KB (two font weights), which would also make
   lyrics in those scripts readable (boxes today). CJK: too big for flash, needs the microSD.
-- **Browse and search the library** (artist, album, genre, composer, playlists, radio) — through
-  the companion's `browse` / `browse/load` / `play-item`; scrollable lists with lazily loaded
-  56 px covers, Roon's actions (play now, queue, start radio), an on-screen keyboard (LVGL) for
-  search; genre through browse (Roon search has no genre category). Use the panel's own browse
-  `multi_session_key` so it never moves what the desktop app is browsing (same spirit as never
-  touching the companion's active zone). ~40–60 KB of flash, 2–3 days.
 - Smaller ideas: a quick small cover before the big one, a French user guide / site, release CI.
 
 ## Phase 3 — polish

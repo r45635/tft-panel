@@ -49,6 +49,33 @@ struct WifiNet {
     bool open = false;   // no password
 };
 
+// The music library (boards with HAS_LIBRARY): one browse level as the panel shows it.
+struct LibItem {
+    String title, subtitle;
+    String itemKey;
+    String hint;          // "list" (opens), "action_list" (playable: actions), "action", "header"
+    String imageKey;
+    bool prompt = false;  // asks for text (Roon's own search entry): the panel uses its Search tab
+    std::shared_ptr<const Picture> thumb;   // filled in as thumbnails arrive
+};
+
+struct LibraryPage {
+    uint32_t id = 0;              // changes when the items change, not when a thumbnail arrives
+    String hierarchy;             // "search" | "browse"
+    String query;                 // the search that opened it
+    std::vector<String> path;     // level titles from the top
+    int total = 0;                // items in this level (more than `items` until all are loaded)
+    std::vector<LibItem> items;
+    String actionsFor;            // title of the item whose actions are open, empty if none
+    std::vector<LibItem> actions;
+    bool loading = false;
+    String message;               // result of an action, or an error
+    bool error = false;
+    uint32_t messageAt = 0;       // millis()
+};
+
+enum class LibOp : uint8_t { Open, Close, Search, Browse, Drill, Back, More, Actions, Action, CloseActions };
+
 struct Snapshot {
     Phase phase = Phase::WifiConnecting;
     String status;            // one human-readable line, with the reason on failure
@@ -64,6 +91,10 @@ struct Snapshot {
     std::shared_ptr<const std::vector<WifiNet>> networks;
     uint32_t networksSerial = 0;
     bool scanning = false;
+
+    // Music library browsing (HAS_LIBRARY boards), null until first opened.
+    std::shared_ptr<const LibraryPage> library;
+    uint32_t librarySerial = 0;
 
     // Followed zone and track.
     String zoneId, zoneName;
@@ -121,5 +152,9 @@ void volumeSet(float value);         // absolute, on the zone's first output wit
 void mute(bool on);                  // every output of the zone
 // Saves the current track's lyrics offset in the companion (> 0 = lyrics later).
 void setOffset(int32_t ms);
+
+// Library (HAS_LIBRARY boards): Open/Close (thumbnails only load while open), Search `text`,
+// Browse (Roon's root), Drill/Actions/Action on item `index`, Back, More (next page), CloseActions.
+void library(LibOp op, int index = -1, const String &text = String());
 
 }  // namespace net

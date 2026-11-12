@@ -96,6 +96,27 @@ play/pause, next, volume − / +, settings.
 
   ![Lyrics timing](images/lyrics-timing.png)
 
+## Find music (Waveshare screen)
+
+On the Waveshare ESP32-P4 screen the controls bar has a **folder** button: the music library.
+Not on the CrowPanel for now.
+
+![Library](images/library.png)
+
+- **Search**: type an artist, album or track on the keyboard, then **Search**. The results come
+  by kind (artists, albums, tracks…); tap one to open it.
+- **Browse**: Roon's own menus — Library (artists, albums, tracks, composers, tags), playlists,
+  radio, genres.
+- **◀** goes back one level; **Show more** loads the rest of a long list.
+- A row with a green **▶** can be played: tap it and choose **Play Now**, **Add Next**,
+  **Queue** or **Start Radio**. It plays on the zone shown at the top right (*Plays on: …*),
+  the one the panel follows; pick another zone with the zone button first.
+
+![Play options](images/library-actions.png)
+
+Browsing from the panel does not move what Roon's other apps or the companion's web player are
+showing.
+
 ## 5. Settings
 
 The gear button opens the settings: brightness, colour warmth, when the screen turns off, how

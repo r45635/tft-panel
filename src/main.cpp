@@ -99,7 +99,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off|pos <ms>|manual on|off|slide <%>] | show <screen>|none | shots on|off | screenshot | touchdiag | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off|pos <ms>|manual on|off|slide <%>] | show <screen>|none | shots on|off | screenshot | lib ... | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -205,6 +205,39 @@ void handleCommand(String line) {
     } else if (cmd == "bringup") {
         g_bringup = true;
         bringup::show();
+    } else if (cmd == "lib" && board::HAS_LIBRARY) {
+        // lib search <text> | browse | open <n> | back | more | actions <n> | action <n> | close-actions | show
+        int sp = arg.indexOf(' ');
+        String sub = sp < 0 ? arg : arg.substring(0, sp), rest = sp < 0 ? String() : arg.substring(sp + 1);
+        if (sub == "search") net::library(net::LibOp::Search, -1, rest);
+        else if (sub == "browse") net::library(net::LibOp::Browse);
+        else if (sub == "ui") ui::openLibrary();
+        else if (sub == "open") net::library(net::LibOp::Drill, rest.toInt());
+        else if (sub == "back") net::library(net::LibOp::Back);
+        else if (sub == "more") net::library(net::LibOp::More);
+        else if (sub == "actions") net::library(net::LibOp::Actions, rest.toInt());
+        else if (sub == "action") net::library(net::LibOp::Action, rest.toInt());
+        else if (sub == "close-actions") net::library(net::LibOp::CloseActions);
+        else if (sub == "show") {
+            auto page = net::snapshot().library;
+            if (!page) Serial.println("[lib] nothing open");
+            else {
+                String path;
+                for (const String &p : page->path) path += (path.length() ? " > " : "") + p;
+                Serial.printf("[lib] %s (%u of %d)%s%s\n", path.c_str(), (unsigned)page->items.size(), page->total,
+                              page->message.length() ? "  message: " : "", page->message.c_str());
+                for (size_t i = 0; i < page->items.size() && i < 60; i++) {
+                    const net::LibItem &it = page->items[i];
+                    Serial.printf("[lib] %2u %-12s %s%s%s%s\n", (unsigned)i, it.hint.c_str(), it.title.c_str(),
+                                  it.subtitle.length() ? "  -  " : "", it.subtitle.c_str(), it.thumb ? "  [img]" : "");
+                }
+                if (page->actionsFor.length()) {
+                    Serial.printf("[lib] actions for \"%s\":\n", page->actionsFor.c_str());
+                    for (size_t i = 0; i < page->actions.size(); i++)
+                        Serial.printf("[lib]   %u %s\n", (unsigned)i, page->actions[i].title.c_str());
+                }
+            }
+        } else Serial.println("[cmd] lib search <text> | browse | open <n> | back | more | actions <n> | action <n> | show");
     } else if (cmd == "restart") board::restart();
     else help();
 }

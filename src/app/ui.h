@@ -5,6 +5,8 @@
 
 namespace ui {
 
+void openLibrary();   // console: the library screen (HAS_LIBRARY boards)
+
 void show();   // builds the screens and loads the main one
 void tick();   // call from loop() before lv_timer_handler()
 
