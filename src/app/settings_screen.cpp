@@ -270,7 +270,16 @@ void buildRows() {
     });
 
     r = row("Wi-Fi", &g_wifiTitle);
-    button(r, "Forget...", [](lv_event_t *) { confirmForgetWifi(); });
+    lv_obj_t *wifiBox = lv_obj_create(r);
+    lv_obj_remove_style_all(wifiBox);
+    lv_obj_set_size(wifiBox, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(wifiBox, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(wifiBox, X(10), 0);
+    button(wifiBox, "Change...", [](lv_event_t *) {
+        close();
+        if (g_hooks.openWifi) g_hooks.openWifi();
+    });
+    button(wifiBox, "Forget...", [](lv_event_t *) { confirmForgetWifi(); });
 
     r = row("Firmware", &g_fwTitle, &g_fwStatus);
     g_fwButton = button(r, "Check now", [](lv_event_t *) {

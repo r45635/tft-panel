@@ -37,14 +37,27 @@ After this, updates come over Wi-Fi (see [Updates](#updates)).
 
 ## 2. Connect it to your Wi-Fi
 
-On its first start the panel shows two QR codes:
+On its first start the panel shows two QR codes and a button. Two ways to go on:
 
 ![Wi-Fi setup](images/wifi-setup.png)
 
-1. Scan the **first** code with your phone: it joins the panel's own network.
-2. Scan the **second** one: the setup page opens. Pick your Wi-Fi, type its password, **Save**.
+**On the panel itself** — tap **Set up on this screen**. The panel lists the Wi-Fi networks it
+hears, strongest first; tap yours, type its password on the keyboard (**Show** reveals it) and tap
+**Connect**. An open network needs no password.
 
-The panel restarts, joins your network and finds the companion by itself. If the companion is
+![Networks the panel hears](images/wifi-list.png)
+
+![Password keyboard](images/wifi-keyboard.png)
+
+**With a phone** — useful for a hidden network, or to enter the companion's address:
+
+1. Scan the **first** code with your phone: it joins the panel's own network.
+2. Scan the **second** one: the setup page opens and lists the networks the panel hears. Tap
+   yours, type its password, **Save**. A network that is not listed can be typed by hand.
+
+The panel restarts, joins your network and finds the companion by itself. Only 2.4 GHz networks
+work (most routers offer both). To move the panel to another network later: **Settings > Wi-Fi >
+Change...**. If the companion is
 on another network segment, its address (and its access token, if you set one) can be typed on
 the same setup page.
 

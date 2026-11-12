@@ -193,6 +193,7 @@ void begin() {
 }
 
 uint32_t activeCode() { return g_code; }
+bool serving() { return g_server != nullptr; }
 void enableScreenshots(bool on) { g_shots = on; }
 void cancelCode() { g_code = 0; }
 

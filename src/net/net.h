@@ -42,6 +42,13 @@ struct OutputInfo {
     bool muted = false;
 };
 
+// A Wi-Fi network heard by the panel (2.4 GHz), strongest first, one entry per name.
+struct WifiNet {
+    String ssid;
+    int8_t rssi = 0;
+    bool open = false;   // no password
+};
+
 struct Snapshot {
     Phase phase = Phase::WifiConnecting;
     String status;            // one human-readable line, with the reason on failure
@@ -52,6 +59,11 @@ struct Snapshot {
 
     String staIp;
     String companion;         // base URL in use, empty if none yet
+
+    // Last Wi-Fi scan (setup portal, on-screen Wi-Fi setup). `networksSerial` changes with it.
+    std::shared_ptr<const std::vector<WifiNet>> networks;
+    uint32_t networksSerial = 0;
+    bool scanning = false;
 
     // Followed zone and track.
     String zoneId, zoneName;
@@ -96,6 +108,7 @@ uint32_t version();          // bumps on every snapshot change (cheap to poll)
 Snapshot snapshot();         // copy under the lock
 
 void openPortal();           // start the setup portal even with Wi-Fi configured
+void requestScan();          // scan for Wi-Fi networks now (result in Snapshot::networks)
 void reconnect();            // re-read settings (Wi-Fi, companion, zone) and start over
 void pause(bool on);         // hold all network calls (used while dumping a screenshot)
 

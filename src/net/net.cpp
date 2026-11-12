@@ -4,6 +4,8 @@
 #include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
+
+#include <algorithm>
 #include <esp_mac.h>
 #include <esp_sntp.h>
 
@@ -56,6 +58,8 @@ struct Command {
     float value;
 };
 QueueHandle_t g_commands = nullptr;
+volatile bool g_scanRequested = false;
+uint32_t g_lastScanAt = 0;
 PositionClock g_clock;
 uint32_t g_lyricsFetchedAt = 0;
 int g_lyricsRetries = 0;
@@ -719,6 +723,45 @@ void resetSession() {
     clearTrack();
 }
 
+// Wi-Fi scan, asynchronous: on request (on-screen setup), when the portal opens, and every 30 s
+// while the portal runs with no phone on it (a scan moves the radio off the AP's channel).
+void tickScan() {
+    int n = WiFi.scanComplete();
+    if (n >= 0) {
+        auto nets = std::make_shared<std::vector<WifiNet>>();
+        for (int i = 0; i < n; i++) {
+            String ssid = WiFi.SSID(i);
+            if (!ssid.length()) continue;   // hidden networks
+            int8_t rssi = (int8_t)WiFi.RSSI(i);
+            bool open = WiFi.encryptionType(i) == WIFI_AUTH_OPEN;
+            auto same = std::find_if(nets->begin(), nets->end(), [&](const WifiNet &w) { return w.ssid == ssid; });
+            if (same == nets->end()) nets->push_back({ssid, rssi, open});
+            else if (rssi > same->rssi) same->rssi = rssi;
+        }
+        WiFi.scanDelete();
+        std::sort(nets->begin(), nets->end(), [](const WifiNet &a, const WifiNet &b) { return a.rssi > b.rssi; });
+        Serial.printf("[net] Wi-Fi scan: %u networks\n", (unsigned)nets->size());
+        update([&](Snapshot &s) {
+            s.networks = nets;
+            s.networksSerial++;
+            s.scanning = false;
+        });
+        return;
+    }
+    if (n == WIFI_SCAN_RUNNING) return;
+    uint32_t now = millis();
+    bool periodic = portal::active() && now - g_lastScanAt > 30000 && WiFi.softAPgetStationNum() == 0;
+    if (!g_scanRequested && !periodic) return;
+    g_scanRequested = false;
+    g_lastScanAt = now;
+    if (WiFi.scanNetworks(true) == WIFI_SCAN_FAILED) {
+        Serial.println("[net] Wi-Fi scan could not start");
+        update([](Snapshot &s) { s.scanning = false; });
+        return;
+    }
+    update([](Snapshot &s) { s.scanning = true; });
+}
+
 void task(void *) {
     uint32_t lastDiscovery = 0;
     bool wifiStarted = false;
@@ -739,6 +782,7 @@ void task(void *) {
             continue;
         }
         portal::loop();
+        tickScan();
         if (portal::savedAndRestartPending()) {
             delay(1500);   // let the confirmation page reach the phone
             board::restart();
@@ -871,6 +915,7 @@ Snapshot snapshot() {
 }
 
 void openPortal() { g_portalRequested = true; }
+void requestScan() { g_scanRequested = true; }
 void reconnect() { g_reconnectRequested = true; }
 void pause(bool on) { g_paused = on; }
 

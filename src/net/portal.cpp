@@ -4,6 +4,8 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
+#include "net.h"
+#include "web_update.h"
 #include "settings.h"
 
 namespace portal {
@@ -13,8 +15,6 @@ WebServer g_http(80);
 DNSServer g_dns;
 bool g_active = false;
 bool g_restartPending = false;
-String g_options;            // <option> list of scanned networks
-uint32_t g_lastScanMs = 0;
 
 String esc(const String &s) {
     String o;
@@ -33,17 +33,23 @@ String esc(const String &s) {
     return o;
 }
 
-void collectScan() {
-    int n = WiFi.scanComplete();
-    if (n < 0) return;   // still running (-1) or never started (-2)
-    String opts;
-    for (int i = 0; i < n; i++) {
-        String ssid = WiFi.SSID(i);
-        if (!ssid.length() || opts.indexOf("\"" + esc(ssid) + "\"") >= 0) continue;
-        opts += "<option value=\"" + esc(ssid) + "\">";
+// Signal strength as bars, for the network list.
+const char *bars(int8_t rssi) {
+    return rssi > -55 ? "\u2582\u2584\u2586\u2588" : rssi > -67 ? "\u2582\u2584\u2586" : rssi > -78 ? "\u2582\u2584" : "\u2582";
+}
+
+// The networks the panel hears, as buttons that fill the name field (net task scans).
+String networkList() {
+    std::shared_ptr<const std::vector<net::WifiNet>> nets = net::snapshot().networks;
+    if (!nets || nets->empty()) return "<p><small>Looking for networks&hellip; <a href=/>refresh</a></small></p>";
+    String h = "<p>Tap your network <small>(2.4 GHz only)</small></p><div>";
+    // The ten strongest: a far neighbour's network can still be typed by hand.
+    for (size_t i = 0; i < nets->size() && i < 10; i++) {
+        const net::WifiNet &w = (*nets)[i];
+        h += "<button type=button class=net data-s=\"" + esc(w.ssid) + "\" onclick=pick(this)>" + esc(w.ssid) +
+             "<span>" + String(w.open ? "" : "\U0001F512 ") + bars(w.rssi) + "</span></button>";
     }
-    g_options = opts;
-    WiFi.scanDelete();
+    return h + "</div><p><small>Not in the list? Type its name below, or <a href=/>refresh</a>.</small></p>";
 }
 
 const char PAGE_HEAD[] PROGMEM = R"(<!doctype html><html><head><meta charset="utf-8">
@@ -52,7 +58,7 @@ const char PAGE_HEAD[] PROGMEM = R"(<!doctype html><html><head><meta charset="ut
 h1{font-size:1.4rem}label{display:block;margin-top:1rem}input{width:100%;box-sizing:border-box;padding:.6rem;
 font-size:1rem;border-radius:.4rem;border:1px solid #2f3037;background:#202127;color:#f6f4ee}
 button{margin-top:1.4rem;width:100%;padding:.8rem;font-size:1.05rem;border:0;border-radius:.4rem;background:#6db56d;color:#15161a}
-small{color:#a9aaa6}.err{color:#15161a;background:#ffb0a0;padding:.8rem;border-radius:.4rem}</style></head><body>)";
+small{color:#a9aaa6}a{color:#6db56d}.net{display:flex;justify-content:space-between;box-sizing:border-box;margin:.4rem 0 0;padding:.75rem .9rem;text-align:left;background:#202127;color:#f6f4ee;border:1px solid #2f3037}.net span{color:#a9aaa6;margin-left:1rem;white-space:nowrap;min-width:5.5em;text-align:right}.err{color:#15161a;background:#ffb0a0;padding:.8rem;border-radius:.4rem}</style></head><body>)";
 
 void sendForm(const String &error, const String &typedSsid = String()) {
     settings::Settings s = settings::get();
@@ -60,17 +66,18 @@ void sendForm(const String &error, const String &typedSsid = String()) {
     String h = FPSTR(PAGE_HEAD);
     h += "<h1>TFT Panel setup</h1>";
     if (error.length()) h += "<p class=err>" + esc(error) + "</p>";
+    h += networkList();
     h += "<form method=post action=/save>"
-         "<label>Wi-Fi network<input name=ssid list=nets required maxlength=32 value=\"" + esc(s.wifiSsid) + "\"></label>"
-         "<datalist id=nets>" + g_options + "</datalist>"
-         "<label>Wi-Fi password<input name=pass type=password maxlength=63 placeholder=\"" +
+         "<label>Wi-Fi network<input id=ssid name=ssid required maxlength=32 value=\"" + esc(s.wifiSsid) + "\"></label>"
+         "<label>Wi-Fi password<input id=pass name=pass type=password maxlength=63 placeholder=\"" +
          String(s.wifiPass.length() ? "unchanged if left empty" : "") + "\"></label>"
          "<label>Companion address <small>(optional, found automatically on the LAN)</small>"
          "<input name=companion placeholder=\"http://192.168.1.20:3888\" value=\"" + esc(s.companionUrl) + "\"></label>"
          "<label>Companion access token <small>(only if the companion has ACCESS_TOKEN)</small>"
          "<input name=token type=password placeholder=\"" +
          String(s.accessToken.length() ? "set — unchanged if left empty" : "") + "\"></label>"
-         "<button>Save and restart</button></form></body></html>";
+         "<button>Save and restart</button></form>"
+         "<script>function pick(b){ssid.value=b.dataset.s;pass.focus()}</script></body></html>";
     g_http.send(200, "text/html; charset=utf-8", h);
 }
 
@@ -133,6 +140,10 @@ void start(const String &ssid, const String &pass) {
         return;
     }
     delay(100);
+    // Port 80 belongs to the update page while Wi-Fi is up: active() makes its task let go first,
+    // or the portal's server cannot bind and the setup page never answers.
+    g_active = true;
+    for (uint32_t t0 = millis(); webupdate::serving() && millis() - t0 < 2000;) delay(10);
     IPAddress ip = WiFi.softAPIP();
     g_dns.setErrorReplyCode(DNSReplyCode::NoError);
     g_dns.start(53, "*", ip);   // captive: every name resolves to the panel
@@ -156,8 +167,7 @@ void start(const String &ssid, const String &pass) {
         WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) { Serial.println("[portal] a device left the AP"); },
                      ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
     }
-    WiFi.scanNetworks(true);
-    g_lastScanMs = millis();
+    net::requestScan();   // the list on the page (net task)
     g_active = true;
     Serial.printf("[portal] AP \"%s\" up at %s\n", ssid.c_str(), ip.toString().c_str());
 }
@@ -178,11 +188,6 @@ void loop() {
     if (!g_active) return;
     g_dns.processNextRequest();
     g_http.handleClient();
-    collectScan();
-    if (millis() - g_lastScanMs > 30000 && WiFi.scanComplete() == -2 && WiFi.softAPgetStationNum() == 0) {
-        WiFi.scanNetworks(true);
-        g_lastScanMs = millis();
-    }
 }
 
 bool savedAndRestartPending() { return g_restartPending; }

@@ -15,6 +15,7 @@
 #include "../layout.h"
 #include "fonts.h"
 #include "settings_screen.h"
+#include "wifi_screen.h"
 #include "showcase.h"
 #include "../version.h"
 
@@ -218,6 +219,8 @@ String qrEscape(const String &v) {
     return o;
 }
 
+lv_obj_t *textButton(lv_obj_t *parent, const char *text, uint32_t bg, void (*cb)(lv_event_t *));
+
 void buildSetup() {
     g_setup = lv_obj_create(g_scr);
     lv_obj_remove_style_all(g_setup);
@@ -252,6 +255,10 @@ void buildSetup() {
     lv_obj_set_pos(g_setupText, X(580), Y(100));
     lv_obj_set_width(g_setupText, X(200));
     lv_label_set_long_mode(g_setupText, LV_LABEL_LONG_MODE_WRAP);
+
+    // Or without a phone: the networks on screen and a touch keyboard.
+    lv_obj_t *here = textButton(g_setup, "Set up on this screen", COL_PRIMARY, [](lv_event_t *) { wifiui::open(); });
+    lv_obj_align(here, LV_ALIGN_BOTTOM_MID, 0, -Y(28));
     setHidden(g_setup, true);
 }
 
@@ -566,7 +573,7 @@ void chooseView(View v) {
 
 void onGesture(lv_event_t *) {
     lv_indev_t *indev = lv_indev_active();
-    if (!indev || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen()) return;
+    if (!indev || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen() || wifiui::isOpen()) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     if (dir != LV_DIR_LEFT && dir != LV_DIR_RIGHT) return;
     // No click at the end of a swipe, on the screen or on a button the finger started on.
@@ -766,7 +773,7 @@ void buildOffsetPopup() {
 
 void onLongPress(lv_event_t *) {
     lv_indev_t *indev = lv_indev_active();
-    if (g_view != View::Lyrics || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen()) return;
+    if (g_view != View::Lyrics || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen() || wifiui::isOpen()) return;
     if (g_s.lyricsStatus != net::LyricsStatus::Found || !g_s.lyrics || !g_s.lyrics->synced) return;
     if (indev) lv_indev_wait_release(indev);   // no tap (controls toggle) at the release
     showControls(false);
@@ -1032,7 +1039,9 @@ void build() {
         },
         []() { onZone(nullptr); },
         []() { setHidden(g_otaConfirm, false); },
+        []() { wifiui::open(); },
     });
+    wifiui::build(g_scr);
     buildVolumePopup();
     buildOffsetPopup();
     buildClock();
@@ -1342,7 +1351,7 @@ void tickClock() {
 void tickSleep(uint32_t now) {
     hookTouch();
     bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch ||
-                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress) || settingsui::isOpen() ||
+                !isHidden(g_otaConfirm) || !isHidden(g_otaProgress) || settingsui::isOpen() || wifiui::isOpen() ||
                 !isHidden(g_volPopup) || !isHidden(g_offPopup) || !isHidden(g_codePopup);
     if (busy) g_activeAt = now;
     uint32_t idle = now - g_activeAt;
@@ -1427,6 +1436,7 @@ void demoSlide(int percent) {
 bool showcase(const String &what) {
     if (what == "none") {
         settingsui::close();
+        wifiui::close();
         for (lv_obj_t *o : {g_volPopup, g_offPopup, g_codePopup, g_otaConfirm, g_otaProgress, g_otaBadge, g_clock})
             setHidden(o, true);
         closePicker();
@@ -1476,6 +1486,8 @@ bool showcase(const String &what) {
     } else if (what == "setup") {
         showcase::fakePortal(g_s);
         applySnapshot();
+    } else if (what == "wifi" || what == "wifi-password") {
+        wifiui::showcase(what == "wifi-password");
     } else if (what == "code") {
         setText(g_codeValue, "482913");
         setHidden(g_codePopup, false);
@@ -1504,6 +1516,7 @@ void tick() {
         g_s = net::snapshot();
         applySnapshot();
         syncVolumePopup();
+        wifiui::refresh(g_s);
         g_seenOtaVersion = UINT32_MAX;   // badge visibility depends on the portal state
     }
     static uint32_t lastRefresh = 0;

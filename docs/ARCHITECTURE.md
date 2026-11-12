@@ -74,8 +74,14 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
 
 1. No Wi-Fi stored → soft AP `TFT-Panel-XXXX` (WPA2, password generated once per device and printed
    on screen) + captive DNS. The screen shows a `WIFI:` QR code and a QR code to `http://192.168.4.1/`.
-2. The page (GET = read only) lists scanned networks; `POST /save` validates and stores Wi-Fi,
-   optional companion address and token, then the panel restarts.
+2. The page (GET = read only) lists the ten strongest scanned networks as buttons that fill the
+   name field (a hidden one is typed); `POST /save` validates and stores Wi-Fi, optional companion
+   address and token, then the panel restarts.
+   Or on the panel: **Set up on this screen** (also Settings > Wi-Fi > Change) lists the networks and
+   takes the password on LVGL's keyboard (`src/app/wifi_screen.cpp`); saving restarts the same way.
+   Scans run in the net task (`tickScan`, async): on request, when the portal opens, and every 30 s
+   while no phone is on the AP; results go out in `Snapshot::networks`.
+   The portal takes port 80 from the update page first (it waits for `webupdate::serving()` to drop).
 3. Stored Wi-Fi failing for 60 s → the AP comes back next to the station, so a changed password can be fixed.
 
 ### Following the playback

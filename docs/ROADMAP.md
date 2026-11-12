@@ -63,6 +63,13 @@
 - [x] C6 coprocessor firmware installed at boot from the P4 image (the factory one carried no Internet)
 - [ ] Use the P4's spare power later: hardware JPEG decoder for covers, PPA for the rotation, bigger fonts
 
+## Wi-Fi setup (2026-11-11)
+
+- [x] Setup page lists the networks the panel hears (tap to fill the name, signal, lock)
+- [x] On-screen Wi-Fi setup: network list + password on a touch keyboard, from the setup screen and Settings
+- [x] Fixed: the portal could not bind port 80 when opened with Wi-Fi up (the update page held it)
+- [ ] Vincent's finger test of the on-screen flow (pick, type, connect)
+
 ## Other boards (not started)
 
 - **Guition JC1060P470C** (ESP32-P4, JD9165, 16 MB flash) — asked by a user 2026-11-11; about half a day

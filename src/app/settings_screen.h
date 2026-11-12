@@ -14,6 +14,7 @@ struct Hooks {
     void (*brightnessPreview)(int percent);   // live backlight while the slider moves
     void (*openZones)();                      // the zone picker
     void (*confirmUpdate)();                  // the firmware update confirmation
+    void (*openWifi)();                       // the on-screen Wi-Fi setup
 };
 
 void build(lv_obj_t *scr, const Hooks &hooks);

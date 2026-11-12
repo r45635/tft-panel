@@ -36,6 +36,8 @@ SCREENS = [  # file name, console commands before the capture
     ("update-confirm", ["show none", "show confirm"]),
     ("update-progress", ["show none", "show progress"]),
     ("wifi-setup", ["show none", "show setup"]),
+    ("wifi-list", ["show none", "show wifi"]),
+    ("wifi-keyboard", ["show none", "show wifi-password"]),
     ("upload-code", ["show none", "show code"]),
 ]
 

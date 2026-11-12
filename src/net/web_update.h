@@ -15,6 +15,8 @@ namespace webupdate {
 // independent of the companion polling, so pages and screenshots answer at once.
 void begin();
 
+bool serving();   // the update server holds port 80 (the setup portal waits for it to let go)
+
 // The code to show on screen, 0 when none is active.
 uint32_t activeCode();
 void cancelCode();   // the user dismissed it on the panel
