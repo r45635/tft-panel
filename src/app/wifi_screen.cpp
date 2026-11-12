@@ -119,6 +119,7 @@ void onPick(lv_event_t *e) {
     lv_label_set_text(g_showLabel, "Show");
     lv_label_set_text(g_passError, "");
     showPage(g_passPage);
+    keyboard::focus(g_ta, true);
 }
 
 void fillList() {
@@ -204,7 +205,6 @@ void buildPassword() {
     lv_obj_set_style_radius(g_ta, S(10), 0);
     lv_obj_set_width(g_ta, X(500));
     lv_obj_set_pos(g_ta, X(32), Y(58));
-    lv_obj_add_state(g_ta, LV_STATE_FOCUSED);   // keeps the cursor visible
 
     lv_obj_t *show = textButton(g_passPage, "Show", 0x232326, [](lv_event_t *) {
         bool hidden = lv_textarea_get_password_mode(g_ta);
@@ -296,6 +296,7 @@ void showcase(bool password) {
         lv_label_set_text(g_showLabel, "Hide");
         lv_label_set_text(g_passError, "");
         showPage(g_passPage);
+        keyboard::focus(g_ta, true);
     }
 }
 

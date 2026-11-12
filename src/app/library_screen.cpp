@@ -90,8 +90,7 @@ void send(net::LibOp op, int index = -1, const String &text = String()) {
 
 void showKeyboard(bool on) {
     lv_obj_set_hidden(g_kb, !on);
-    if (on) lv_obj_add_state(g_ta, LV_STATE_FOCUSED);
-    else lv_obj_remove_state(g_ta, LV_STATE_FOCUSED);
+    keyboard::focus(g_ta, on);
 }
 
 // The header's second row: the search field at the top of the Search tab, else Back + the path.
