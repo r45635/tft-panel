@@ -51,8 +51,9 @@ Rules learned on the watch client:
 **Boards.** `board.h` is the only interface the rest of the firmware sees; each board compiles
 its own file, chosen by the environment's `-DBOARD_…` flag: `board_crowpanel7.cpp` (ESP32-S3, RGB
 panel fed from bounce buffers, frozen update screen) and `board_waveshare_p4_7b.cpp` (ESP32-P4,
-MIPI-DSI panel fed by the 2D-DMA from two internal-RAM strips, image turned 180° on the way). Shared
-by both: `restart.cpp` (clean resets), `white_balance.cpp` (warmth table), `gt911.cpp`. Per-board
+MIPI-DSI panel; LVGL renders two internal-RAM strips and the PPA turns each one 180° straight into
+the framebuffer). Shared by both: `restart.cpp` (clean resets), `white_balance.cpp` (warmth, two
+pixels per 32-bit word), `gt911.cpp`. Per-board
 constants (`pins_*.h`): resolution, `BOARD_NAME`, the release asset name `BOARD_ASSET`,
 `HAS_STATIC_SCREEN`, `DEFAULT_WARMTH`, `OTA_DOWNLOAD_FIRST`. Wi-Fi on the P4 goes through the
 on-board ESP32-C6 (esp_hosted, transparent to `WiFi.h`); the firmware carries the C6's matching

@@ -61,7 +61,9 @@
 - [ ] Vincent's eye check of the P4 screen (colours, warmth, touch comfort)
 - [ ] Browser install of the P4 from the website (needs a person at the browser's port picker)
 - [x] C6 coprocessor firmware installed at boot from the P4 image (the factory one carried no Internet)
-- [ ] Use the P4's spare power later: hardware JPEG decoder for covers, PPA for the rotation, bigger fonts
+- [x] PPA turns the image 180° (was the CPU), no permanent screenshot copy, faster warmth: lyric
+      slides ~15 → ~20 fps (`docs/HARDWARE.md`, render speed)
+- [ ] Use the P4's spare power later: hardware JPEG decoder for covers and library thumbnails, bigger fonts
 
 ## Wi-Fi setup (2026-11-11)
 

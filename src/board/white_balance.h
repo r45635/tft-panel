@@ -1,5 +1,5 @@
 // Colour warmth shared by the board layers: red stays, green and blue are scaled on every
-// pixel on its way to the panel, through one table on the 11 G+B bits of RGB565 (4 KB).
+// pixel on its way to the panel.
 #pragma once
 
 #include <stddef.h>

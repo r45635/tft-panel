@@ -173,9 +173,17 @@ Pin map in code: [`src/board/pins_waveshare_p4_7b.h`](../src/board/pins_waveshar
   no answer from any source port. Installing the C6 firmware matching the host (esp_hosted 2.12.13,
   1.2 MB, ~40 s over SDIO from the P4) fixed all of it.
 - The image was upside down (colour bars reversed). The EK79007's MADCTL flip (0x36) has no
-  effect in video mode: the board layer turns each flushed area by 180° (a rectangle turned 180°
-  is its pixels in reverse order) and draws it at the mirrored position. Touch needs nothing: the
-  GT911 already reports in the viewer's orientation (checked at the four corners).
+  effect in video mode: the board layer turns each flushed area by 180° and writes it at the
+  mirrored position. Touch needs nothing: the GT911 already reports in the viewer's orientation
+  (checked at the four corners).
+- **Render speed (2026-11-12)**: a lyric slide (`[ui] scroll` in the log, ~420 lines × 1024 per
+  frame) ran at 6 frames in 400 ms (~15 fps). Per slide the flush cost 142 ms: warmth table 54,
+  upright copy for screenshots 57, CPU reverse 23, 2D-DMA copy 8. Now the PPA turns and copies each
+  strip (asynchronous), screenshots turn the framebuffer back only when asked, and the warmth works
+  on two pixels at once: 8-9 frames in 400 ms (~20 fps), flush ~1.3 ms per 48-line strip. Rendering
+  is the rest (~37 ms per frame: blending, glyphs). Tried and dropped: LVGL's PPA draw unit (needs
+  `esp_cache_get_line_size_by_addr`, newer than IDF 5.5.5), two software draw threads (slower,
+  ~68 ms per frame), 200-line draw buffers in PSRAM (slower than 48 lines in internal RAM).
 - TFT Panel itself: Wi-Fi setup from the phone, companion, zones, synced lyrics, covers
   (480 px JPEG decoded in ~1 s), screenshots, `restart` (full system reset) all work.
 

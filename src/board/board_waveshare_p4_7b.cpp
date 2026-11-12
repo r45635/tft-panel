@@ -12,6 +12,7 @@
 #include <esp_lcd_panel_ops.h>
 #include <esp_ldo_regulator.h>
 #include <esp_timer.h>
+#include <driver/ppa.h>
 
 #include <cstring>
 
@@ -32,13 +33,14 @@ volatile bool g_touchDown = false;
 volatile uint16_t g_touchX = 0, g_touchY = 0;
 volatile uint32_t g_flushCount = 0, g_flushUs = 0;
 
-// LVGL renders into two internal-RAM strips; the DSI driver copies each one into its PSRAM
-// framebuffer with the 2D-DMA while LVGL renders the next one.
+// LVGL renders into two internal-RAM strips; the PPA turns each one 180° straight into the
+// panel's PSRAM framebuffer while LVGL renders the next one (the panel is mounted upside down).
 constexpr int DRAW_BUF_LINES = 48;
+constexpr size_t FB_BYTES = (size_t)LCD_H_RES * LCD_V_RES * 2;
 
-// Upright copy of the screen (the panel's own framebuffer is upside down): screenshots and
-// anything else that reads the screen use this one.
-uint16_t *g_shadow = nullptr;
+uint16_t *g_fb = nullptr;              // the panel's framebuffer, upside down
+ppa_client_handle_t g_ppa = nullptr;   // scale-rotate-mirror client
+uint16_t *g_upright = nullptr;         // screenshots: an upright copy, made on request
 
 void scanI2c() {
     g_info.i2cDevices = "";
@@ -63,7 +65,7 @@ void dcs(esp_lcd_panel_io_handle_t io, int cmd, const uint8_t *data, size_t len)
     if (err != ESP_OK) Serial.printf("[board] EK79007 command 0x%02X: %s\n", cmd, esp_err_to_name(err));
 }
 
-bool IRAM_ATTR onCopied(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t *, void *) {
+bool IRAM_ATTR onRotated(ppa_client_handle_t, ppa_event_data_t *, void *) {
     lv_display_flush_ready(g_disp);
     return false;
 }
@@ -122,7 +124,6 @@ bool createPanel() {
     dpi.video_timing.vsync_pulse_width = LCD_VSYNC_PULSE_WIDTH;
     dpi.video_timing.vsync_back_porch = LCD_VSYNC_BACK_PORCH;
     dpi.video_timing.vsync_front_porch = LCD_VSYNC_FRONT_PORCH;
-    dpi.flags.use_dma2d = true;
     err = esp_lcd_new_panel_dpi(bus, &dpi, &g_panel);
     if (err != ESP_OK) return fail("DPI panel", err);
     err = esp_lcd_panel_init(g_panel);
@@ -130,31 +131,22 @@ bool createPanel() {
 
     // Black screen before the backlight comes on.
     void *fb = nullptr;
-    if (esp_lcd_dpi_panel_get_frame_buffer(g_panel, 1, &fb) == ESP_OK && fb) {
-        memset(fb, 0, (size_t)LCD_H_RES * LCD_V_RES * 2);
-        esp_cache_msync(fb, (size_t)LCD_H_RES * LCD_V_RES * 2, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-    }
-    g_shadow = (uint16_t *)heap_caps_aligned_calloc(64, 1, (size_t)LCD_H_RES * LCD_V_RES * 2,
-                                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!g_shadow) {
-        g_info.error = "screen copy: out of PSRAM";
-        return false;
-    }
-    esp_lcd_dpi_panel_event_callbacks_t cbs = {};
-    cbs.on_color_trans_done = onCopied;
-    err = esp_lcd_dpi_panel_register_event_callbacks(g_panel, &cbs, nullptr);
-    if (err != ESP_OK) return fail("DPI callbacks", err);
-    return true;
-}
+    err = esp_lcd_dpi_panel_get_frame_buffer(g_panel, 1, &fb);
+    if (err != ESP_OK || !fb) return fail("DPI framebuffer", err != ESP_OK ? err : ESP_FAIL);
+    g_fb = (uint16_t *)fb;
+    memset(fb, 0, FB_BYTES);
+    esp_cache_msync(fb, FB_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
 
-// Reverses a buffer in place: a rectangle turned 180 degrees is its pixels in reverse order.
-IRAM_ATTR __attribute__((optimize("O2"))) void reverse(uint16_t *p, size_t n) {
-    uint16_t *a = p, *b = p + n - 1;
-    while (a < b) {
-        uint16_t t = *a;
-        *a++ = *b;
-        *b-- = t;
-    }
+    ppa_client_config_t pc = {};
+    pc.oper_type = PPA_OPERATION_SRM;
+    pc.max_pending_trans_num = 1;   // LVGL waits for each flush before the next one
+    err = ppa_register_client(&pc, &g_ppa);
+    if (err != ESP_OK) return fail("PPA", err);
+    ppa_event_callbacks_t cbs = {};
+    cbs.on_trans_done = onRotated;
+    err = ppa_client_register_event_callbacks(g_ppa, &cbs);
+    if (err != ESP_OK) return fail("PPA callbacks", err);
+    return true;
 }
 
 void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
@@ -162,11 +154,23 @@ void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
     const int w = lv_area_get_width(area), h = lv_area_get_height(area);
     uint16_t *p = (uint16_t *)px;
     wb::apply(p, (size_t)w * h);
-    for (int y = 0; y < h; y++) memcpy(g_shadow + (size_t)(area->y1 + y) * LCD_H_RES + area->x1, p + y * w, w * 2);
-    reverse(p, (size_t)w * h);
-    // The panel is upside down: the area goes to the mirrored position (end coordinates exclusive).
-    esp_err_t err = esp_lcd_panel_draw_bitmap(g_panel, LCD_H_RES - 1 - area->x2, LCD_V_RES - 1 - area->y2,
-                                              LCD_H_RES - area->x1, LCD_V_RES - area->y1, p);
+    // The panel is upside down: the area, turned 180°, goes to the mirrored position.
+    ppa_srm_oper_config_t op = {};
+    op.in.buffer = p;
+    op.in.pic_w = op.in.block_w = w;
+    op.in.pic_h = op.in.block_h = h;
+    op.in.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+    op.out.buffer = g_fb;
+    op.out.buffer_size = FB_BYTES;
+    op.out.pic_w = LCD_H_RES;
+    op.out.pic_h = LCD_V_RES;
+    op.out.block_offset_x = LCD_H_RES - 1 - area->x2;
+    op.out.block_offset_y = LCD_V_RES - 1 - area->y2;
+    op.out.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+    op.rotation_angle = PPA_SRM_ROTATION_ANGLE_180;
+    op.scale_x = op.scale_y = 1.0f;
+    op.mode = PPA_TRANS_MODE_NON_BLOCKING;
+    esp_err_t err = ppa_do_scale_rotate_mirror(g_ppa, &op);
     g_flushUs += (uint32_t)(esp_timer_get_time() - t0);
     g_flushCount++;
     if (err != ESP_OK) lv_display_flush_ready(disp);   // nothing queued: no completion callback
@@ -254,7 +258,17 @@ const Info &info() { return g_info; }
 
 lv_display_t *display() { return g_disp; }
 
-const uint16_t *frameBuffer() { return g_shadow; }
+// The framebuffer turned back upright: reversing the whole buffer undoes the 180°. Made on
+// request (screenshots only), so no frame pays for a copy.
+const uint16_t *frameBuffer() {
+    if (!g_fb) return nullptr;
+    if (!g_upright) g_upright = (uint16_t *)heap_caps_aligned_alloc(64, FB_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!g_upright) return nullptr;
+    esp_cache_msync(g_fb, FB_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    const size_t n = FB_BYTES / 2;
+    for (size_t i = 0; i < n; i++) g_upright[i] = g_fb[n - 1 - i];
+    return g_upright;
+}
 
 void flushStats(uint32_t &count, uint32_t &us) {
     count = g_flushCount;
