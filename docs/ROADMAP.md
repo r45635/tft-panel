@@ -1,15 +1,15 @@
 # Roadmap
 
-## Phase 0 — hardware bring-up (in progress)
+## Phase 0 — hardware bring-up (done)
 
 - [x] Toolchain: PlatformIO + pioarduino 55.03.312-1, LVGL 9.6.0, builds and flashes (460800 baud)
 - [x] PSRAM 8 MB / flash 4 MB detected, RGB panel + bounce buffers created, LVGL running
 - [x] PCA9557 found at 0x18, touch reset sequence applied
 - [x] GT911 touch: answered once the touch flex was seated (id 911, fw 0x1060, 0x5D)
-- [ ] Visual check: colour bars in R/G/B order, gradient smooth, no drift or flicker
-- [ ] Touch mapping (dot follows the finger, axes not mirrored), backlight slider (PWM 5 kHz)
+- [x] Visual check: colour bars in R/G/B order, gradient smooth, no drift or flicker
+- [x] Touch mapping (dot follows the finger, axes not mirrored), backlight slider (PWM 5 kHz)
 
-## Phase 1 — connected client (in progress)
+## Phase 1 — connected client (done)
 
 - [x] Settings in NVS only (`src/net/settings.*`): Wi-Fi, companion address, access token, pinned zone
 - [x] Wi-Fi setup without touch: WPA2 soft AP `TFT-Panel-XXXX` (password random once per device, kept
@@ -24,8 +24,8 @@
 - [x] Lyrics layout bounded (neighbours 1 line, current ≤ 2, "…"), all of General Punctuation in the
       font (U+2010 in "Jean‐Luc" showed as a box), FPS overlay off; checked with `demo` + `screenshot`
 - [x] Timing: PositionClock (window ~36 ms on the board) + 250 ms display lead
-- [ ] Vincent's eye check on the real LCD after these fixes (the framebuffer is right; the panel itself is unverified)
-- [ ] Flash budget: the image is at 85 % of an OTA slot (Wi-Fi + HTTP + web server ≈ 900 KB)
+- [x] Vincent's eye check on the real LCD (white balance picked on the colour test card)
+- [ ] Flash budget: the CrowPanel image is at ~90 % of an OTA slot (1.85 MB, ~200 KB left); the P4 has 6 MB slots
 
 ## Phase 2 — lyrics and controls UI (in progress)
 
