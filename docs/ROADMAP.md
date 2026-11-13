@@ -75,14 +75,16 @@
 - [x] Fixed: the portal could not bind port 80 when opened with Wi-Fi up (the update page held it)
 - [ ] Vincent's finger test of the on-screen flow (pick, type, connect)
 
-## Music library (Waveshare P4, 2026-11-11)
+## Music library (Waveshare P4 2026-11-11, CrowPanel 2026-11-13)
 
 - [x] Search and browse Roon's library from the panel, play / queue / radio on the followed zone
       (own Roon browse session; `docs/ARCHITECTURE.md`)
 - [x] Vincent's finger test on the P4 (2026-11-12): search, results and playback work
 - [x] Text fields show a visible blinking green cursor while they wait for typing (v0.1.15; the
       theme's thin cursor did not blink when the field was focused by the code)
-- [ ] CrowPanel: later if it works well (~207 KB of flash left; lists slower there)
+- [x] CrowPanel too (v0.1.17, +29 KB of flash, 91 %): library text and lists moved to PSRAM so its
+      internal RAM stays flat while browsing (300 albums + thumbnails: 61 KB free throughout)
+- [ ] Vincent's finger test on the CrowPanel
 
 ## Other boards (not started)
 

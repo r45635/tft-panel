@@ -96,10 +96,10 @@ play/pause, next, volume − / +, settings.
 
   ![Lyrics timing](images/lyrics-timing.png)
 
-## Find music (Waveshare screen)
+## Find music
 
-On the Waveshare ESP32-P4 screen the controls bar has a **folder** button: the music library.
-Not on the CrowPanel for now.
+The controls bar has a **folder** button: the music library (both screens, since v0.1.17 on the
+CrowPanel).
 
 ![Library](images/library.png)
 

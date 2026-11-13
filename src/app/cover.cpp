@@ -4,6 +4,8 @@
 
 #include <cstring>
 
+#include "../net/psram_text.h"
+
 #include "src/libs/tjpgd/tjpgd.h"   // LVGL's bundled TJpgDec (LV_USE_TJPGD), RGB888 output
 
 namespace {
@@ -136,7 +138,7 @@ bool downsample(const Rgb &src, int box, Rgb &out) {
 }
 
 std::shared_ptr<Picture> newPicture(int w, int h) {
-    auto p = std::make_shared<Picture>();
+    auto p = std::allocate_shared<Picture>(PsramAllocator<Picture>());   // the block too: 150 thumbnails
     p->pixels = (uint16_t *)psramAlloc((size_t)w * h * 2);
     if (!p->pixels) return nullptr;
     p->w = w;

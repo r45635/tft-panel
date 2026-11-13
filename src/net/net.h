@@ -10,6 +10,7 @@
 #include "../app/cover.h"
 #include "../app/lyrics.h"
 #include "../layout.h"
+#include "psram_text.h"
 
 namespace net {
 
@@ -50,14 +51,16 @@ struct WifiNet {
 };
 
 // The music library (boards with HAS_LIBRARY): one browse level as the panel shows it.
+// Library text and lists live in PSRAM (psram_text.h): pages can hold hundreds of items.
 struct LibItem {
-    String title, subtitle;
-    String itemKey;
-    String hint;          // "list" (opens), "action_list" (playable: actions), "action", "header"
-    String imageKey;
+    PStr title, subtitle;
+    PStr itemKey;
+    PStr hint;            // "list" (opens), "action_list" (playable: actions), "action", "header"
+    PStr imageKey;
     bool prompt = false;  // asks for text (Roon's own search entry): the panel uses its Search tab
     std::shared_ptr<const Picture> thumb;   // filled in as thumbnails arrive
 };
+using LibItems = std::vector<LibItem, PsramAllocator<LibItem>>;
 
 struct LibraryPage {
     uint32_t id = 0;              // changes when the items change, not when a thumbnail arrives
@@ -65,9 +68,9 @@ struct LibraryPage {
     String query;                 // the search that opened it
     std::vector<String> path;     // level titles from the top
     int total = 0;                // items in this level (more than `items` until all are loaded)
-    std::vector<LibItem> items;
+    LibItems items;
     String actionsFor;            // title of the item whose actions are open, empty if none
-    std::vector<LibItem> actions;
+    LibItems actions;
     bool loading = false;
     String message;               // result of an action, or an error
     bool error = false;

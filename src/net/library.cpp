@@ -29,8 +29,10 @@ std::vector<Level> g_levels;
 int g_roon = 0;          // Roon's current level in g_hier (deeper than the shown one after actions)
 bool g_open = false;     // the library screen is open: thumbnails load
 uint32_t g_nextId = 1;
-std::vector<std::pair<String, std::shared_ptr<const Picture>>> g_cache;   // back = most recent
-std::vector<String> g_failedThumbs;
+// In PSRAM, keys too (psram_text.h): 150 keys as Strings took ~7 KB of the CrowPanel's internal RAM.
+using CacheEntry = std::pair<PStr, std::shared_ptr<const Picture>>;
+std::vector<CacheEntry, PsramAllocator<CacheEntry>> g_cache;   // back = most recent
+std::vector<PStr, PsramAllocator<PStr>> g_failedThumbs;
 
 const String &sessionKey() {
     static String key = net::hostName();   // the panel's own browse stack in Roon
@@ -56,13 +58,13 @@ String errorText(const HttpResult &r) {
     return r.message.length() ? r.message : "HTTP " + String(r.code);
 }
 
-std::shared_ptr<const Picture> cached(const String &key) {
+std::shared_ptr<const Picture> cached(const PStr &key) {
     for (auto it = g_cache.begin(); it != g_cache.end(); ++it)
         if (it->first == key) {
-            auto pic = it->second;
+            CacheEntry e = std::move(*it);
             g_cache.erase(it);
-            g_cache.emplace_back(key, pic);   // most recent last
-            return pic;
+            g_cache.push_back(std::move(e));   // most recent last
+            return g_cache.back().second;
         }
     return nullptr;
 }
@@ -183,7 +185,7 @@ void drill(int index) {
     g_page->loading = true;
     publish();
     JsonDocument body(psram()), resp(psram());
-    body["item_key"] = it.itemKey;
+    body["item_key"] = it.itemKey.c_str();
     String zone = followedZoneId();
     if (zone.length()) body["zone_or_output_id"] = zone;
     HttpResult r = post("/api/roon/browse", body, resp);
@@ -202,7 +204,7 @@ void drill(int index) {
         // pops both, see back()).
         if (g_page->items.size() == 1 && g_page->items[0].hint == "list" && g_page->items[0].title == it.title) {
             JsonDocument b2(psram()), r2(psram());
-            b2["item_key"] = g_page->items[0].itemKey;
+            b2["item_key"] = g_page->items[0].itemKey.c_str();
             if (zone.length()) b2["zone_or_output_id"] = zone;
             HttpResult rr = post("/api/roon/browse", b2, r2);
             if (rr.code == 200 && String(r2["action"] | "") == "list") {
@@ -276,7 +278,7 @@ void openActions(int index) {
             setMessage("No actions: " + errorText(r), true);
             return publish();
         }
-        std::vector<LibItem> actions, lists;
+        LibItems actions, lists;
         for (JsonObjectConst a : lresp["items"].as<JsonArrayConst>()) {
             LibItem i = readItem(a, "");
             if (i.hint == "action") actions.push_back(std::move(i));
@@ -306,7 +308,7 @@ void runAction(int index) {
         return publish();
     }
     JsonDocument body(psram()), resp(psram());
-    body["item_key"] = a.itemKey;
+    body["item_key"] = a.itemKey.c_str();
     body["zone_or_output_id"] = zone;
     HttpResult r = post("/api/roon/browse", body, resp);
     if (r.code == 502) return restart("stale action key");
@@ -349,7 +351,7 @@ void run(LibOp op, int index, const String &text) {
 
 void tick() {
     if (!g_open || !g_page || !baseUrl().length()) return;
-    String key;
+    PStr key;
     for (const LibItem &i : g_page->items)
         if (!i.thumb && i.imageKey.length() &&
             std::find(g_failedThumbs.begin(), g_failedThumbs.end(), i.imageKey) == g_failedThumbs.end()) {

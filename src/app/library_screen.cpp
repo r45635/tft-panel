@@ -34,7 +34,7 @@ struct Row {
     lv_obj_t *img = nullptr;
     bool hasThumb = false;
 };
-std::vector<Row> g_rows;
+std::vector<Row, PsramAllocator<Row>> g_rows;   // PSRAM: one per row, hundreds of rows
 lv_obj_t *g_moreButton = nullptr;
 
 Tab g_tab = Tab::Search;

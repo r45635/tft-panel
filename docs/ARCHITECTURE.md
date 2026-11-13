@@ -85,7 +85,7 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
    The portal takes port 80 from the update page first (it waits for `webupdate::serving()` to drop).
 3. Stored Wi-Fi failing for 60 s → the AP comes back next to the station, so a changed password can be fixed.
 
-### Music library (HAS_LIBRARY boards: the Waveshare P4)
+### Music library (both boards, `HAS_LIBRARY`)
 
 `src/net/library.cpp` (net task) talks to the companion with **`POST /api/roon/browse` and
 `/browse/load` only**, always with the panel's own `multi_session_key` (its host name), so its
@@ -102,6 +102,10 @@ carries `zone_or_output_id` = the followed zone, so actions play there.
   deeper); running one is `POST /browse {item_key, zone_or_output_id}`.
 - A 502 (stale `item_key`) reopens the hierarchy. Thumbnails (`/api/roon/image/<key>`, the list's
   image for tracks) load one by one while the screen is open, LRU cache of 150 in PSRAM.
+- Memory: item text, item lists, the thumbnail cache (keys and picture blocks) and the screen's row
+  list live in PSRAM (`src/net/psram_text.h`: `PStr`, `PsramAllocator`). On the S3 every malloc under
+  4 KB goes to internal RAM, which Wi-Fi needs: as Arduino Strings, 300 albums with thumbnails took
+  the CrowPanel from 60 to 44 KB free; now it stays at ~61 KB (2026-11-13).
 - Published as `Snapshot::library` (copy-on-write); `src/app/library_screen.cpp` draws it; UI
   commands go through `net::library(op, index, text)`. Console: `lib search <text> | browse |
   open <n> | back | more | actions <n> | show | ui` (`lib action <n>` plays: not while someone listens).

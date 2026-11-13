@@ -16,8 +16,8 @@ constexpr bool HAS_STATIC_SCREEN = true;   // OTA: freeze the image in internal 
 constexpr uint8_t DEFAULT_WARMTH = 75;
 // Firmware updates stream from the network straight into flash.
 constexpr bool OTA_DOWNLOAD_FIRST = false;
-// Music library browsing: not on this board yet (flash margin, slower lists); see the P4.
-constexpr bool HAS_LIBRARY = false;
+// Music library browsing (search, browse, play on the followed zone).
+constexpr bool HAS_LIBRARY = true;
 
 // ---- RGB LCD (800x480, RGB565, EK9716BD3 + EK73002ACGB) ----
 constexpr int LCD_H_RES = 800;
