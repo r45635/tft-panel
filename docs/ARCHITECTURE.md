@@ -45,8 +45,17 @@ Rules learned on the watch client:
 |---|---|---|
 | Board | `src/board/` | one layer per screen behind `board.h`: pins, touch, panel driver (`esp_lcd`), LVGL glue, backlight, colour warmth |
 | Layout | `src/layout.h` | screen size and the 800×480 design grid's scaling (`X`, `Y`, `S`) |
-| Net | `src/net/` | settings (NVS), Wi-Fi + setup portal, mDNS discovery, companion polling, OTA |
+| Net | `src/net/` | settings (NVS), Wi-Fi + setup portal, OTA, and the **source** behind `source.h` that answers "what is playing" |
 | App | `src/app/` | lyrics model (LRC), fonts, covers, screens (setup, now playing, settings; bring-up via `bringup`) |
+
+**Sources.** `src/net/source.h` is the only thing the net task knows about where the music
+information comes from. `source_companion.*` is the TextFromTrack companion over its LAN HTTP API,
+which is what the panel has always used and the only source with lyrics. The net task keeps
+everything that is the same whatever answers: the snapshot and its version counter, the position
+clock, the track change, the covers, the lyrics retries, the command queue and the status line. A
+source only discovers a server, reads it, and calls the `publish*` functions of `net_internal.h`.
+It also builds the cover URLs, because the cover task runs on another core and must never read a
+source's address while the net task changes it.
 
 **Boards.** `board.h` is the only interface the rest of the firmware sees; each board compiles
 its own file, chosen by the environment's `-DBOARD_…` flag: `board_crowpanel7.cpp` (ESP32-S3, RGB
@@ -87,8 +96,8 @@ every frame. Lyrics are a `shared_ptr<const Lyrics>`, so copying a snapshot neve
 
 ### Music library (both boards, `HAS_LIBRARY`)
 
-`src/net/library.cpp` (net task) talks to the companion with **`POST /api/roon/browse` and
-`/browse/load` only**, always with the panel's own `multi_session_key` (its host name), so its
+`src/net/library.cpp` (net task) browses with **`browse` and `load` only**, through the source
+(for the companion: `POST /api/roon/browse` and `/browse/load`), always with the panel's own `multi_session_key` (its host name), so its
 browse stack in Roon is its own: it never moves the desktop app's or the web player's. Never
 `GET /search` or `POST /play-item`: they use Roon's shared default session. Every step on an item
 carries `zone_or_output_id` = the followed zone, so actions play there.
