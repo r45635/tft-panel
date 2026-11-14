@@ -1,7 +1,9 @@
-// Board layer of the Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (ESP32-P4, MIPI-DSI panel).
+// Board layer shared by the ESP32-P4 boards with a MIPI-DSI panel. What differs between them
+// lives in their `pins_*.h`: the panel's vendor init table, the DSI and video timings, the reset
+// and backlight pins, and whether the panel is mounted upside down.
 #include "board.h"
 
-#if defined(BOARD_WAVESHARE_P4_7B)
+#if defined(BOARD_WAVESHARE_P4_7B) || defined(BOARD_P4_S070_WBA)
 
 #include <Wire.h>
 #include <esp_cache.h>
@@ -62,7 +64,18 @@ bool fail(const char *what, esp_err_t err) {
 
 void dcs(esp_lcd_panel_io_handle_t io, int cmd, const uint8_t *data, size_t len) {
     esp_err_t err = esp_lcd_panel_io_tx_param(io, cmd, data, len);
-    if (err != ESP_OK) Serial.printf("[board] EK79007 command 0x%02X: %s\n", cmd, esp_err_to_name(err));
+    if (err != ESP_OK) Serial.printf("[board] panel command 0x%02X: %s\n", cmd, esp_err_to_name(err));
+}
+
+// Walks the panel's vendor table: {command, data length, data bytes...} repeated.
+void sendInitTable(esp_lcd_panel_io_handle_t io) {
+    size_t i = 0;
+    while (i + 1 < sizeof PANEL_INIT) {
+        uint8_t cmd = PANEL_INIT[i];
+        uint8_t len = PANEL_INIT[i + 1];
+        dcs(io, cmd, len ? &PANEL_INIT[i + 2] : nullptr, len);
+        i += 2u + len;
+    }
 }
 
 bool IRAM_ATTR onRotated(ppa_client_handle_t, ppa_event_data_t *, void *) {
@@ -78,12 +91,13 @@ bool createPanel() {
     ldoCfg.voltage_mv = DSI_PHY_LDO_MV;
     esp_err_t err = esp_ldo_acquire_channel(&ldoCfg, &ldo);
     if (err != ESP_OK) return fail("DSI PHY power", err);
+    delay(PANEL_PHY_POWER_MS);
 
     esp_lcd_dsi_bus_handle_t bus = nullptr;
     esp_lcd_dsi_bus_config_t busCfg = {};
     busCfg.bus_id = 0;
     busCfg.num_data_lanes = DSI_LANES;
-    busCfg.phy_clk_src = (mipi_dsi_phy_clock_source_t)0;   // default
+    busCfg.phy_clk_src = DSI_PHY_CLK_SRC;
     busCfg.lane_bit_rate_mbps = DSI_LANE_MBPS;
     err = esp_lcd_new_dsi_bus(&busCfg, &bus);
     if (err != ESP_OK) return fail("DSI bus", err);
@@ -96,19 +110,14 @@ bool createPanel() {
     err = esp_lcd_new_panel_io_dbi(bus, &dbi, &io);
     if (err != ESP_OK) return fail("DSI command channel", err);
 
-    // EK79007: hardware reset, then the vendor sequence (esp_lcd_ek79007 2.0.2, Apache-2.0).
-    pinMode(LCD_PIN_RESET, OUTPUT);
-    digitalWrite(LCD_PIN_RESET, LOW);
-    delay(10);
-    digitalWrite(LCD_PIN_RESET, HIGH);
-    delay(20);
-    static const uint8_t lanes2 = 0x10;
-    dcs(io, 0xB2, &lanes2, 1);
-    static const uint8_t vendor[][2] = {{0x80, 0x8B}, {0x81, 0x78}, {0x82, 0x84}, {0x83, 0x88},
-                                        {0x84, 0xA8}, {0x85, 0xE3}, {0x86, 0x88}};
-    for (const auto &c : vendor) dcs(io, c[0], &c[1], 1);
-    dcs(io, 0x11, nullptr, 0);   // sleep out
-    delay(120);
+    // Hardware reset, then the panel's own vendor sequence (see its pins_*.h for the source).
+    if (LCD_PIN_RESET >= 0) {   // some boards route no reset line and rely on power-on
+        pinMode(LCD_PIN_RESET, OUTPUT);
+        digitalWrite(LCD_PIN_RESET, LOW);
+        delay(PANEL_RESET_LOW_MS);
+        digitalWrite(LCD_PIN_RESET, HIGH);
+    }
+    delay(PANEL_RESET_WAIT_MS);   // some controllers ignore everything until this has passed
 
     esp_lcd_dpi_panel_config_t dpi = {};
     dpi.virtual_channel = 0;
@@ -124,10 +133,31 @@ bool createPanel() {
     dpi.video_timing.vsync_pulse_width = LCD_VSYNC_PULSE_WIDTH;
     dpi.video_timing.vsync_back_porch = LCD_VSYNC_BACK_PORCH;
     dpi.video_timing.vsync_front_porch = LCD_VSYNC_FRONT_PORCH;
+
+    // 🪤 Whether the vendor table may be sent before the video stream is a property of the
+    // board: on the S070 nothing leaves the command FIFO until the stream runs, and the
+    // twentieth command blocks forever. The EK79007 was brought up the other way round and is
+    // left as it was. Never read the panel's ID: a panel that does not answer a DSI read hangs
+    // every command after it.
     err = esp_lcd_new_panel_dpi(bus, &dpi, &g_panel);
     if (err != ESP_OK) return fail("DPI panel", err);
-    err = esp_lcd_panel_init(g_panel);
-    if (err != ESP_OK) return fail("DPI panel init", err);
+    if (PANEL_INIT_AFTER_DPI_START) {
+        err = esp_lcd_panel_init(g_panel);
+        if (err != ESP_OK) return fail("DPI panel init", err);
+    }
+    sendInitTable(io);
+    if (!PANEL_INIT_SENDS_SLEEP_OUT) dcs(io, 0x11, nullptr, 0);   // sleep out
+    delay(PANEL_SLEEP_OUT_MS);
+    // Some controllers wake up with the display still off and show nothing, however good the
+    // video stream is, until they are told to turn it on.
+    if (PANEL_NEEDS_DISPLAY_ON) {
+        dcs(io, 0x29, nullptr, 0);   // display on
+        delay(20);
+    }
+    if (!PANEL_INIT_AFTER_DPI_START) {
+        err = esp_lcd_panel_init(g_panel);
+        if (err != ESP_OK) return fail("DPI panel init", err);
+    }
 
     // Black screen before the backlight comes on.
     void *fb = nullptr;
@@ -154,7 +184,8 @@ void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
     const int w = lv_area_get_width(area), h = lv_area_get_height(area);
     uint16_t *p = (uint16_t *)px;
     wb::apply(p, (size_t)w * h);
-    // The panel is upside down: the area, turned 180°, goes to the mirrored position.
+    // A panel mounted upside down gets the area turned 180° and written to the mirrored
+    // position; one mounted the right way up gets it as it is, where it belongs.
     ppa_srm_oper_config_t op = {};
     op.in.buffer = p;
     op.in.pic_w = op.in.block_w = w;
@@ -164,10 +195,10 @@ void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
     op.out.buffer_size = FB_BYTES;
     op.out.pic_w = LCD_H_RES;
     op.out.pic_h = LCD_V_RES;
-    op.out.block_offset_x = LCD_H_RES - 1 - area->x2;
-    op.out.block_offset_y = LCD_V_RES - 1 - area->y2;
+    op.out.block_offset_x = PANEL_UPSIDE_DOWN ? (LCD_H_RES - 1 - area->x2) : area->x1;
+    op.out.block_offset_y = PANEL_UPSIDE_DOWN ? (LCD_V_RES - 1 - area->y2) : area->y1;
     op.out.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
-    op.rotation_angle = PPA_SRM_ROTATION_ANGLE_180;
+    op.rotation_angle = PANEL_UPSIDE_DOWN ? PPA_SRM_ROTATION_ANGLE_180 : PPA_SRM_ROTATION_ANGLE_0;
     op.scale_x = op.scale_y = 1.0f;
     op.mode = PPA_TRANS_MODE_NON_BLOCKING;
     esp_err_t err = ppa_do_scale_rotate_mirror(g_ppa, &op);
@@ -225,7 +256,7 @@ bool createLvgl() {
 bool begin() {
     // Backlight off until the first frame is on the panel (PWM output is inverted on this board).
     ledcAttach(LCD_PIN_BACKLIGHT, 5000, 10);
-    ledcOutputInvert(LCD_PIN_BACKLIGHT, true);
+    ledcOutputInvert(LCD_PIN_BACKLIGHT, LCD_BACKLIGHT_ACTIVE_LOW);
     ledcWrite(LCD_PIN_BACKLIGHT, 0);
 
     g_info.psramBytes = ESP.getPsramSize();

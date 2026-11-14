@@ -241,42 +241,73 @@ choose between boards with the same chip. Then a bring-up **on the real board**:
 orientation, touch at the four corners, backlight, Wi-Fi to the Internet, an OTA. Nothing is
 published for a board that has not run.
 
-### Guition JC1060P470C (board in hand since 2026-11-14)
+### A third board: ESP32-P4 7" S070, JD9165 (bring-up started 2026-11-14)
 
-| | Waveshare 7B (supported) | Guition JC1060P470C |
-|---|---|---|
-| Chip | ESP32-P4 | ESP32-P4 rev **v3.2** (ROM esp32p4-eco7) |
-| Screen | 1024×600 MIPI-DSI, **EK79007** | 1024×600 MIPI-DSI, **JD9165** (driver 1.0.4) |
-| Touch | GT911 | GT911 (answers at the default address) |
-| PSRAM / flash | 32 MB / 32 MB | 32 MB hex at 200 MHz / **16 MB** |
-| Wi-Fi | ESP32-C6 (esp_hosted) | ESP32-C6, **proven: it scans** (2026-11-14) |
-| USB | native USB-Serial/JTAG, `cu.usbmodem*` | **CH340**, `cu.usbserial-*`, console on GPIO 38/37 |
+Sold as **UEP4S070H1024V600C-WB-C**; its own factory firmware calls the board `ESP32_P4_S070_WBA`.
+ESP32-P4 rev 3.2, 16 MB flash, 32 MB PSRAM, ESP32-C6 for Wi-Fi, 7" 1024x600 MIPI-DSI behind a
+**JD9165**, GT911 touch, serial through a **CH340** (not the P4's native USB). MAC
+`80:f1:b2:d6:18:00`. It is **not** the Guition JC1060P470C below, which a user asked about; the
+two share the panel controller and little else, which is exactly how this bring-up went wrong at
+first.
 
-Read from the factory image's own boot log (2026-11-14, board MAC `80:f1:b2:d6:18:00`): its app is
-`lvgl_demo_v9` on IDF 5.5.4 and its board support package calls itself `ESP32_P4_S070_WBA`.
+**Everything works on it except the image.** Verified on the board: the firmware boots, the
+backlight on GPIO 23 lights, the GT911 answers at 0x5D on GPIO 7/8 in 1024x600, Wi-Fi works
+through the C6 (including the firmware's own update of it, to 2.12.13), the setup portal comes up
+and a scan sees the neighbourhood. The display stays dark.
 
-- **Backlight is GPIO 23** — confirmed, no longer guesswork: the factory app's LEDC setup warns
-  `GPIO 23 is not usable, maybe conflict with others` and then sets the backlight to 100 %.
-- 🪤 `esp_lcd_panel_swap_xy` is **not supported by the JD9165 panel** (the factory app logs the
-  error itself). Any rotation has to happen elsewhere — the PPA, as on the Waveshare.
-- 🪤 **Its CH340 does not survive a long transfer at 460800**: a 16 MB `read-flash` died after
-  284 KB with "Serial data stream stopped: possible serial noise or corruption". 230400 works.
-  Same family of trap as the CrowPanel's 921600.
-- Factory partition table (replaced by ours when flashed, so keep the backup): `nvs` 0x9000 24 KB,
-  `phy_init` 0xf000 4 KB, `factory` app 0x10000 **8 MB**, `storage` 0x810000 7 MB.
-- Factory image backed up whole before anything was written:
-  `~/Documents/TFT-Panel-backups/guition-jc1060p470c-factory-80f1b2d61800.bin` (+ `.sha256`);
-  restore with `esptool --baud 230400 write-flash 0 <file>`.
-- **Wi-Fi works with no board-specific change** (2026-11-14): a plain Arduino sketch flashed on it
-  scanned and heard 14 networks, strongest -46 dBm. Its C6 is wired on the same SDIO pins the
-  Arduino core assumes, exactly like the Waveshare, so `src/net/` needs nothing new here.
-  As on the Waveshare, the factory C6 firmware is older than the core's host side, which says so
-  at boot: `hostedHasUpdate(): Version on Host is NEWER than version on co-processor`. Scanning
-  still works, so the same `src/net/coprocessor.cpp` update at boot should finish the job.
-- Internal RAM is in another league than the CrowPanel's: **548 KB free at boot** with 32 MB of
-  PSRAM, against ~60 KB free on the S3 while playing.
+What this cost, and what it taught:
 
-Still to do for a supported board: the JD9165 init sequence and timings (Espressif's
-`esp_lcd_jd9165` driver, Apache-2.0), the rest of the pin map (LCD reset, I2C, the SDIO link to the
-C6), the orientation, and a board choice on the install page, since the installer picks by chip.
+- 🪤 **A DSI command sent before the video stream is running never leaves the host's command
+  FIFO on this board.** The first nineteen sit in it and the twentieth blocks forever, inside
+  `esp_lcd_panel_io_tx_param`, which busy-waits on `gen_is_cmd_fifo_full`. The EK79007's nine
+  commands fit either way, which is why the Waveshare never showed this. Start the video first
+  (`PANEL_INIT_AFTER_DPI_START`), and all 58 commands of the JD9165 table go through.
+- 🪤 **Never read the panel's ID.** `esp_lcd_panel_io_rx_param` turns the bus around and waits; a
+  panel that does not answer hangs it and everything after it. Espressif's own JD9165 driver does
+  this read, so a straight port of it hangs here.
+- 🪤 **The PHY reference clock and the lane rate go together.** Asking for XTAL (what a P4 rev 3.0
+  or newer wants, and what the factory firmware logs) with 1000 Mbps makes `esp_lcd_panel_init`
+  never return. XTAL with 750 Mbps starts.
+- 🪤 **Its CH340 drops bytes on a long transfer**: a 16 MB read died after 284 KB at 460800 and
+  again at 230400 in one go. Reading in retryable 512 KB pieces at 230400 works (one retry in 32).
+  Flashing at 230400 is reliable.
+- 🪤 **16 MB of flash**: the image header has to say 16 MB or the bootloader refuses to probe.
+
+Still dark after trying, with the DSI bridge's **hardware test pattern** (which bypasses the
+frame buffer, LVGL and the PPA entirely) as the probe:
+
+| Tried | Result |
+|---|---|
+| Both published JD9165 vendor tables (the 2026 panel batch and the earlier one) | no image |
+| Three sets of video timings, including Espressif's `JD9165_1024_600_PANEL_60HZ_DPI_CONFIG` (50 MHz, hsync 20/136/160, vsync 2/12/20) from the very component version the factory firmware runs | no image |
+| Reset on GPIO 0, on GPIO 27, and no reset at all | no image |
+| RGB565 and RGB888 pixel formats | no image |
+| Lane rate 750 and 1000 Mbps, PHY reference legacy and XTAL | no image |
+| Sending the display-on command (0x29) after sleep out, which the firmware never sent at all | no image |
+| Asserting GPIO 23 before the DSI comes up, in case it enables the panel and not just its backlight | no image |
+
+The factory firmware drives the same panel, so the answer exists and is in its board support
+code. Its init payloads were read out of the factory image and match the published table for the
+2026 panel batch, so **the table is not what is missing**: it is something in the panel's own
+configuration that none of the public sources for look-alike boards carries. The next step is the
+vendor's board support package or schematic for this exact product code, which the seller can
+supply; guessing further costs more than it returns.
+
+The board's factory image is backed up whole and verified against the chip, and the board was
+left running it: `~/Documents/TFT-Panel-backups/guition-jc1060p470c-factory-80f1b2d61800.bin`
+(named before the board was correctly identified). Restore with
+`esptool --baud 230400 write-flash 0 <file>`; the first 4 MB are enough, the demo's assets above
+8 MB are never touched by our firmware.
+
+### Guition JC1060P470C (asked about 2026-11-11, still no board)
+
+A user asked for this one on 2026-11-11. It is a different product from the S070 above, with the
+same JD9165 controller: 1024x600 MIPI-DSI, GT911, 32 MB PSRAM, 16 MB flash, ESP32-C6 for Wi-Fi.
+Community configurations put its backlight on GPIO 23 and its reset on GPIO 0 (2026 batch) or
+GPIO 27 (earlier). Nobody on the project has one, and the S070 bring-up above shows that sharing
+a controller is not enough to share a configuration.
+
+Still to do for either board: the JD9165 configuration that actually produces an image, the rest
+of the pin map, the orientation, and a board choice on the install page, since the installer picks
+by chip.
 
