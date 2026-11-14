@@ -241,21 +241,42 @@ choose between boards with the same chip. Then a bring-up **on the real board**:
 orientation, touch at the four corners, backlight, Wi-Fi to the Internet, an OTA. Nothing is
 published for a board that has not run.
 
-### Guition JC1060P470C (asked about 2026-11-11)
+### Guition JC1060P470C (board in hand since 2026-11-14)
 
 | | Waveshare 7B (supported) | Guition JC1060P470C |
 |---|---|---|
-| Chip | ESP32-P4 | ESP32-P4 |
-| Screen | 1024×600 MIPI-DSI, **EK79007** | 1024×600 MIPI-DSI, **JD9165** |
-| Touch | GT911 | GT911 |
-| PSRAM / flash | 32 MB / 32 MB | 32 MB / **16 MB** |
-| Wi-Fi | ESP32-C6 (esp_hosted) | ESP32-C6 (esp_hosted) |
+| Chip | ESP32-P4 | ESP32-P4 rev **v3.2** (ROM esp32p4-eco7) |
+| Screen | 1024×600 MIPI-DSI, **EK79007** | 1024×600 MIPI-DSI, **JD9165** (driver 1.0.4) |
+| Touch | GT911 | GT911 (answers at the default address) |
+| PSRAM / flash | 32 MB / 32 MB | 32 MB hex at 200 MHz / **16 MB** |
+| Wi-Fi | ESP32-C6 (esp_hosted) | ESP32-C6, **proven: it scans** (2026-11-14) |
+| USB | native USB-Serial/JTAG, `cu.usbmodem*` | **CH340**, `cu.usbserial-*`, console on GPIO 38/37 |
 
-Reusable as is: the 1024×600 scaled interface, GT911, the C6 firmware update at boot, updates
-received whole before writing; 16 MB is enough (the P4 partition table ends at 12.6 MB, but the
-environment must declare 16 MB). To do: the JD9165 init sequence and timings (Espressif's
-`esp_lcd_jd9165` driver, Apache-2.0), the pin map (community configs mention backlight GPIO23 and
-LCD reset GPIO5 — unverified), the orientation, and a board choice on the install page.
-**Blocked on hardware**: nobody on the project has one. A user with the board who can flash a test
-build and send back the USB console log and photos would be enough to start.
+Read from the factory image's own boot log (2026-11-14, board MAC `80:f1:b2:d6:18:00`): its app is
+`lvgl_demo_v9` on IDF 5.5.4 and its board support package calls itself `ESP32_P4_S070_WBA`.
+
+- **Backlight is GPIO 23** — confirmed, no longer guesswork: the factory app's LEDC setup warns
+  `GPIO 23 is not usable, maybe conflict with others` and then sets the backlight to 100 %.
+- 🪤 `esp_lcd_panel_swap_xy` is **not supported by the JD9165 panel** (the factory app logs the
+  error itself). Any rotation has to happen elsewhere — the PPA, as on the Waveshare.
+- 🪤 **Its CH340 does not survive a long transfer at 460800**: a 16 MB `read-flash` died after
+  284 KB with "Serial data stream stopped: possible serial noise or corruption". 230400 works.
+  Same family of trap as the CrowPanel's 921600.
+- Factory partition table (replaced by ours when flashed, so keep the backup): `nvs` 0x9000 24 KB,
+  `phy_init` 0xf000 4 KB, `factory` app 0x10000 **8 MB**, `storage` 0x810000 7 MB.
+- Factory image backed up whole before anything was written:
+  `~/Documents/TFT-Panel-backups/guition-jc1060p470c-factory-80f1b2d61800.bin` (+ `.sha256`);
+  restore with `esptool --baud 230400 write-flash 0 <file>`.
+- **Wi-Fi works with no board-specific change** (2026-11-14): a plain Arduino sketch flashed on it
+  scanned and heard 14 networks, strongest -46 dBm. Its C6 is wired on the same SDIO pins the
+  Arduino core assumes, exactly like the Waveshare, so `src/net/` needs nothing new here.
+  As on the Waveshare, the factory C6 firmware is older than the core's host side, which says so
+  at boot: `hostedHasUpdate(): Version on Host is NEWER than version on co-processor`. Scanning
+  still works, so the same `src/net/coprocessor.cpp` update at boot should finish the job.
+- Internal RAM is in another league than the CrowPanel's: **548 KB free at boot** with 32 MB of
+  PSRAM, against ~60 KB free on the S3 while playing.
+
+Still to do for a supported board: the JD9165 init sequence and timings (Espressif's
+`esp_lcd_jd9165` driver, Apache-2.0), the rest of the pin map (LCD reset, I2C, the SDIO link to the
+C6), the orientation, and a board choice on the install page, since the installer picks by chip.
 
