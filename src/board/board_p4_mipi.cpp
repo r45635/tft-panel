@@ -67,14 +67,16 @@ void dcs(esp_lcd_panel_io_handle_t io, int cmd, const uint8_t *data, size_t len)
     if (err != ESP_OK) Serial.printf("[board] panel command 0x%02X: %s\n", cmd, esp_err_to_name(err));
 }
 
-// Walks the panel's vendor table: {command, data length, data bytes...} repeated.
+// Walks the panel's vendor table: {command, data length, delay after in ms, data bytes...}.
 void sendInitTable(esp_lcd_panel_io_handle_t io) {
     size_t i = 0;
-    while (i + 1 < sizeof PANEL_INIT) {
+    while (i + 2 < sizeof PANEL_INIT) {
         uint8_t cmd = PANEL_INIT[i];
         uint8_t len = PANEL_INIT[i + 1];
-        dcs(io, cmd, len ? &PANEL_INIT[i + 2] : nullptr, len);
-        i += 2u + len;
+        uint8_t after = PANEL_INIT[i + 2];
+        dcs(io, cmd, len ? &PANEL_INIT[i + 3] : nullptr, len);
+        if (after) delay(after);
+        i += 3u + len;
     }
 }
 
@@ -84,6 +86,21 @@ bool IRAM_ATTR onRotated(ppa_client_handle_t, ppa_event_data_t *, void *) {
 }
 
 bool createPanel() {
+    // 🪤 The panel's supply rails first, where the board switches them with GPIOs. Without this
+    // the panel is simply unpowered: it acknowledges no DSI command, so the host's command FIFO
+    // fills and the twentieth call blocks forever, reading its ID never returns, and no video
+    // appears however right the timings are. All three look like driver bugs and are not.
+    if (PANEL_POWER_GPIO_1 >= 0) {
+        pinMode(PANEL_POWER_GPIO_1, OUTPUT);
+        digitalWrite(PANEL_POWER_GPIO_1, HIGH);
+        delay(PANEL_POWER_STEP_MS);
+    }
+    if (PANEL_POWER_GPIO_2 >= 0) {
+        pinMode(PANEL_POWER_GPIO_2, OUTPUT);
+        digitalWrite(PANEL_POWER_GPIO_2, HIGH);
+        delay(PANEL_POWER_STEP_MS);
+    }
+
     // The D-PHY needs its LDO before the DSI bus comes up.
     esp_ldo_channel_handle_t ldo = nullptr;
     esp_ldo_channel_config_t ldoCfg = {};
@@ -113,6 +130,8 @@ bool createPanel() {
     // Hardware reset, then the panel's own vendor sequence (see its pins_*.h for the source).
     if (LCD_PIN_RESET >= 0) {   // some boards route no reset line and rely on power-on
         pinMode(LCD_PIN_RESET, OUTPUT);
+        digitalWrite(LCD_PIN_RESET, HIGH);
+        delay(PANEL_RESET_HIGH_MS);
         digitalWrite(LCD_PIN_RESET, LOW);
         delay(PANEL_RESET_LOW_MS);
         digitalWrite(LCD_PIN_RESET, HIGH);
@@ -125,6 +144,7 @@ bool createPanel() {
     dpi.dpi_clock_freq_mhz = DPI_CLOCK_MHZ;
     dpi.pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565;
     dpi.num_fbs = 1;
+    dpi.flags.use_dma2d = PANEL_USE_DMA2D;
     dpi.video_timing.h_size = LCD_H_RES;
     dpi.video_timing.v_size = LCD_V_RES;
     dpi.video_timing.hsync_pulse_width = LCD_HSYNC_PULSE_WIDTH;
@@ -134,11 +154,9 @@ bool createPanel() {
     dpi.video_timing.vsync_back_porch = LCD_VSYNC_BACK_PORCH;
     dpi.video_timing.vsync_front_porch = LCD_VSYNC_FRONT_PORCH;
 
-    // 🪤 Whether the vendor table may be sent before the video stream is a property of the
-    // board: on the S070 nothing leaves the command FIFO until the stream runs, and the
-    // twentieth command blocks forever. The EK79007 was brought up the other way round and is
-    // left as it was. Never read the panel's ID: a panel that does not answer a DSI read hangs
-    // every command after it.
+    // The video panel is created here and started either side of the vendor table, as that
+    // panel's own driver does. Never read the panel's ID: a panel that does not answer a DSI
+    // read hangs every command sent after it, and nothing in this firmware needs the answer.
     err = esp_lcd_new_panel_dpi(bus, &dpi, &g_panel);
     if (err != ESP_OK) return fail("DPI panel", err);
     if (PANEL_INIT_AFTER_DPI_START) {

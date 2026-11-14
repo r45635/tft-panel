@@ -31,6 +31,10 @@ constexpr int DSI_LANE_MBPS = 1000;
 // Brought up with the driver's legacy default reference; left as it is until this board can be
 // retested (see the note on P4 rev 3.0 and newer in pins_p4_s070_wba.h).
 constexpr mipi_dsi_phy_clock_source_t DSI_PHY_CLK_SRC = (mipi_dsi_phy_clock_source_t)0;
+// No GPIO-switched panel rails on this board: it powers its panel on its own.
+constexpr int PANEL_POWER_GPIO_1 = -1;
+constexpr int PANEL_POWER_GPIO_2 = -1;
+constexpr int PANEL_POWER_STEP_MS = 0;
 constexpr int PANEL_PHY_POWER_MS = 0;   // settling time after the PHY supply comes up
 constexpr int DSI_PHY_LDO_CHAN = 3;        // LDO_VO3 powers the MIPI D-PHY
 constexpr int DSI_PHY_LDO_MV = 2500;
@@ -43,9 +47,13 @@ constexpr bool LCD_BACKLIGHT_ACTIVE_LOW = true;
 // Mounted upside down: the image is rotated on its way to the panel, because the controller's
 // MADCTL flip has no effect in video mode.
 constexpr bool PANEL_UPSIDE_DOWN = true;
+// Brought up without the 2D DMA path; left as it is.
+constexpr bool PANEL_USE_DMA2D = false;
 
-// Vendor init table, {command, data length, data bytes...} repeated: two-lane mode then the
-// sequence of esp_lcd_ek79007 2.0.2 (Apache-2.0). Sleep out is sent by the board layer.
+// Vendor init table, {command, data length, delay after in ms, data bytes...} repeated: two-lane
+// mode then the sequence of esp_lcd_ek79007 2.0.2 (Apache-2.0). Sleep out is sent by the board
+// layer, and no entry needs a delay of its own.
+constexpr int PANEL_RESET_HIGH_MS = 0;   // this one needs no high pulse before the low one
 constexpr int PANEL_RESET_LOW_MS = 10;
 constexpr int PANEL_RESET_WAIT_MS = 20;
 // Brought up sending its nine commands before the video stream started; left as it was.
@@ -55,8 +63,8 @@ constexpr bool PANEL_INIT_SENDS_SLEEP_OUT = false;
 constexpr bool PANEL_NEEDS_DISPLAY_ON = false;
 constexpr int PANEL_SLEEP_OUT_MS = 120;
 constexpr uint8_t PANEL_INIT[] = {
-    0xB2, 1, 0x10, 0x80, 1, 0x8B, 0x81, 1, 0x78, 0x82, 1, 0x84, 0x83, 1, 0x88,
-    0x84, 1, 0xA8, 0x85, 1, 0xE3, 0x86, 1, 0x88,
+    0xB2, 1, 0, 0x10, 0x80, 1, 0, 0x8B, 0x81, 1, 0, 0x78, 0x82, 1, 0, 0x84, 0x83, 1, 0, 0x88,
+    0x84, 1, 0, 0xA8, 0x85, 1, 0, 0xE3, 0x86, 1, 0, 0x88,
 };
 
 // ---- I2C bus: GT911 touch (0x5D), ES8311 codec (0x18), ES7210 mic ADC (0x40) ----
