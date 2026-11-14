@@ -378,11 +378,12 @@ std::vector<OutputInfo> followedOutputs() {
     return o;
 }
 
-void currentTrack(String &title, String &artist, String &album) {
+void currentTrack(String &title, String &artist, String &album, uint32_t *durationMs) {
     xSemaphoreTake(g_lock, portMAX_DELAY);
     title = g_snap.title;
     artist = g_snap.artist;
     album = g_snap.album;
+    if (durationMs) *durationMs = g_snap.durationMs;
     xSemaphoreGive(g_lock);
 }
 

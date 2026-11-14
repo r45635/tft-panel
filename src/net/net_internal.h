@@ -46,7 +46,7 @@ void markHealthy();                        // a freshly installed image answered
 bool publishZones(std::shared_ptr<std::vector<ZoneInfo>> zones);
 String followedZoneId();                   // empty if none
 std::vector<OutputInfo> followedOutputs();
-void currentTrack(String &title, String &artist, String &album);
+void currentTrack(String &title, String &artist, String &album, uint32_t *durationMs = nullptr);
 // The followed zone's track. Runs the position clock, spots a track change, asks for the cover
 // and the lyrics, and sets the status line.
 // Takes ownership: the outputs move into the snapshot rather than being copied under

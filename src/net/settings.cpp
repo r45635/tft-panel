@@ -44,6 +44,7 @@ void begin() {
     g_s.serverHost = read("srv_host");
     g_s.serverId = read("srv_id");
     g_s.serverToken = read("srv_token");
+    g_s.lyricsUrl = read("lyrics_url");
     g_s.apPass = read("ap_pass");
     g_s.leadMs = g_prefs.isKey("lead") ? g_prefs.getInt("lead", 250) : 250;
     g_leadMs = g_s.leadMs;
@@ -135,6 +136,13 @@ void setServerHost(const String &hostPort) {
     g_s.serverHost = hostPort;
     xSemaphoreGive(g_lock);
     putString("srv_host", hostPort);
+}
+
+void setLyricsUrl(const String &url) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.lyricsUrl = url;
+    xSemaphoreGive(g_lock);
+    putString("lyrics_url", url);
 }
 
 void setPairing(const String &serverId, const String &token) {
