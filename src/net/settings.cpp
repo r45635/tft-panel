@@ -39,6 +39,11 @@ void begin() {
     g_s.companionUrl = read("companion");
     g_s.accessToken = read("token");
     g_s.zoneId = read("zone");
+    g_s.source = g_prefs.isKey("source") && g_prefs.getUChar("source", 0) == 1 ? SourceKind::Direct
+                                                                               : SourceKind::Companion;
+    g_s.serverHost = read("srv_host");
+    g_s.serverId = read("srv_id");
+    g_s.serverToken = read("srv_token");
     g_s.apPass = read("ap_pass");
     g_s.leadMs = g_prefs.isKey("lead") ? g_prefs.getInt("lead", 250) : 250;
     g_leadMs = g_s.leadMs;
@@ -108,6 +113,40 @@ void setZone(const String &zoneId) {
     xSemaphoreGive(g_lock);
     putString("zone", zoneId);
 }
+
+void setSource(SourceKind kind) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.source = kind;
+    xSemaphoreGive(g_lock);
+    g_prefs.begin(NS, false);
+    g_prefs.putUChar("source", (uint8_t)kind);
+    g_prefs.end();
+}
+
+SourceKind source() {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    SourceKind k = g_s.source;
+    xSemaphoreGive(g_lock);
+    return k;
+}
+
+void setServerHost(const String &hostPort) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.serverHost = hostPort;
+    xSemaphoreGive(g_lock);
+    putString("srv_host", hostPort);
+}
+
+void setPairing(const String &serverId, const String &token) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.serverId = serverId;
+    g_s.serverToken = token;
+    xSemaphoreGive(g_lock);
+    putString("srv_id", serverId);
+    putString("srv_token", token);
+}
+
+void forgetPairing() { setPairing("", ""); }
 
 void setLead(int32_t ms) {
     xSemaphoreTake(g_lock, portMAX_DELAY);

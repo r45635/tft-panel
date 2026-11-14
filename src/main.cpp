@@ -99,6 +99,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
+    Serial.println("[cmd] source companion|direct | server <host:port>|auto | forget-pairing");
     Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off|pos <ms>|manual on|off|slide <%>] | show <screen>|none | shots on|off | screenshot | lib ... | touchdiag | erase-all | bringup | restart");
 }
 
@@ -123,6 +124,22 @@ void handleCommand(String line) {
         settings::forgetWifi();
         net::reconnect();
         Serial.println("[cmd] Wi-Fi forgotten");
+    } else if (cmd == "source" && arg.length()) {
+        bool direct = arg == "direct" || arg == "roon";
+        settings::setSource(direct ? settings::SourceKind::Direct : settings::SourceKind::Companion);
+        Serial.printf("[cmd] source = %s, restarting\n", direct ? "direct" : "companion");
+        delay(300);
+        board::restart();
+    } else if (cmd == "server" && arg.length()) {
+        settings::setServerHost(arg == "auto" ? "" : arg);
+        Serial.printf("[cmd] music server = %s, restarting\n", arg.c_str());
+        delay(300);
+        board::restart();
+    } else if (cmd == "forget-pairing") {
+        settings::forgetPairing();
+        Serial.println("[cmd] pairing forgotten, restarting");
+        delay(300);
+        board::restart();
     } else if (cmd == "companion" && arg.length()) {
         settings::setCompanion(arg == "auto" ? "" : arg);
         net::reconnect();

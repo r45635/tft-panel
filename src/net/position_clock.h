@@ -1,11 +1,18 @@
 // Playback position estimator from Roon's whole-second seek positions.
 //
-// Each sample says: at local time t (ms), the true position p(t) lies in [seek, seek + 1000).
+// Each sample says: at local time t (ms), the true position p(t) lies in [seek, seek + quantum).
 // With p(t) = t + offset, that bounds `offset` to [seek - t, seek + 1000 - t). Intersecting
 // those windows over successive samples converges on the moment each second ticks over,
 // far tighter than any single sample (the companion web player gets the same precision
 // from its push channel; we poll). Each window is widened by the request's half round
 // trip, the uncertainty of t. An empty intersection means a seek or a stall: start over.
+//
+// The quantum is a thousand when the position was fetched at a moment of our choosing, so it
+// can be anywhere inside the second it names. It is zero when the position arrived *because*
+// it changed: the server pushed it as the second ticked over, so the position is that second,
+// give or take the slack. A source that is pushed to and still claims a thousand never narrows
+// its window, because every sample then says the same thing, and its estimate sits half a
+// second late.
 //
 // Header-only and free of Arduino types so it can be unit-tested on the host.
 #pragma once
@@ -16,14 +23,14 @@ class PositionClock {
 public:
     // seekMs: reported position (whole seconds, in ms); t: local time of the sample
     // (middle of the request); slackMs: half the round trip.
-    void observe(int32_t seekMs, uint32_t t, bool playing, int32_t slackMs) {
+    void observe(int32_t seekMs, uint32_t t, bool playing, int32_t slackMs, int32_t quantumMs = 1000) {
         if (!playing) {
             valid_ = false;
             pausedAt_ = seekMs;
             return;
         }
         int64_t lo = (int64_t)seekMs - t - slackMs;
-        int64_t hi = (int64_t)seekMs + 1000 - t + slackMs;
+        int64_t hi = (int64_t)seekMs + quantumMs - t + slackMs;
         if (valid_ && lo < hi_ && hi > lo_) {
             if (lo > lo_) lo_ = lo;
             if (hi < hi_) hi_ = hi;

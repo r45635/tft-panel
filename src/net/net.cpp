@@ -21,6 +21,7 @@
 #include "settings.h"
 #include "source.h"
 #include "source_companion.h"
+#include "source_roon.h"
 
 namespace net {
 using namespace internal;
@@ -437,7 +438,7 @@ void publishNowPlaying(NowPlaying np) {
                  String(np.durationMs);
     bool newTrack = key != g_trackKey;
     if (newTrack) g_clock.reset();
-    g_clock.observe(np.seekMs, np.sampleAtMs, np.state == "playing", np.slackMs);
+    g_clock.observe(np.seekMs, np.sampleAtMs, np.state == "playing", np.slackMs, np.quantumMs);
     update([&](Snapshot &s) {
         s.positionMs = g_clock.positionAt(np.sampleAtMs);
         s.positionAtMs = np.sampleAtMs;
@@ -713,15 +714,24 @@ int32_t Snapshot::positionAt(uint32_t now) const {
     return p < 0 ? 0 : p;
 }
 
-// The one source in use. A second one (talking to the music server directly) plugs in here,
-// chosen from the settings at startup; everything above is written against the interface only.
+// The source in use, chosen once at startup from the settings: everything above is written
+// against the interface only. Switching sources means re-reading the settings, which is a
+// restart (settings::setSource then board::restart), because a source owns its connection.
 namespace {
 CompanionSource g_companion;
+#if defined(SOURCE_ROON)
+DirectSource g_direct;
+#endif
+Source *g_source = &g_companion;
 }  // namespace
 
-Source &source() { return g_companion; }
+Source &source() { return *g_source; }
 
 void begin() {
+#if defined(SOURCE_ROON)
+    if (settings::source() == settings::SourceKind::Direct) g_source = &g_direct;
+#endif
+    Serial.printf("[net] source: %s\n", g_source->name());
     g_coverQueue = xQueueCreate(1, sizeof(CoverRequest));
     xTaskCreatePinnedToCore(coverTask, "cover", 8192, nullptr, 1, nullptr, 0);
     ota::begin();

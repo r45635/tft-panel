@@ -37,6 +37,9 @@ struct NowPlaying {
     int32_t seekMs = 0;      // whole seconds, as the server reports them
     uint32_t sampleAtMs = 0; // local millis() at which `seekMs` was true
     int32_t slackMs = 0;     // how much to widen the position window (round trip, jitter)
+    // How far past `seekMs` the true position can be at `sampleAtMs`: a whole second when the
+    // position was asked for, nothing when the server pushed it as the second ticked over.
+    int32_t quantumMs = 1000;
     bool canPlay = false, canPause = false, canNext = false, canPrevious = false;
     std::vector<OutputInfo> outputs;
 };
