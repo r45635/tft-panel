@@ -15,6 +15,7 @@
 #include "board/board.h"
 #include "board/board_pins.h"
 #include "net/net.h"
+#include "net/lyrics_source.h"
 #include "net/settings.h"
 
 namespace {
@@ -99,7 +100,7 @@ void screenshot() {
 
 void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
-    Serial.println("[cmd] source companion|direct | server <host:port>|auto | lyrics <url>|none | forget-pairing");
+    Serial.println("[cmd] source companion|direct | server <host:port>|auto | lyrics auto|<url>|none | lyrics-token <t>|none | forget-pairing");
     Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off|pos <ms>|manual on|off|slide <%>] | show <screen>|none | shots on|off | screenshot | lib ... | touchdiag | erase-all | bringup | restart");
 }
 
@@ -136,8 +137,12 @@ void handleCommand(String line) {
         delay(300);
         board::restart();
     } else if (cmd == "lyrics" && arg.length()) {
-        settings::setLyricsUrl(arg == "none" ? "" : arg);
-        Serial.printf("[cmd] lyrics server = %s\n", arg.c_str());
+        settings::setLyricsUrl(arg == "auto" ? "" : arg);
+        net::lyricsrc::forgetDiscovered();
+        Serial.printf("[cmd] lyrics from %s\n", arg == "auto" ? "a companion on the network" : arg.c_str());
+    } else if (cmd == "lyrics-token" && arg.length()) {
+        settings::setLyricsToken(arg == "none" ? "" : arg);
+        Serial.println("[cmd] lyrics token saved");
     } else if (cmd == "forget-pairing") {
         settings::forgetPairing();
         Serial.println("[cmd] pairing forgotten, restarting");

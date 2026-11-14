@@ -2,14 +2,12 @@
 
 #if defined(SOURCE_ROON)
 
-#include <HTTPClient.h>
-#include <NetworkClientSecure.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <tftcore/arduino_io.h>
 
 #include "../app/cover.h"
-#include "../app/lyrics.h"
+#include "lyrics_source.h"
 #include "settings.h"
 #include "version.h"
 
@@ -214,79 +212,10 @@ void DirectSource::publishEverything(const tftcore::ZoneList &zones, const tftco
 // ---- Lyrics, from a server that has them ----
 
 bool DirectSource::fetchLyrics(const String &) {
-    String base = settings::get().lyricsUrl;
-    if (!base.length()) return false;   // nothing configured: the UI says there are none
-    while (base.endsWith("/")) base.remove(base.length() - 1);
-
     String title, artist, album;
     uint32_t durationMs = 0;
     currentTrack(title, artist, album, &durationMs);
-    if (!title.length() || !artist.length()) return false;
-
-    publishLyricsLoading();
-    String url = base + "/api/get?track_name=" + urlEncode(title) + "&artist_name=" + urlEncode(artist);
-    if (album.length()) url += "&album_name=" + urlEncode(album);
-    if (durationMs) url += "&duration=" + String(durationMs / 1000);
-
-    // The mirror on the network is plain HTTP; the public site is not. Both are supported, and
-    // the secure one costs a TLS session, which is why a local mirror is worth having.
-    NetworkClientSecure secure;
-    WiFiClient plain;
-    bool https = url.startsWith("https://");
-    if (https) secure.useBuiltinCACertBundle();   // the same roots the update check trusts
-    HTTPClient http;
-    http.setConnectTimeout(3000);
-    http.setTimeout(8000);
-    http.setReuse(false);
-    http.useHTTP10(true);
-    bool begun = https ? http.begin(secure, url) : http.begin(plain, url);
-    if (!begun) {
-        publishLyricsFailed(LyricsStatus::Error, "bad lyrics server address");
-        return true;
-    }
-    int code = http.GET();
-    if (code == 404) {   // the one answer that means "not here", as opposed to a fault
-        http.end();
-        Serial.println("[net] lyrics: not in the lyrics server");
-        publishLyricsFailed(LyricsStatus::NotFound, "");
-        return true;
-    }
-    if (code != 200) {
-        String why = code < 0 ? HTTPClient::errorToString(code) : "HTTP " + String(code);
-        http.end();
-        Serial.printf("[net] lyrics failed: %s\n", why.c_str());
-        publishLyricsFailed(LyricsStatus::Error, why);
-        return true;
-    }
-    JsonDocument doc(psram());
-    DeserializationError err = deserializeJson(doc, http.getStream());
-    http.end();
-    if (err) {
-        publishLyricsFailed(LyricsStatus::Error, String("bad answer (") + err.c_str() + ")");
-        return true;
-    }
-
-    if (doc["instrumental"] | false) {
-        Serial.println("[net] lyrics: instrumental");
-        publishLyrics(LyricsStatus::Instrumental, nullptr, "lyrics server", 0);
-        return true;
-    }
-    String text = doc["syncedLyrics"] | "";
-    bool synced = text.length() > 0;
-    if (!synced) text = doc["plainLyrics"] | "";
-    if (!text.length()) {
-        publishLyricsFailed(LyricsStatus::NotFound, "");
-        return true;
-    }
-    auto parsed = std::make_shared<const lyrics::Lyrics>(lyrics::parse(text));
-    if (parsed->lines.empty()) {
-        publishLyricsFailed(LyricsStatus::NotFound, "");
-        return true;
-    }
-    Serial.printf("[net] lyrics: found, %u lines, %s, from the lyrics server\n",
-                  (unsigned)parsed->lines.size(), parsed->synced ? "synced" : "plain");
-    publishLyrics(LyricsStatus::Found, parsed, "lyrics server", 0);
-    return true;
+    return lyricsrc::lookup(title, artist, album, durationMs);
 }
 
 // ---- User commands ----

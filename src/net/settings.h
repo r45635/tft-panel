@@ -21,7 +21,10 @@ struct Settings {
     String serverHost;     // direct mode: "host:port" to skip discovery; empty = find it
     String serverId;       // direct mode: the server this pairing belongs to
     String serverToken;    // direct mode: the pairing token, so it is asked for only once
-    String lyricsUrl;      // direct mode: an LRCLIB-compatible server; empty = no lyrics
+    // Where lyrics come from when the music source has none: empty = find a companion on the
+    // network, "none" = do without, anything else = an LRCLIB-compatible server's base URL.
+    String lyricsUrl;
+    String lyricsToken;    // bearer token, for a lyrics server that asks for one
     String apPass;         // setup AP password, generated once per device
     int32_t leadMs = 250;  // show each lyric line this much before its timestamp
     bool backdrop = true;  // cover art as the screen background
@@ -48,6 +51,7 @@ void setSource(SourceKind kind);
 SourceKind source();
 void setServerHost(const String &hostPort);
 void setLyricsUrl(const String &url);
+void setLyricsToken(const String &token);
 // Direct mode's pairing, kept per server so a different one asks again.
 void setPairing(const String &serverId, const String &token);
 void forgetPairing();
