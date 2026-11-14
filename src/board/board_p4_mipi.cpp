@@ -311,9 +311,14 @@ lv_display_t *display() { return g_disp; }
 // request (screenshots only), so no frame pays for a copy.
 const uint16_t *frameBuffer() {
     if (!g_fb) return nullptr;
+    esp_cache_msync(g_fb, FB_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    // A screenshot shows what a person sees. On a panel mounted upside down the buffer holds the
+    // image already turned for the glass, so it is turned back here; on one mounted the right way
+    // up it is handed over as it is. Turning it unconditionally is how screenshots of the VIEWE
+    // board came out upside down while its screen was perfectly readable.
+    if (!PANEL_UPSIDE_DOWN) return g_fb;
     if (!g_upright) g_upright = (uint16_t *)heap_caps_aligned_alloc(64, FB_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!g_upright) return nullptr;
-    esp_cache_msync(g_fb, FB_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
     const size_t n = FB_BYTES / 2;
     for (size_t i = 0; i < n; i++) g_upright[i] = g_fb[n - 1 - i];
     return g_upright;
