@@ -19,6 +19,8 @@
 #include "web_update.h"
 #include "position_clock.h"
 #include "settings.h"
+#include "source.h"
+#include "source_companion.h"
 
 namespace net {
 using namespace internal;
@@ -28,12 +30,9 @@ namespace {
 // ---- Timings ----
 constexpr uint32_t WIFI_TIMEOUT_MS = 20000;        // one connection attempt
 constexpr uint32_t WIFI_PORTAL_AFTER_MS = 60000;   // stored Wi-Fi failing that long → portal too
-constexpr uint32_t NOW_PLAYING_PERIOD_MS = 300;   // narrower windows for PositionClock
-constexpr uint32_t ZONES_PERIOD_MS = 5000;
-constexpr uint32_t DISCOVERY_PERIOD_MS = 5000;
+// Asking again for lyrics is the net task's policy, whichever source resolves them.
 constexpr uint32_t LYRICS_RETRY_MS = 60000;        // "not found" may resolve later (new source)
 constexpr int LYRICS_MAX_RETRIES = 3;
-constexpr int FAILS_BEFORE_REDISCOVERY = 6;        // ~3 s of failed polls
 
 SemaphoreHandle_t g_lock = nullptr;
 Snapshot g_snap;
@@ -44,24 +43,12 @@ volatile bool g_paused = false;
 
 // Fields below are touched only by the net task.
 String g_apSsid, g_apPass;
-String g_baseUrl;
-bool g_baseFromMdns = false;
 bool g_mdnsStarted = false;
-int g_consecutiveFails = 0;
 uint32_t g_wifiAttemptAt = 0, g_wifiDownSince = 0;
 uint8_t g_lastDisconnectReason = 0;
 String g_trackKey;
 String g_imageKey;          // cover currently shown (or attempted)
 bool g_backdropWanted = true;
-uint32_t g_lastZonesAt = 0, g_lastNowPlayingAt = 0;
-
-enum class CmdType : uint8_t { Control, Volume, Zone, VolumeSet, Mute, Offset, Library };
-struct Command {
-    CmdType type;
-    int8_t direction;
-    char arg[128];   // a search text, or Find's "<name>\n<artist>"
-    float value;
-};
 QueueHandle_t g_commands = nullptr;
 volatile bool g_scanRequested = false;
 uint32_t g_lastScanAt = 0;
@@ -77,6 +64,10 @@ void update(F &&fn) {
     xSemaphoreGive(g_lock);
 }
 
+}  // namespace
+
+namespace internal {
+
 void setPhase(Phase p, const String &status) {
     bool changed = false;
     xSemaphoreTake(g_lock, portMAX_DELAY);
@@ -89,6 +80,16 @@ void setPhase(Phase p, const String &status) {
     xSemaphoreGive(g_lock);
     if (changed) Serial.printf("[net] %s\n", status.c_str());
 }
+
+void publishServer(const String &url) {
+    update([&](Snapshot &s) { s.companion = url; });
+}
+
+void markHealthy() { ota::markHealthy(); }
+
+}  // namespace internal
+
+namespace {
 
 void openPortalNow() {
     if (portal::active()) return;
@@ -138,63 +139,7 @@ ArduinoJson::Allocator *psram() {
     return &a;
 }
 
-// GET when `body` is null, else POST it as JSON.
-HttpResult request(const String &path, const JsonDocument *body, JsonDocument &doc, uint32_t timeoutMs) {
-    HttpResult r;
-    WiFiClient client;
-    HTTPClient http;
-    http.setConnectTimeout(3000);
-    http.setTimeout(timeoutMs);
-    http.setReuse(false);
-    if (!http.begin(client, g_baseUrl + path)) {
-        r.code = -100;
-        r.message = "bad companion URL";
-        return r;
-    }
-    String token = settings::get().accessToken;
-    if (token.length()) http.addHeader("Authorization", "Bearer " + token);
-    http.useHTTP10(true);   // no chunked encoding: parse straight from the socket, no body String
-    if (body) {
-        String payload;
-        serializeJson(*body, payload);
-        http.addHeader("Content-Type", "application/json");
-        r.code = http.POST(payload);
-    } else {
-        r.code = http.GET();
-    }
-    if (r.code < 0) {
-        r.message = HTTPClient::errorToString(r.code);
-        http.end();
-        return r;
-    }
-    DeserializationError err = deserializeJson(doc, http.getStream());
-    http.end();
-    if (err) {
-        r.message = String("bad JSON (") + err.c_str() + ")";
-        if (r.code == 200) r.code = -101;
-        return r;
-    }
-    if (r.code != 200) {
-        r.errorCode = doc["error"]["code"] | "";
-        r.message = doc["error"]["message"] | ("HTTP " + String(r.code)).c_str();
-    }
-    return r;
-}
-
-}  // namespace internal
-
-namespace {
-
-HttpResult getJson(const String &path, JsonDocument &doc, uint32_t timeoutMs) {
-    return request(path, nullptr, doc, timeoutMs);
-}
-
-}  // namespace
-
-namespace internal {
-
-HttpResult getBytes(const String &base, const String &path, uint8_t *&buf, size_t &len, size_t maxLen,
-                    uint32_t timeoutMs) {
+HttpResult getBytes(const String &url, uint8_t *&buf, size_t &len, size_t maxLen, uint32_t timeoutMs) {
     HttpResult r;
     buf = nullptr;
     len = 0;
@@ -203,9 +148,9 @@ HttpResult getBytes(const String &base, const String &path, uint8_t *&buf, size_
     http.setConnectTimeout(3000);
     http.setTimeout(timeoutMs);
     http.useHTTP10(true);
-    if (!http.begin(client, base + path)) {
+    if (!http.begin(client, url)) {
         r.code = -100;
-        r.message = "bad companion URL";
+        r.message = "bad image URL";
         return r;
     }
     String token = settings::get().accessToken;
@@ -248,8 +193,6 @@ HttpResult getBytes(const String &base, const String &path, uint8_t *&buf, size_
     return r;
 }
 
-const String &baseUrl() { return g_baseUrl; }
-
 String followedZoneId() {
     xSemaphoreTake(g_lock, portMAX_DELAY);
     String z = g_snap.zoneId;
@@ -277,13 +220,11 @@ void setCover(cover::Cover c) {
     });
 }
 
-// Fetches the cover at `px` and builds the pictures. false with `why` on failure.
-bool loadCover(const String &base, const String &imageKey, int px, bool withBig, cover::Cover &c, size_t &len,
-               String &why) {
+// Fetches one cover URL and builds the pictures. false with `why` on failure.
+bool loadCover(const String &url, bool withBig, cover::Cover &c, size_t &len, String &why) {
     uint8_t *jpeg = nullptr;
     len = 0;
-    String q = "?w=" + String(px) + "&h=" + String(px);
-    HttpResult r = getBytes(base, "/api/roon/image/" + imageKey + q, jpeg, len, 256 * 1024, 5000);
+    HttpResult r = getBytes(url, jpeg, len, 256 * 1024, 5000);
     if (r.code != 200 || !jpeg) {
         why = "not loaded: " + r.message;
         return false;
@@ -299,8 +240,8 @@ bool loadCover(const String &base, const String &imageKey, int px, bool withBig,
 // generation: a cover finished after the track changed again is dropped.
 struct CoverRequest {
     uint32_t gen;
-    char base[96];
-    char key[96];
+    char bigUrl[224];     // both sizes are resolved before the request is queued: the cover task
+    char thumbUrl[224];   // runs on another core and must not read the source's address
 };
 QueueHandle_t g_coverQueue = nullptr;
 volatile uint32_t g_coverGen = 0;
@@ -308,15 +249,14 @@ volatile uint32_t g_coverGen = 0;
 // One fetch at the big size feeds the cover view, the thumbnail and the backdrop. If the big
 // one fails (e.g. a progressive JPEG), the small one still gives thumbnail and backdrop.
 void buildCover(const CoverRequest &rq) {
-    String base = rq.base, key = rq.key;
     uint32_t t0 = millis();
     cover::Cover c;
     size_t len = 0;
     String why;
-    bool ok = loadCover(base, key, COVER_BIG_PX, true, c, len, why);
+    bool ok = loadCover(rq.bigUrl, true, c, len, why);
     if (!ok) {
         Serial.printf("[net] WARNING: big cover %s, trying the small one\n", why.c_str());
-        ok = loadCover(base, key, COVER_THUMB_PX, false, c, len, why);
+        ok = loadCover(rq.thumbUrl, false, c, len, why);
         if (!ok) Serial.printf("[net] WARNING: cover %s\n", why.c_str());
     }
     if (rq.gen != g_coverGen) return;   // the track changed meanwhile
@@ -344,30 +284,19 @@ void fetchCover(const String &imageKey) {
         setCover({});
         return;
     }
+    String big = source().imageUrl(imageKey, COVER_BIG_PX);
+    String thumb = source().imageUrl(imageKey, COVER_THUMB_PX);
+    if (!big.length() || !thumb.length()) {
+        setCover({});
+        return;
+    }
     CoverRequest rq{};
     rq.gen = gen;
-    strlcpy(rq.base, g_baseUrl.c_str(), sizeof rq.base);
-    strlcpy(rq.key, imageKey.c_str(), sizeof rq.key);
+    strlcpy(rq.bigUrl, big.c_str(), sizeof rq.bigUrl);
+    strlcpy(rq.thumbUrl, thumb.c_str(), sizeof rq.thumbUrl);
     xQueueOverwrite(g_coverQueue, &rq);
 }
 
-// Turns a failed call into the status line, and drops a discovered companion after
-// several failures in a row so a restarted one (new IP/port) is found again.
-void reportCompanionFailure(const char *what, const HttpResult &r) {
-    g_consecutiveFails++;
-    String msg;
-    if (r.code == 401) msg = "Companion needs its access token (set it in the setup portal)";
-    else if (r.code == 503) msg = "Companion: Roon Core not connected";
-    else msg = String("Companion ") + what + " failed: " + r.message;
-    setPhase(Phase::CompanionError, msg);
-    if (g_baseFromMdns && g_consecutiveFails >= FAILS_BEFORE_REDISCOVERY) {
-        Serial.printf("[net] dropping %s after %d failures, rediscovering\n", g_baseUrl.c_str(), g_consecutiveFails);
-        g_baseUrl = "";
-        update([](Snapshot &s) { s.companion = ""; });
-    }
-}
-
-// ---- Companion discovery ----
 }  // namespace
 
 // The chip's base MAC from eFuse: valid before Wi-Fi starts, and on the P4 (whose Wi-Fi is
@@ -393,93 +322,32 @@ void startMdns() {
     else Serial.println("[net] WARNING: mDNS responder failed to start");
 }
 
-bool discover() {
-    settings::Settings st = settings::get();
-    if (st.companionUrl.length()) {
-        g_baseUrl = st.companionUrl;
-        g_baseFromMdns = false;
-    } else {
-        startMdns();
-        setPhase(Phase::Discovering, "Looking for the TextFromTrack companion on the network...");
-        int n = MDNS.queryService("textfromtrack", "tcp");
-        for (int i = 0; i < n; i++) {
-            IPAddress ip = MDNS.address(i);
-            if (ip == IPAddress((uint32_t)0)) continue;
-            g_baseUrl = "http://" + ip.toString() + ":" + String(MDNS.port(i));
-            g_baseFromMdns = true;
-            Serial.printf("[net] companion \"%s\" at %s\n", MDNS.hostname(i).c_str(), g_baseUrl.c_str());
-            break;
-        }
-        if (!g_baseUrl.length()) {
-            setPhase(Phase::Discovering,
-                     n < 0 ? "mDNS query failed - set the companion address in the setup portal"
-                           : "No companion found on the network yet (is it running?)");
-            return false;
-        }
-    }
-    g_consecutiveFails = 0;
-    update([](Snapshot &s) { s.companion = g_baseUrl; });
-    return true;
-}
+}  // namespace
 
-// ---- Zones ----
+namespace internal {
 
-// Picks the zone to follow: the pinned one if it exists, else keep the current zone
-// while it plays, else the first playing zone, else the first with a track, else the first.
-bool refreshZones() {
-    JsonDocument doc(psram());
-    HttpResult r = getJson("/api/roon/zones", doc, 4000);
-    if (r.code != 200) {
-        reportCompanionFailure("zones", r);
-        return false;
-    }
-    JsonArrayConst zones = doc["zones"].as<JsonArrayConst>();
-    String pinned = settings::get().zoneId;
-    String current;
-    xSemaphoreTake(g_lock, portMAX_DELAY);
-    current = g_snap.zoneId;
-    xSemaphoreGive(g_lock);
+void ensureMdns() { startMdns(); }
 
-    auto list = std::make_shared<std::vector<ZoneInfo>>();
-    JsonObjectConst chosen, firstPlaying, firstLoaded, first, cur;
-    for (JsonObjectConst z : zones) {
-        String id = z["zone_id"] | "";
-        String state = z["state"] | "";
-        list->push_back({id, z["display_name"] | "", state, z["now_playing_title"] | "", z["now_playing_artist"] | ""});
-        if (first.isNull()) first = z;
-        if (pinned.length() && id == pinned) chosen = z;
-        if (id == current) cur = z;
-        if (firstPlaying.isNull() && state == "playing") firstPlaying = z;
-        if (firstLoaded.isNull() && !z["now_playing_title"].isNull()) firstLoaded = z;
-    }
-    bool isPinned = !chosen.isNull();
-    if (chosen.isNull() && !cur.isNull() && String(cur["state"] | "") == "playing") chosen = cur;
-    if (chosen.isNull()) chosen = firstPlaying;
-    if (chosen.isNull() && !cur.isNull()) chosen = cur;
-    if (chosen.isNull()) chosen = firstLoaded;
-    if (chosen.isNull()) chosen = first;
-    if (chosen.isNull()) {
-        g_consecutiveFails = 0;
-        setPhase(Phase::Idle, "The companion sees no Roon zone");
-        return false;
-    }
-    if (pinned.length() && !isPinned)
-        Serial.printf("[net] WARNING: pinned zone %s not found, following another zone\n", pinned.c_str());
+}  // namespace internal
 
-    String id = chosen["zone_id"] | "";
-    String name = chosen["display_name"] | "";
-    if (id != current) Serial.printf("[net] following zone \"%s\"%s\n", name.c_str(), isPinned ? " (pinned)" : "");
-    update([&](Snapshot &s) {
-        s.zoneId = id;
-        s.zoneName = name;
-        s.zonePinned = isPinned;
-        s.zones = list;
-        s.zonesSerial++;
-    });
-    return true;
-}
+namespace {
 
 // ---- Now playing + lyrics ----
+
+// Asks the source for the lyrics of what is playing. A source that has none says so and is
+// never asked again for that track.
+void askLyrics(const String &zoneId) {
+    if (!source().fetchLyrics(zoneId)) {
+        update([](Snapshot &s) {
+            s.lyricsStatus = LyricsStatus::None;
+            s.lyrics.reset();
+            s.lyricsSerial++;
+            s.lyricsSource = s.lyricsError = "";
+        });
+        g_lyricsRetries = LYRICS_MAX_RETRIES;
+    }
+    g_lyricsFetchedAt = millis();
+}
 
 void clearTrack() {
     g_trackKey = "";
@@ -496,143 +364,115 @@ void clearTrack() {
     });
 }
 
-void fetchLyrics(const String &zoneId) {
-    update([](Snapshot &s) { s.lyricsStatus = LyricsStatus::Loading; });
-    JsonDocument doc(psram());
-    // The companion resolves lyrics before answering (cache, tags, LRCLIB…): allow time.
-    HttpResult r = getJson("/api/lyrics/current?zone_id=" + zoneId, doc, 20000);
-    g_lyricsFetchedAt = millis();
-    if (r.code != 200) {
-        Serial.printf("[net] lyrics failed: %d %s\n", r.code, r.message.c_str());
-        update([&](Snapshot &s) {
-            s.lyricsStatus = r.errorCode == "NO_CURRENT_TRACK" ? LyricsStatus::None : LyricsStatus::Error;
-            s.lyricsError = r.message;
-        });
-        return;
-    }
-    JsonObjectConst l = doc["lyrics"];
-    bool found = l["found"] | false;
-    bool instrumental = l["instrumental"] | false;
-    String text = l["text"] | "";
-    String source = l["source"] | "";
-    int32_t offset = l["offset_ms"] | 0;
-    std::shared_ptr<const lyrics::Lyrics> parsed;
-    LyricsStatus st;
-    if (instrumental) st = LyricsStatus::Instrumental;
-    else if (!found || !text.length()) st = LyricsStatus::NotFound;
-    else {
-        parsed = std::make_shared<const lyrics::Lyrics>(lyrics::parse(text));
-        st = parsed->lines.empty() ? LyricsStatus::NotFound : LyricsStatus::Found;
-    }
-    Serial.printf("[net] lyrics: %s, %u lines, %s, source %s, offset %d ms\n",
-                  st == LyricsStatus::Found ? "found" : st == LyricsStatus::Instrumental ? "instrumental" : "not found",
-                  parsed ? (unsigned)parsed->lines.size() : 0u, parsed && parsed->synced ? "synced" : "plain",
-                  source.c_str(), (int)offset);
-    update([&](Snapshot &s) {
-        s.lyricsStatus = st;
-        s.lyrics = parsed;
-        s.lyricsSerial++;
-        s.offsetMs = offset;
-        s.lyricsSource = source;
-        s.lyricsError = "";
-    });
+}  // namespace
+
+namespace internal {
+
+// ---- What a source publishes ----
+
+std::vector<OutputInfo> followedOutputs() {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    std::vector<OutputInfo> o = g_snap.outputs;
+    xSemaphoreGive(g_lock);
+    return o;
 }
 
-void pollNowPlaying() {
-    String zoneId;
+void currentTrack(String &title, String &artist, String &album) {
     xSemaphoreTake(g_lock, portMAX_DELAY);
-    zoneId = g_snap.zoneId;
+    title = g_snap.title;
+    artist = g_snap.artist;
+    album = g_snap.album;
     xSemaphoreGive(g_lock);
-    if (!zoneId.length()) return;
+}
 
-    JsonDocument doc(psram());
-    uint32_t sentAt = millis();
-    HttpResult r = getJson("/api/roon/now-playing?zone_id=" + zoneId, doc, 3000);
-    uint32_t now = millis();
-    if (r.code == 404 && r.errorCode == "NO_CURRENT_TRACK") {
-        g_consecutiveFails = 0;
-        if (g_trackKey.length()) clearTrack();
-        String zoneName;
-        xSemaphoreTake(g_lock, portMAX_DELAY);
-        zoneName = g_snap.zoneName;
-        xSemaphoreGive(g_lock);
-        setPhase(Phase::Idle, "Nothing playing in " + zoneName);
-        return;
-    }
-    if (r.code != 200) {
-        reportCompanionFailure("now-playing", r);
-        return;
-    }
-    g_consecutiveFails = 0;
+// Picks the zone to follow: the pinned one if it exists, else keep the current zone
+// while it plays, else the first playing zone, else the first with a track, else the first.
+bool publishZones(std::shared_ptr<std::vector<ZoneInfo>> zones) {
+    String pinned = settings::get().zoneId;
+    String current = followedZoneId();
 
-    JsonObjectConst np = doc["now_playing"];
-    String title = np["title"] | "";
-    String artist = np["artist"] | "";
-    String album = np["album"] | "";
-    String state = np["state"] | "";
-    String imageKey = np["image_key"] | "";
-    uint32_t durationMs = (uint32_t)(np["duration_seconds"] | 0) * 1000u;
-    int32_t seekMs = (int32_t)(np["seek_position_seconds"] | 0) * 1000;
-    String key = zoneId + "\x1f" + title + "\x1f" + artist + "\x1f" + album + "\x1f" + String(durationMs);
-    bool newTrack = key != g_trackKey;
-    // Middle of the request round trip: best local time for the reported position.
-    uint32_t sampleAt = sentAt + (now - sentAt) / 2;
-
-    std::vector<OutputInfo> outputs;
-    for (JsonObjectConst o : np["outputs"].as<JsonArrayConst>()) {
-        OutputInfo oi;
-        oi.id = o["output_id"] | "";
-        oi.name = o["display_name"] | "";
-        JsonObjectConst v = o["volume"];
-        if (!v.isNull()) {
-            oi.volumeType = v["type"] | "";
-            oi.value = v["value"] | 0.0f;
-            oi.min = v["min"] | 0.0f;
-            oi.max = v["max"] | 0.0f;
-            oi.step = v["step"] | 1.0f;
-            oi.muted = v["is_muted"] | false;
-        }
-        outputs.push_back(oi);
+    const ZoneInfo *chosen = nullptr, *cur = nullptr, *firstPlaying = nullptr, *firstLoaded = nullptr,
+                   *first = nullptr;
+    for (const ZoneInfo &z : *zones) {
+        if (!first) first = &z;
+        if (pinned.length() && z.id == pinned) chosen = &z;
+        if (z.id == current) cur = &z;
+        if (!firstPlaying && z.state == "playing") firstPlaying = &z;
+        if (!firstLoaded && z.title.length()) firstLoaded = &z;
     }
-    bool canPlay = np["is_play_allowed"] | false, canPause = np["is_pause_allowed"] | false;
-    bool canNext = np["is_next_allowed"] | false, canPrevious = np["is_previous_allowed"] | false;
-    if (newTrack) g_clock.reset();
-    g_clock.observe(seekMs, sampleAt, state == "playing", (int32_t)(now - sentAt) / 2 + 10);
+    bool isPinned = chosen != nullptr;
+    if (!chosen && cur && cur->state == "playing") chosen = cur;
+    if (!chosen) chosen = firstPlaying;
+    if (!chosen) chosen = cur;
+    if (!chosen) chosen = firstLoaded;
+    if (!chosen) chosen = first;
+    if (!chosen) return false;
+    if (pinned.length() && !isPinned)
+        Serial.printf("[net] WARNING: pinned zone %s not found, following another zone\n", pinned.c_str());
+
+    String id = chosen->id, name = chosen->name;
+    if (id != current) Serial.printf("[net] following zone \"%s\"%s\n", name.c_str(), isPinned ? " (pinned)" : "");
     update([&](Snapshot &s) {
-        s.positionMs = g_clock.positionAt(sampleAt);
-        s.positionAtMs = sampleAt;
+        s.zoneId = id;
+        s.zoneName = name;
+        s.zonePinned = isPinned;
+        s.zones = zones;
+        s.zonesSerial++;
+    });
+    return true;
+}
+
+void publishIdle() {
+    if (g_trackKey.length()) clearTrack();
+    String zoneName;
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    zoneName = g_snap.zoneName;
+    xSemaphoreGive(g_lock);
+    setPhase(Phase::Idle, "Nothing playing in " + zoneName);
+}
+
+// The position clock, the track change, the cover and the lyrics: the same for every source.
+void publishNowPlaying(NowPlaying np) {
+    String key = np.zoneId + "\x1f" + np.title + "\x1f" + np.artist + "\x1f" + np.album + "\x1f" +
+                 String(np.durationMs);
+    bool newTrack = key != g_trackKey;
+    if (newTrack) g_clock.reset();
+    g_clock.observe(np.seekMs, np.sampleAtMs, np.state == "playing", np.slackMs);
+    update([&](Snapshot &s) {
+        s.positionMs = g_clock.positionAt(np.sampleAtMs);
+        s.positionAtMs = np.sampleAtMs;
         s.positionUncertaintyMs = g_clock.uncertaintyMs();
-        s.state = state;
-        s.title = title;
-        s.artist = artist;
-        s.album = album;
-        s.durationMs = durationMs;
-        s.outputs = std::move(outputs);
-        s.canPlay = canPlay;
-        s.canPause = canPause;
-        s.canNext = canNext;
-        s.canPrevious = canPrevious;
+        s.state = np.state;
+        s.title = np.title;
+        s.artist = np.artist;
+        s.album = np.album;
+        s.durationMs = np.durationMs;
+        s.outputs = std::move(np.outputs);
+        s.canPlay = np.canPlay;
+        s.canPause = np.canPause;
+        s.canNext = np.canNext;
+        s.canPrevious = np.canPrevious;
         if (newTrack) {
             s.lyricsStatus = LyricsStatus::Loading;
             s.lyrics.reset();
             s.lyricsSerial++;
         }
     });
-    setPhase(Phase::Playing, state == "playing" ? "Playing" : state == "paused" ? "Paused" : state);
+    setPhase(Phase::Playing, np.state == "playing" ? "Playing" : np.state == "paused" ? "Paused" : np.state);
 
     if (newTrack) {
         g_trackKey = key;
         g_lyricsRetries = 0;
-        Serial.printf("[net] track: %s - %s (%u s, %s)\n", artist.c_str(), title.c_str(),
-                      (unsigned)(durationMs / 1000), state.c_str());
+        Serial.printf("[net] track: %s - %s (%u s, %s)\n", np.artist.c_str(), np.title.c_str(),
+                      (unsigned)(np.durationMs / 1000), np.state.c_str());
         // Cover first, in its own task: it shows in ~1 s while the lyrics are being resolved.
         g_backdropWanted = settings::backdrop();
-        fetchCover(imageKey);
-        fetchLyrics(zoneId);
+        fetchCover(np.imageKey);
+        askLyrics(np.zoneId);
     } else {
-        if (imageKey != g_imageKey || settings::backdrop() != g_backdropWanted) {
+        if (np.imageKey != g_imageKey || settings::backdrop() != g_backdropWanted) {
             g_backdropWanted = settings::backdrop();
-            fetchCover(imageKey);
+            fetchCover(np.imageKey);
         }
         LyricsStatus ls;
         xSemaphoreTake(g_lock, portMAX_DELAY);
@@ -641,12 +481,37 @@ void pollNowPlaying() {
         if ((ls == LyricsStatus::NotFound || ls == LyricsStatus::Error) && g_lyricsRetries < LYRICS_MAX_RETRIES &&
             millis() - g_lyricsFetchedAt > LYRICS_RETRY_MS) {
             g_lyricsRetries++;
-            fetchLyrics(zoneId);
+            askLyrics(np.zoneId);
         }
     }
 }
 
-// ---- User commands ----
+void publishLyricsLoading() {
+    update([](Snapshot &s) { s.lyricsStatus = LyricsStatus::Loading; });
+}
+
+void publishLyrics(LyricsStatus st, std::shared_ptr<const lyrics::Lyrics> parsed, const String &source,
+                   int32_t offsetMs) {
+    update([&](Snapshot &s) {
+        s.lyricsStatus = st;
+        s.lyrics = parsed;
+        s.lyricsSerial++;
+        s.offsetMs = offsetMs;
+        s.lyricsSource = source;
+        s.lyricsError = "";
+    });
+}
+
+void publishLyricsFailed(LyricsStatus st, const String &message) {
+    update([&](Snapshot &s) {
+        s.lyricsStatus = st;
+        s.lyricsError = message;
+    });
+}
+
+void publishOffset(int32_t offsetMs) {
+    update([&](Snapshot &s) { s.offsetMs = offsetMs; });
+}
 
 void commandFailed(const String &what, const HttpResult &r) {
     String msg = what + " failed: " + (r.message.length() ? r.message : "HTTP " + String(r.code));
@@ -657,98 +522,32 @@ void commandFailed(const String &what, const HttpResult &r) {
     });
 }
 
-void runCommand(const Command &c) {
+}  // namespace internal
+
+namespace {
+
+// ---- User commands ----
+
+// A queued user action: the library and the zone choice are the panel's own business,
+// everything else is the source's.
+void handleCommand(const Command &c) {
     if (c.type == CmdType::Library) {   // its own module: browse session, levels, thumbnails
         if (board::HAS_LIBRARY) lib::run((LibOp)c.direction, (int)c.value, String(c.arg));
         return;
     }
-    String zoneId;
-    std::vector<OutputInfo> outputs;
-    xSemaphoreTake(g_lock, portMAX_DELAY);
-    zoneId = g_snap.zoneId;
-    outputs = g_snap.outputs;
-    xSemaphoreGive(g_lock);
-
     if (c.type == CmdType::Zone) {
         settings::setZone(String(c.arg));
         Serial.printf("[net] zone %s\n", c.arg[0] ? c.arg : "auto (follow the playing zone)");
-        g_lastZonesAt = 0;   // re-pick at once
+        source().zoneSelectionChanged();   // re-pick at once
         return;
     }
-    if (!g_baseUrl.length() || !zoneId.length()) return;
-    JsonDocument body(psram()), resp(psram());
-    if (c.type == CmdType::Control) {
-        body["action"] = c.arg;
-        body["zone_id"] = zoneId;   // always: never act on the companion's global active zone
-        HttpResult r = request("/api/roon/control", &body, resp, 4000);
-        if (r.code == 200) Serial.printf("[net] control %s ok\n", c.arg);
-        else commandFailed(String("Control ") + c.arg, r);
-    } else if (c.type == CmdType::VolumeSet) {
-        for (const OutputInfo &o : outputs) {
-            if (o.volumeType != "number" && o.volumeType != "db") continue;
-            body["output_id"] = o.id;
-            body["how"] = "absolute";
-            body["value"] = c.value;
-            HttpResult r = request("/api/roon/volume", &body, resp, 4000);
-            if (r.code != 200) commandFailed("Volume " + o.name, r);
-            break;   // the slider follows the first output with an absolute volume
-        }
-    } else if (c.type == CmdType::Mute) {
-        for (const OutputInfo &o : outputs) {
-            if (!o.volumeType.length()) continue;
-            body.clear();
-            body["output_id"] = o.id;
-            body["how"] = c.direction ? "mute" : "unmute";
-            HttpResult r = request("/api/roon/mute", &body, resp, 4000);
-            if (r.code != 200) commandFailed(String(c.direction ? "Mute " : "Unmute ") + o.name, r);
-        }
-    } else if (c.type == CmdType::Offset) {
-        String title, artist, album;
-        xSemaphoreTake(g_lock, portMAX_DELAY);
-        title = g_snap.title;
-        artist = g_snap.artist;
-        album = g_snap.album;
-        xSemaphoreGive(g_lock);
-        if (!title.length()) return;
-        body["title"] = title;
-        body["artist"] = artist;
-        if (album.length()) body["album"] = album;
-        body["offset_ms"] = (int32_t)c.value;
-        HttpResult r = request("/api/lyrics/offset", &body, resp, 4000);
-        if (r.code != 200) {
-            commandFailed("Lyrics offset", r);
-            return;
-        }
-        int32_t saved = resp["offset_ms"] | (int32_t)c.value;
-        update([&](Snapshot &s) { s.offsetMs = saved; });
-        Serial.printf("[net] lyrics offset %d ms saved for \"%s\"\n", (int)saved, title.c_str());
-        return;
-    } else {
-        int sent = 0;
-        for (const OutputInfo &o : outputs) {
-            if (!o.volumeType.length()) continue;
-            body.clear();
-            body["output_id"] = o.id;
-            body["how"] = "relative_step";
-            body["value"] = c.direction;
-            HttpResult r = request("/api/roon/volume", &body, resp, 4000);
-            if (r.code != 200) commandFailed("Volume " + o.name, r);
-            sent++;
-        }
-        if (!sent) {
-            HttpResult r;
-            r.message = "this zone has no volume control";
-            commandFailed("Volume", r);
-        }
-    }
-    g_lastNowPlayingAt = 0;   // show the effect right away
+    source().command(c);
 }
 
 // ---- Task ----
 
 void resetSession() {
-    g_baseUrl = "";
-    g_consecutiveFails = 0;
+    source().reset();
     g_trackKey = "";
     update([](Snapshot &s) {
         s.companion = "";
@@ -797,7 +596,6 @@ void tickScan() {
 }
 
 void task(void *) {
-    uint32_t lastDiscovery = 0;
     bool wifiStarted = false;
 
     WiFi.persistent(false);   // credentials live in our NVS namespace, not the driver's
@@ -882,33 +680,25 @@ void task(void *) {
             Serial.printf("[net] WARNING: internal RAM low: %u KB free (min %u KB)\n", (unsigned)(freeInternal / 1024),
                           (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
         }
-        ota::tick(true);   // update check (boot + daily) and a confirmed install; no companion needed
-        if (!g_baseUrl.length()) {
-            if (now - lastDiscovery < DISCOVERY_PERIOD_MS && lastDiscovery) {
-                delay(20);
-                continue;
-            }
-            lastDiscovery = now;
-            if (!discover()) continue;
-            g_lastZonesAt = 0;
+        ota::tick(true);   // update check (boot + daily) and a confirmed install; no server needed
+        if (!source().ready() && !source().connect(now)) {
+            delay(20);
+            continue;
         }
 
         Command cmd;
-        while (xQueueReceive(g_commands, &cmd, 0) == pdTRUE) runCommand(cmd);
+        while (xQueueReceive(g_commands, &cmd, 0) == pdTRUE) handleCommand(cmd);
+        source().pump();   // a source that is pushed to reads its socket; a polled one does nothing
 
         now = millis();
-        if (!g_lastZonesAt || now - g_lastZonesAt > ZONES_PERIOD_MS) {
-            g_lastZonesAt = now ? now : 1;
-            if (!refreshZones()) {
+        if (source().zonesDue(now)) {
+            if (!source().refreshZones()) {
                 delay(200);
                 continue;
             }
-            ota::markHealthy();   // Wi-Fi + companion answered: a freshly installed image is good
+            internal::markHealthy();   // Wi-Fi + server answered: a freshly installed image is good
         }
-        if (!g_lastNowPlayingAt || now - g_lastNowPlayingAt >= NOW_PLAYING_PERIOD_MS) {
-            g_lastNowPlayingAt = now ? now : 1;
-            pollNowPlaying();
-        }
+        if (source().nowPlayingDue(now)) source().pollNowPlaying();
         if (board::HAS_LIBRARY) lib::tick();   // next thumbnail while the library is open
         delay(10);
     }
@@ -922,6 +712,14 @@ int32_t Snapshot::positionAt(uint32_t now) const {
     if (durationMs && p > (int32_t)durationMs) p = durationMs;
     return p < 0 ? 0 : p;
 }
+
+// The one source in use. A second one (talking to the music server directly) plugs in here,
+// chosen from the settings at startup; everything above is written against the interface only.
+namespace {
+CompanionSource g_companion;
+}  // namespace
+
+Source &source() { return g_companion; }
 
 void begin() {
     g_coverQueue = xQueueCreate(1, sizeof(CoverRequest));

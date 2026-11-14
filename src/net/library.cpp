@@ -6,6 +6,7 @@
 
 #include "../app/cover.h"
 #include "net_internal.h"
+#include "source.h"
 
 namespace net::lib {
 namespace {
@@ -14,7 +15,6 @@ using namespace net::internal;
 
 constexpr int PAGE = 50;                // items per /browse/load
 constexpr size_t THUMB_CACHE = 150;     // thumbnails kept, by image key (PSRAM)
-constexpr uint32_t TIMEOUT_MS = 10000;  // Roon can be slow on a big library
 
 // One level as shown: its title and where it sits in Roon's stack for this hierarchy.
 struct Level {
@@ -69,10 +69,12 @@ std::shared_ptr<const Picture> cached(const PStr &key) {
     return nullptr;
 }
 
-HttpResult post(const char *path, JsonDocument &body, JsonDocument &resp) {
+// `load` reads a level that is already open, `browse` moves in the hierarchy. Both bodies are
+// written in the server's own terms, so the source only has to deliver them.
+HttpResult post(bool load, JsonDocument &body, JsonDocument &resp) {
     body["hierarchy"] = g_hier;
     body["multi_session_key"] = sessionKey();
-    return request(path, &body, resp, TIMEOUT_MS);
+    return load ? source().browseLoad(body, resp) : source().browse(body, resp);
 }
 
 LibItem readItem(JsonObjectConst it, const String &listImage) {
@@ -95,7 +97,7 @@ bool loadTop(int offset) {
     body["level"] = lv.roonLevel;
     body["offset"] = offset;
     body["count"] = PAGE;
-    HttpResult r = post("/api/roon/browse/load", body, resp);
+    HttpResult r = post(true, body, resp);
     if (r.code != 200) {
         setMessage("Could not load the list: " + errorText(r), true);
         return false;
@@ -124,7 +126,7 @@ bool syncTo() {
     if (g_roon <= shown) return true;
     JsonDocument body(psram()), resp(psram());
     body["pop_levels"] = g_roon - shown;
-    HttpResult r = post("/api/roon/browse", body, resp);
+    HttpResult r = post(false, body, resp);
     if (r.code != 200) {
         setMessage("Could not go back: " + errorText(r), true);
         return false;
@@ -146,7 +148,7 @@ void openRoot(const String &hier, const String &query) {
     if (hier == "search") body["input"] = query;
     String zone = followedZoneId();
     if (zone.length()) body["zone_or_output_id"] = zone;
-    HttpResult r = post("/api/roon/browse", body, resp);
+    HttpResult r = post(false, body, resp);
     if (r.code != 200) {
         setMessage((hier == "search" ? "Search failed: " : "Could not open the library: ") + errorText(r), true);
     } else {
@@ -188,7 +190,7 @@ void drill(int index) {
     body["item_key"] = it.itemKey.c_str();
     String zone = followedZoneId();
     if (zone.length()) body["zone_or_output_id"] = zone;
-    HttpResult r = post("/api/roon/browse", body, resp);
+    HttpResult r = post(false, body, resp);
     g_page->loading = false;
     if (r.code == 502) return restart("stale item key");
     if (r.code != 200) {
@@ -206,7 +208,7 @@ void drill(int index) {
             JsonDocument b2(psram()), r2(psram());
             b2["item_key"] = g_page->items[0].itemKey.c_str();
             if (zone.length()) b2["zone_or_output_id"] = zone;
-            HttpResult rr = post("/api/roon/browse", b2, r2);
+            HttpResult rr = post(false, b2, r2);
             if (rr.code == 200 && String(r2["action"] | "") == "list") {
                 g_roon = r2["list"]["level"] | (g_roon + 1);
                 g_levels.back().roonLevel = g_roon;
@@ -270,7 +272,7 @@ void back() {
     JsonDocument body(psram()), resp(psram());
     // One shown level can be several in Roon (an album opened through its single-item level).
     body["pop_levels"] = std::max(1, g_levels.back().roonLevel - g_levels[g_levels.size() - 2].roonLevel);
-    HttpResult r = post("/api/roon/browse", body, resp);
+    HttpResult r = post(false, body, resp);
     if (r.code != 200) {
         setMessage("Could not go back: " + errorText(r), true);
         return publish();
@@ -306,7 +308,7 @@ void openActions(int index) {
         JsonDocument body(psram()), resp(psram());
         body["item_key"] = key;
         body["zone_or_output_id"] = zone;
-        HttpResult r = post("/api/roon/browse", body, resp);
+        HttpResult r = post(false, body, resp);
         if (r.code == 502) return restart("stale item key");
         if (r.code != 200 || String(resp["action"] | "") != "list") {
             setMessage(r.code != 200 ? "No actions for \"" + it.title + "\": " + errorText(r)
@@ -319,7 +321,7 @@ void openActions(int index) {
         lbody["level"] = g_roon;
         lbody["offset"] = 0;
         lbody["count"] = 20;
-        r = post("/api/roon/browse/load", lbody, lresp);
+        r = post(true, lbody, lresp);
         if (r.code != 200) {
             setMessage("No actions: " + errorText(r), true);
             return publish();
@@ -356,7 +358,7 @@ void runAction(int index) {
     JsonDocument body(psram()), resp(psram());
     body["item_key"] = a.itemKey.c_str();
     body["zone_or_output_id"] = zone;
-    HttpResult r = post("/api/roon/browse", body, resp);
+    HttpResult r = post(false, body, resp);
     if (r.code == 502) return restart("stale action key");
     if (r.code != 200) setMessage(a.title + " failed: " + errorText(r), true);
     else if (String(resp["action"] | "") == "message" && (resp["is_error"] | false))
@@ -376,7 +378,7 @@ void run(LibOp op, int index, const String &text) {
         g_open = false;
         return;
     }
-    if (!baseUrl().length()) return;
+    if (!source().ready()) return;
     if (op == LibOp::Search) return openRoot("search", text);
     if (op == LibOp::Browse) return openRoot("browse", "");
     if (op == LibOp::Find) {
@@ -402,7 +404,7 @@ void run(LibOp op, int index, const String &text) {
 }
 
 void tick() {
-    if (!g_open || !g_page || !baseUrl().length()) return;
+    if (!g_open || !g_page || !source().ready()) return;
     PStr key;
     for (const LibItem &i : g_page->items)
         if (!i.thumb && i.imageKey.length() &&
@@ -415,8 +417,7 @@ void tick() {
     if (!pic) {
         uint8_t *jpeg = nullptr;
         size_t len = 0;
-        String q = "/api/roon/image/" + key + "?w=" + COVER_THUMB_PX + "&h=" + COVER_THUMB_PX;
-        HttpResult r = getBytes(baseUrl(), q, jpeg, len, 64 * 1024, 4000);
+        HttpResult r = getBytes(source().imageUrl(String(key.c_str()), COVER_THUMB_PX), jpeg, len, 64 * 1024, 4000);
         cover::Cover c;
         String why;
         if (r.code == 200 && jpeg && cover::build(jpeg, len, false, COVER_THUMB_PX, false, 0, 0, c, why) && c.thumb) {
