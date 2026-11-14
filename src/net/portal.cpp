@@ -55,7 +55,7 @@ String networkList() {
 const char PAGE_HEAD[] PROGMEM = R"(<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>TFT Panel setup</title>
 <style>body{font:16px system-ui,sans-serif;max-width:28rem;margin:0 auto;padding:1rem;background:#15161a;color:#f6f4ee}
-h1{font-size:1.4rem}label{display:block;margin-top:1rem}input{width:100%;box-sizing:border-box;padding:.6rem;
+h1{font-size:1.4rem}label{display:block;margin-top:1rem}input,select{width:100%;box-sizing:border-box;padding:.6rem;
 font-size:1rem;border-radius:.4rem;border:1px solid #2f3037;background:#202127;color:#f6f4ee}
 button{margin-top:1.4rem;width:100%;padding:.8rem;font-size:1.05rem;border:0;border-radius:.4rem;background:#6db56d;color:#15161a}
 small{color:#a9aaa6}a{color:#6db56d}.net{display:flex;justify-content:space-between;box-sizing:border-box;margin:.4rem 0 0;padding:.75rem .9rem;text-align:left;background:#202127;color:#f6f4ee;border:1px solid #2f3037}.net span{color:#a9aaa6;margin-left:1rem;white-space:nowrap;min-width:5.5em;text-align:right}.err{color:#15161a;background:#ffb0a0;padding:.8rem;border-radius:.4rem}</style></head><body>)";
@@ -76,6 +76,18 @@ void sendForm(const String &error, const String &typedSsid = String()) {
          "<label>Companion access token <small>(only if the companion has ACCESS_TOKEN)</small>"
          "<input name=token type=password placeholder=\"" +
          String(s.accessToken.length() ? "set — unchanged if left empty" : "") + "\"></label>"
+         "<label>Where the music information comes from"
+         "<select name=source>"
+         "<option value=companion" + String(s.source == settings::SourceKind::Companion ? " selected" : "") +
+         ">The TextFromTrack companion</option>"
+         "<option value=direct" + String(s.source == settings::SourceKind::Direct ? " selected" : "") +
+         ">The music server, directly</option></select></label>"
+         "<label>Lyrics server <small>(direct only; empty = a companion on the network, "
+         "<code>none</code> = no lyrics)</small>"
+         "<input name=lyrics placeholder=\"http://192.168.1.30:3300\" value=\"" + esc(s.lyricsUrl) + "\"></label>"
+         "<label>Lyrics server token <small>(only if it asks for one)</small>"
+         "<input name=lyricstoken type=password placeholder=\"" +
+         String(s.lyricsToken.length() ? "set — unchanged if left empty" : "") + "\"></label>"
          "<button>Save and restart</button></form>"
          "<script>function pick(b){ssid.value=b.dataset.s;pass.focus()}</script></body></html>";
     g_http.send(200, "text/html; charset=utf-8", h);
@@ -86,9 +98,14 @@ void handleSave() {
     String pass = g_http.arg("pass");
     String companion = g_http.arg("companion");
     String token = g_http.arg("token");
+    String source = g_http.arg("source");
+    String lyrics = g_http.arg("lyrics");
+    String lyricsToken = g_http.arg("lyricstoken");
     ssid.trim();
     companion.trim();
     token.trim();
+    lyrics.trim();
+    lyricsToken.trim();
     settings::Settings cur = settings::get();
     if (!pass.length() && ssid == cur.wifiSsid) pass = cur.wifiPass;   // "unchanged if left empty"
 
@@ -98,6 +115,8 @@ void handleSave() {
         error = "A WPA password is 8 to 63 characters (leave it empty for an open network).";
     else if (companion.length() && !companion.startsWith("http://"))
         error = "The companion address starts with http:// (for example http://192.168.1.20:3888).";
+    else if (lyrics.length() && lyrics != "none" && !lyrics.startsWith("http://") && !lyrics.startsWith("https://"))
+        error = "The lyrics server starts with http:// or https://, or is the word none.";
     if (error.length()) {
         Serial.printf("[portal] save rejected: %s (args=%d, ssid len %u, pass len %u)\n", error.c_str(),
                       g_http.args(), ssid.length(), pass.length());
@@ -105,9 +124,14 @@ void handleSave() {
     }
     while (companion.endsWith("/")) companion.remove(companion.length() - 1);
 
+    while (lyrics.endsWith("/")) lyrics.remove(lyrics.length() - 1);
     settings::setWifi(ssid, pass);
     settings::setCompanion(companion);
     if (token.length()) settings::setToken(token);
+    if (source.length()) settings::setSource(source == "direct" ? settings::SourceKind::Direct
+                                                                : settings::SourceKind::Companion);
+    settings::setLyricsUrl(lyrics);
+    if (lyricsToken.length()) settings::setLyricsToken(lyricsToken == "none" ? "" : lyricsToken);
 
     String h = FPSTR(PAGE_HEAD);
     h += "<h1>Saved</h1><p>The panel restarts and joins <b>" + esc(ssid) +

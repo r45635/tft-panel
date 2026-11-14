@@ -1,5 +1,7 @@
 #include "settings_screen.h"
 
+#include "../net/lyrics_source.h"
+
 #include "../layout.h"
 
 #include <Arduino.h>
@@ -152,6 +154,49 @@ void stepLead(int delta) {
     showLead();
 }
 
+lv_obj_t *g_sourceDrop = nullptr;
+lv_obj_t *g_lyricsDrop = nullptr;
+lv_obj_t *g_lyricsSub = nullptr;
+
+void showLyricsSource() {
+    if (!g_lyricsSub) return;
+    String url = settings::get().lyricsUrl;
+    if (url == "none") lv_label_set_text(g_lyricsSub, "No lyrics are looked up.");
+    else if (url.length()) lv_label_set_text(g_lyricsSub, ("Looked up on " + url + ".").c_str());
+    else lv_label_set_text(g_lyricsSub, "Looked up on a TextFromTrack companion found on the network.");
+}
+
+// A source owns its connection to its server, so swapping one for the other is a restart.
+void confirmSource(settings::SourceKind kind) {
+    bool direct = kind == settings::SourceKind::Direct;
+    lv_obj_t *mb = lv_msgbox_create(nullptr);
+    lv_msgbox_add_title(mb, direct ? "Talk to the music server?" : "Use the companion?");
+    lv_msgbox_add_text(mb, direct ? "The panel restarts, finds the server itself and asks you to "
+                                    "enable it there once. Lyrics then come from wherever the "
+                                    "Lyrics setting points."
+                                  : "The panel restarts and looks for the TextFromTrack companion "
+                                    "on the network, which is the only source that reads the "
+                                    "lyrics already in your own files.");
+    lv_obj_t *yes = lv_msgbox_add_footer_button(mb, "Restart");
+    lv_obj_t *no = lv_msgbox_add_footer_button(mb, "Cancel");
+    lv_obj_set_width(mb, X(600));
+    lv_obj_set_style_text_font(mb, fonts::ui20, 0);
+    static settings::SourceKind s_kind;
+    s_kind = kind;
+    lv_obj_add_event_cb(yes, [](lv_event_t *e) {
+        lv_msgbox_close((lv_obj_t *)lv_event_get_user_data(e));
+        settings::setSource(s_kind);
+        board::restart();
+    }, LV_EVENT_CLICKED, mb);
+    lv_obj_add_event_cb(no, [](lv_event_t *e) {
+        lv_msgbox_close((lv_obj_t *)lv_event_get_user_data(e));
+        // Put the list back on what is actually in use.
+        if (g_sourceDrop)
+            lv_dropdown_set_selected(g_sourceDrop,
+                                     settings::source() == settings::SourceKind::Direct ? 1 : 0);
+    }, LV_EVENT_CLICKED, mb);
+}
+
 void confirmForgetWifi() {
     lv_obj_t *mb = lv_msgbox_create(nullptr);
     lv_msgbox_add_title(mb, "Forget Wi-Fi?");
@@ -261,6 +306,33 @@ void buildRows() {
         lv_label_set_text_fmt(g_ctValue, "Warmth %d %%", (int)settings::warmth());
         lv_obj_set_hidden(g_colourTest, false);
     });
+
+    // Where the music information comes from, and where the lyrics come from. Both are shown
+    // whatever the board, because a panel has to be usable with no console attached.
+    r = row("Music from", nullptr, &sub);
+    lv_label_set_text(sub, "The companion reads your own files and ranks what it finds. Direct "
+                           "talks to the music server itself, with nothing in between.");
+    g_sourceDrop = dropdown(r, "TextFromTrack companion\nThe music server, directly",
+                            settings::source() == settings::SourceKind::Direct ? 1 : 0, [](lv_event_t *) {
+        settings::SourceKind chosen = lv_dropdown_get_selected(g_sourceDrop) == 1 ? settings::SourceKind::Direct
+                                                                                  : settings::SourceKind::Companion;
+        if (chosen == settings::source()) return;
+        confirmSource(chosen);
+    });
+
+    r = row("Lyrics", nullptr, &g_lyricsSub);
+    showLyricsSource();
+    {
+        String url = settings::get().lyricsUrl;
+        int sel = url == "none" ? 1 : 0;
+        g_lyricsDrop = dropdown(r, "A companion on the network\nNo lyrics", sel, [](lv_event_t *) {
+            settings::setLyricsUrl(lv_dropdown_get_selected(g_lyricsDrop) == 1 ? "none" : "");
+            net::lyricsrc::forgetDiscovered();
+            showLyricsSource();
+        });
+        // A lyrics server of one's own is typed on the setup page, not here: it is a URL.
+        if (url.length() && url != "none") lv_obj_set_hidden(g_lyricsDrop, true);
+    }
 
     r = row("Zone", nullptr, &sub);
     lv_label_set_text(sub, "Which Roon zone the panel follows.");
