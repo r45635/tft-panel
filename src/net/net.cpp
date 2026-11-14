@@ -22,6 +22,8 @@
 #include "source.h"
 #include "source_companion.h"
 #include "source_roon.h"
+#include "news.h"
+#include "weather.h"
 
 namespace net {
 using namespace internal;
@@ -515,6 +517,20 @@ void publishOffset(int32_t offsetMs) {
     update([&](Snapshot &s) { s.offsetMs = offsetMs; });
 }
 
+void publishWeather(const weather::Now &w) {
+    update([&](Snapshot &s) {
+        s.weather = w;
+        s.weatherSerial++;
+    });
+}
+
+void publishNews(const String &headlines) {
+    update([&](Snapshot &s) {
+        s.news = headlines;
+        s.newsSerial++;
+    });
+}
+
 void commandFailed(const String &what, const HttpResult &r) {
     String msg = what + " failed: " + (r.message.length() ? r.message : "HTTP " + String(r.code));
     Serial.printf("[net] %s\n", msg.c_str());
@@ -683,6 +699,8 @@ void task(void *) {
                           (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
         }
         ota::tick(true);   // update check (boot + daily) and a confirmed install; no server needed
+        weather::tick(now);   // for the idle clock; it has its own schedule and needs no source
+        news::tick(now);
         if (!source().ready() && !source().connect(now)) {
             delay(20);
             continue;

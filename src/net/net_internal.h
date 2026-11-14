@@ -67,4 +67,8 @@ void commandFailed(const String &what, const HttpResult &r);
 // --- Music library ---
 void publishLibrary(std::shared_ptr<const LibraryPage> page);
 
+// --- Idle clock extras ---
+void publishWeather(const weather::Now &w);
+void publishNews(const String &headlines);
+
 }  // namespace net::internal

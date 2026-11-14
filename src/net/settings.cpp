@@ -46,6 +46,8 @@ void begin() {
     g_s.serverToken = read("srv_token");
     g_s.lyricsUrl = read("lyrics_url");
     g_s.lyricsToken = read("lyrics_tok");
+    g_s.weatherPlace = read("weather");
+    g_s.newsUrl = read("news");
     g_s.apPass = read("ap_pass");
     g_s.leadMs = g_prefs.isKey("lead") ? g_prefs.getInt("lead", 250) : 250;
     g_leadMs = g_s.leadMs;
@@ -151,6 +153,20 @@ void setLyricsToken(const String &token) {
     g_s.lyricsToken = token;
     xSemaphoreGive(g_lock);
     putString("lyrics_tok", token);
+}
+
+void setWeatherPlace(const String &place) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.weatherPlace = place;
+    xSemaphoreGive(g_lock);
+    putString("weather", place);
+}
+
+void setNewsUrl(const String &url) {
+    xSemaphoreTake(g_lock, portMAX_DELAY);
+    g_s.newsUrl = url;
+    xSemaphoreGive(g_lock);
+    putString("news", url);
 }
 
 void setPairing(const String &serverId, const String &token) {

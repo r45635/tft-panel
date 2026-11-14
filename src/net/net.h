@@ -11,6 +11,7 @@
 #include "../app/lyrics.h"
 #include "../layout.h"
 #include "psram_text.h"
+#include "weather.h"
 
 namespace net {
 
@@ -131,6 +132,12 @@ struct Snapshot {
     int32_t offsetMs = 0;     // > 0 = lyrics shown later (lyric time = position - offset)
     std::shared_ptr<const lyrics::Lyrics> lyrics;
     String lyricsSource, lyricsError;
+
+    // Shown on the idle clock when a place is set. `weatherSerial` changes with it.
+    weather::Now weather;
+    uint32_t weatherSerial = 0;
+    String news;              // headlines, joined; empty = no feed set
+    uint32_t newsSerial = 0;
 
     bool playing() const { return state == "playing"; }
     // Position extrapolated to `now` (millis()), clamped to the track duration.

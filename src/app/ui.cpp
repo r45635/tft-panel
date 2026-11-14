@@ -120,6 +120,8 @@ ota::Status g_ota;
 // Idle clock: over everything but the update screens, while the screen is dimmed and nothing
 // plays (settings::clock()). Redrawn once a minute.
 lv_obj_t *g_clock = nullptr, *g_clockTime = nullptr, *g_clockDate = nullptr, *g_clockTrack = nullptr;
+lv_obj_t *g_clockWeather = nullptr, *g_clockNews = nullptr;
+uint32_t g_clockWeatherSerial = 0, g_clockNewsSerial = 0;
 int g_clockMinute = -1;
 bool g_clockForced = false;    // showcase: shown with a fixed time
 bool g_demoManualSlide = false;   // showcase: the slide is stepped by the console, not animated
@@ -868,11 +870,24 @@ void buildClock() {
     lv_obj_align(g_clockTime, LV_ALIGN_CENTER, 0, -Y(40));
     g_clockDate = label(g_clock, fonts::lyricsOther, COL_MID);
     lv_obj_align(g_clockDate, LV_ALIGN_CENTER, 0, Y(70));
+    // Under the date: the weather, when a place is set. One line, so the clock stays the face.
+    g_clockWeather = label(g_clock, fonts::ui20, COL_DIM);
+    lv_obj_set_width(g_clockWeather, X(760));
+    lv_obj_set_style_text_align(g_clockWeather, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(g_clockWeather, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_align(g_clockWeather, LV_ALIGN_CENTER, 0, Y(120));
+
     g_clockTrack = label(g_clock, fonts::ui20, COL_DIM);
     lv_obj_set_width(g_clockTrack, X(700));
     marquee(g_clockTrack);
     lv_obj_set_style_text_align(g_clockTrack, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(g_clockTrack, LV_ALIGN_BOTTOM_MID, 0, -Y(36));
+    lv_obj_align(g_clockTrack, LV_ALIGN_BOTTOM_MID, 0, -Y(76));
+
+    // Headlines slide along the bottom edge, slowly enough to read at a glance.
+    g_clockNews = label(g_clock, fonts::ui20, COL_DIM);
+    lv_obj_set_width(g_clockNews, X(900));
+    marquee(g_clockNews);
+    lv_obj_align(g_clockNews, LV_ALIGN_BOTTOM_MID, 0, -Y(28));
     lv_obj_set_hidden(g_clock, true);
 }
 
@@ -1365,8 +1380,25 @@ void tickClock() {
         g_clockMinute = -1;
         return;
     }
-    if (lt.tm_min == g_clockMinute) return;
+    if (lt.tm_min == g_clockMinute && g_s.weatherSerial == g_clockWeatherSerial &&
+        g_s.newsSerial == g_clockNewsSerial)
+        return;
     g_clockMinute = lt.tm_min;
+    g_clockWeatherSerial = g_s.weatherSerial;
+    if (g_s.newsSerial != g_clockNewsSerial) {
+        g_clockNewsSerial = g_s.newsSerial;
+        setText(g_clockNews, g_s.news.c_str());
+    }
+
+    if (g_s.weather.valid) {
+        String w = g_s.weather.place + "   " + String((int)g_s.weather.tempC) + " \u00B0C";
+        const char *what = net::weather::describe(g_s.weather.code);
+        if (*what) w += String("   ") + what;
+        w += "   " + String((int)g_s.weather.minC) + " to " + String((int)g_s.weather.maxC) + " \u00B0C today";
+        setText(g_clockWeather, w.c_str());
+    } else {
+        setText(g_clockWeather, "");
+    }
     char buf[48];
     strftime(buf, sizeof buf, "%H:%M", &lt);
     setText(g_clockTime, buf);

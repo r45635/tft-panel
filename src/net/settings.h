@@ -25,6 +25,8 @@ struct Settings {
     // network, "none" = do without, anything else = an LRCLIB-compatible server's base URL.
     String lyricsUrl;
     String lyricsToken;    // bearer token, for a lyrics server that asks for one
+    String weatherPlace;   // town shown on the idle clock; empty = no weather
+    String newsUrl;        // RSS or Atom feed slid under the clock; empty = no headlines
     String apPass;         // setup AP password, generated once per device
     int32_t leadMs = 250;  // show each lyric line this much before its timestamp
     bool backdrop = true;  // cover art as the screen background
@@ -52,6 +54,8 @@ SourceKind source();
 void setServerHost(const String &hostPort);
 void setLyricsUrl(const String &url);
 void setLyricsToken(const String &token);
+void setWeatherPlace(const String &place);
+void setNewsUrl(const String &url);
 // Direct mode's pairing, kept per server so a different one asks again.
 void setPairing(const String &serverId, const String &token);
 void forgetPairing();
