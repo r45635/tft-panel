@@ -545,6 +545,32 @@ void buildPageDots() {
 
 void fillClock(bool force);   // below: the clock face's text
 
+// Headlines, read at walking pace: slow enough to follow, fast enough to come round again.
+constexpr int NEWS_SPEED_PX_S = 60;
+
+void newsStep(void *obj, int32_t x) { lv_obj_set_x((lv_obj_t *)obj, x); }
+
+void startNews(const char *text) {
+    lv_anim_delete(g_clockNews, nullptr);
+    lv_label_set_text(g_clockNews, text ? text : "");
+    lv_obj_set_width(g_clockNews, LV_SIZE_CONTENT);
+    if (!text || !*text) {
+        lv_obj_set_x(g_clockNews, SCREEN_W);
+        return;
+    }
+    lv_obj_update_layout(g_clockNews);
+    int32_t textW = lv_obj_get_width(g_clockNews);
+    int32_t from = SCREEN_W, to = -textW;
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, g_clockNews);
+    lv_anim_set_exec_cb(&a, newsStep);
+    lv_anim_set_values(&a, from, to);
+    lv_anim_set_duration(&a, (uint32_t)((int64_t)(from - to) * 1000 / NEWS_SPEED_PX_S));
+    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_start(&a);
+}
+
 // The clock face is shown when the panel has gone quiet, and whenever it is the chosen view.
 bool clockWanted() {
     if (g_view == View::Clock && !g_s.portalActive && !g_demo) return true;
@@ -902,11 +928,12 @@ void buildClock() {
     lv_obj_set_style_text_align(g_clockTrack, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(g_clockTrack, LV_ALIGN_BOTTOM_MID, 0, -Y(76));
 
-    // Headlines slide along the bottom edge, slowly enough to read at a glance.
+    // Headlines slide along the bottom edge. Not with the marquee the titles use: LVGL caps a
+    // scroll at ten seconds however long the text is, so a line of headlines would race past.
+    // This one is animated by hand, at a speed that does not depend on its length.
     g_clockNews = label(g_clock, fonts::ui20, COL_DIM);
-    lv_obj_set_width(g_clockNews, X(900));
-    marquee(g_clockNews);
-    lv_obj_align(g_clockNews, LV_ALIGN_BOTTOM_MID, 0, -Y(28));
+    lv_label_set_long_mode(g_clockNews, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_set_pos(g_clockNews, SCREEN_W, SCREEN_H - Y(46));
     lv_obj_set_hidden(g_clock, true);
 }
 
@@ -1400,7 +1427,7 @@ void fillClock(bool force) {
     g_clockWeatherSerial = g_s.weatherSerial;
     if (g_s.newsSerial != g_clockNewsSerial) {
         g_clockNewsSerial = g_s.newsSerial;
-        setText(g_clockNews, g_s.news.c_str());
+        startNews(g_s.news.c_str());
     }
 
     if (g_s.weather.valid) {
