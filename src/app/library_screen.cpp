@@ -150,7 +150,7 @@ lv_obj_t *addRow(size_t i) {
     lv_obj_set_flex_grow(texts, 1);
     lv_obj_set_height(texts, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(texts, LV_FLEX_FLOW_COLUMN);
-    lv_obj_remove_flag(texts, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(texts, false);
     lv_obj_t *t = label(texts, fonts::ui20, COL_TEXT, it.title.c_str());
     lv_obj_set_width(t, lv_pct(100));
     lv_label_set_long_mode(t, LV_LABEL_LONG_MODE_DOTS);
@@ -421,6 +421,18 @@ void open() {
     lv_obj_move_foreground(g_root);
     if (!g_page) selectTab(Tab::Search);
     else applyPage();
+}
+
+// The artist or album line of the cover view was tapped: open on the Search tab, with the name in
+// the field so a near miss can be edited, and let the net task open the exact match.
+void openFind(bool album, const String &name, const String &artist) {
+    if (!g_root || !name.length()) return;
+    open();
+    g_tab = Tab::Search;
+    lv_textarea_set_text(g_ta, name.c_str());
+    showKeyboard(false);
+    showHeader();
+    send(net::LibOp::Find, album ? 1 : 0, name + "\n" + artist);
 }
 
 void close() {

@@ -475,6 +475,16 @@ lv_obj_t *progressBar(lv_obj_t *parent) {
     return b;
 }
 
+void onLibraryLink(lv_event_t *e);   // defined with the other input handlers, below hasTrack()
+
+// A tappable line of the cover view: wider touch area than the glyphs, accent while pressed.
+void libraryLink(lv_obj_t *l, bool album) {
+    lv_obj_set_clickable(l, true);
+    lv_obj_set_ext_click_area(l, Y(10));
+    lv_obj_set_style_text_color(l, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
+    lv_obj_add_event_cb(l, onLibraryLink, LV_EVENT_CLICKED, (void *)(intptr_t)album);
+}
+
 void buildCoverView() {
     g_bigCover = lv_image_create(g_coverView);
     lv_obj_set_pos(g_bigCover, CV_COVER_X, CV_COVER_Y);
@@ -497,6 +507,10 @@ void buildCoverView() {
     g_cvTitle = boundedLabel(col, fonts::lyricsCurrent, COL_TEXT, 2);
     g_cvArtist = boundedLabel(col, fonts::lyricsOther, COL_MID, 2);
     g_cvAlbum = boundedLabel(col, fonts::ui20, COL_DIM, 1);
+    if (board::HAS_LIBRARY) {
+        libraryLink(g_cvArtist, false);
+        libraryLink(g_cvAlbum, true);
+    }
     lv_obj_t *gap = lv_obj_create(col);   // breathing space before the lyric line
     lv_obj_remove_style_all(gap);
     lv_obj_set_size(gap, 1, Y(12));
@@ -575,6 +589,18 @@ void chooseView(View v) {
         settings::setView(v == View::Cover ? 1 : 0);
     }
     showView(v);
+}
+
+// Cover view: the artist line opens that artist in the library, the album line its track list.
+// A swipe that started on the line is not a tap: onGesture waits for the release, so no click.
+void onLibraryLink(lv_event_t *e) {
+    bool album = (bool)(intptr_t)lv_event_get_user_data(e);
+    if (!board::HAS_LIBRARY || g_demo || g_s.portalActive || !isHidden(g_picker) || settingsui::isOpen() ||
+        wifiui::isOpen() || libui::isOpen() || !hasTrack())
+        return;
+    const String &name = album ? g_s.album : g_s.artist;
+    if (!name.length()) return;
+    libui::openFind(album, name, g_s.artist);
 }
 
 void onGesture(lv_event_t *) {
@@ -1551,8 +1577,22 @@ void tick() {
     tickProgress(now);
 }
 
-void openLibrary() {
-    if (board::HAS_LIBRARY) libui::open();
+void openLibrary(bool on) {
+    if (!board::HAS_LIBRARY) return;
+    if (on) libui::open();
+    else libui::close();
+}
+
+// Same as tapping the artist or album line of the cover view. An explicit name tries one that is
+// not playing (console only): the ambiguous cases are hard to reach otherwise.
+void findPlaying(bool album, const String &name) {
+    if (!board::HAS_LIBRARY) return;
+    String who = name.length() ? name : (album ? g_s.album : g_s.artist);
+    if (!who.length()) {
+        Serial.printf("[lib] no %s playing\n", album ? "album" : "artist");
+        return;
+    }
+    libui::openFind(album, who, g_s.artist);
 }
 
 }  // namespace ui

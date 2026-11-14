@@ -84,7 +84,9 @@
       theme's thin cursor did not blink when the field was focused by the code)
 - [x] CrowPanel too (v0.1.17, +29 KB of flash, 91 %): library text and lists moved to PSRAM so its
       internal RAM stays flat while browsing (300 albums + thumbnails: 61 KB free throughout)
-- [ ] Vincent's finger test on the CrowPanel
+- [x] Cover view: the artist and album lines open that artist or that album in the library
+      (v0.1.18; search + exact match, the results shown when the name is not one thing)
+- [ ] Vincent's finger test on the CrowPanel, including the two new tappable lines
 
 ## Other boards (not started)
 

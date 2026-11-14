@@ -77,7 +77,8 @@ struct LibraryPage {
     uint32_t messageAt = 0;       // millis()
 };
 
-enum class LibOp : uint8_t { Open, Close, Search, Browse, Drill, Back, More, Actions, Action, CloseActions };
+// Find = Search then open the one exact match (index 0 artist, 1 album; text "<name>\n<artist>").
+enum class LibOp : uint8_t { Open, Close, Search, Browse, Find, Drill, Back, More, Actions, Action, CloseActions };
 
 struct Snapshot {
     Phase phase = Phase::WifiConnecting;

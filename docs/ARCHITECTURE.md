@@ -100,6 +100,11 @@ carries `zone_or_output_id` = the followed zone, so actions play there.
   opened at once (Back pops both). Pages of 50 (`offset`), "Show more".
 - Actions: an `action_list` item opened with the zone lists Roon's `action`s (sometimes one level
   deeper); running one is `POST /browse {item_key, zone_or_output_id}`.
+- Find (the cover view's artist and album lines, `LibOp::Find`): Roon has no "browse by name", so
+  the panel searches the name, drills into the `Artists`/`Albums` category and opens the item whose
+  title matches exactly (an album also needs the playing artist in its subtitle). Anything else —
+  no such category, no match, several — stops there and leaves the results on screen to choose
+  from: never open a guess.
 - A 502 (stale `item_key`) reopens the hierarchy. Thumbnails (`/api/roon/image/<key>`, the list's
   image for tracks) load one by one while the screen is open, LRU cache of 150 in PSRAM.
 - Memory: item text, item lists, the thumbnail cache (keys and picture blocks) and the screen's row
@@ -108,7 +113,8 @@ carries `zone_or_output_id` = the followed zone, so actions play there.
   the CrowPanel from 60 to 44 KB free; now it stays at ~61 KB (2026-11-13).
 - Published as `Snapshot::library` (copy-on-write); `src/app/library_screen.cpp` draws it; UI
   commands go through `net::library(op, index, text)`. Console: `lib search <text> | browse |
-  open <n> | back | more | actions <n> | show | ui` (`lib action <n>` plays: not while someone listens).
+  find artist|album [name] | open <n> | back | more | actions <n> | show | ui [close]`
+  (`lib action <n>` plays: not while someone listens).
 
 ### Following the playback
 

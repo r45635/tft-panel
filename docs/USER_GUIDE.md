@@ -118,6 +118,13 @@ CrowPanel).
 Browsing from the panel does not move what Roon's other apps or the companion's web player are
 showing.
 
+### From what is playing
+
+On the **cover view**, the artist and the album under the title are tappable: the artist opens
+that artist's albums, the album opens its track list, ready to play. When the name is not exactly
+one thing in your library — several artists on a track, an album title shared by other records —
+the panel shows what it found and lets you choose rather than opening a guess.
+
 ## 5. Settings
 
 The gear button opens the settings: brightness, colour warmth, when the screen turns off, how

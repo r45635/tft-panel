@@ -5,7 +5,8 @@
 
 namespace ui {
 
-void openLibrary();   // console: the library screen (HAS_LIBRARY boards)
+void openLibrary(bool on);     // console: the library screen (HAS_LIBRARY boards)
+void findPlaying(bool album, const String &name = String());   // console: an artist/album, playing one if empty
 
 void show();   // builds the screens and loads the main one
 void tick();   // call from loop() before lv_timer_handler()

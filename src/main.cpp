@@ -206,12 +206,16 @@ void handleCommand(String line) {
         g_bringup = true;
         bringup::show();
     } else if (cmd == "lib" && board::HAS_LIBRARY) {
-        // lib search <text> | browse | open <n> | back | more | actions <n> | action <n> | close-actions | show
+        // lib search <text> | browse | find artist|album [name] | ui [close] | open <n> | back | more | actions <n> | action <n> | close-actions | show
         int sp = arg.indexOf(' ');
         String sub = sp < 0 ? arg : arg.substring(0, sp), rest = sp < 0 ? String() : arg.substring(sp + 1);
         if (sub == "search") net::library(net::LibOp::Search, -1, rest);
         else if (sub == "browse") net::library(net::LibOp::Browse);
-        else if (sub == "ui") ui::openLibrary();
+        else if (sub == "ui") ui::openLibrary(rest != "close");
+        else if (sub == "find") {
+            int sp2 = rest.indexOf(' ');
+            ui::findPlaying(rest.startsWith("album"), sp2 < 0 ? String() : rest.substring(sp2 + 1));
+        }
         else if (sub == "open") net::library(net::LibOp::Drill, rest.toInt());
         else if (sub == "back") net::library(net::LibOp::Back);
         else if (sub == "more") net::library(net::LibOp::More);
@@ -237,7 +241,7 @@ void handleCommand(String line) {
                         Serial.printf("[lib]   %u %s\n", (unsigned)i, page->actions[i].title.c_str());
                 }
             }
-        } else Serial.println("[cmd] lib search <text> | browse | open <n> | back | more | actions <n> | action <n> | show");
+        } else Serial.println("[cmd] lib search <text> | browse | find artist|album [name] | ui [close] | open <n> | back | more | actions <n> | action <n> | show");
     } else if (cmd == "restart") board::restart();
     else help();
 }

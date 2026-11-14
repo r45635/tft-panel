@@ -59,7 +59,7 @@ enum class CmdType : uint8_t { Control, Volume, Zone, VolumeSet, Mute, Offset, L
 struct Command {
     CmdType type;
     int8_t direction;
-    char arg[48];
+    char arg[128];   // a search text, or Find's "<name>\n<artist>"
     float value;
 };
 QueueHandle_t g_commands = nullptr;
@@ -960,7 +960,8 @@ void enqueue(CmdType type, const char *arg, int8_t direction, float value = 0) {
     c.type = type;
     c.direction = direction;
     c.value = value;
-    strlcpy(c.arg, arg ? arg : "", sizeof c.arg);
+    if (strlcpy(c.arg, arg ? arg : "", sizeof c.arg) >= sizeof c.arg)
+        Serial.printf("[net] WARNING: command text cut to %u characters\n", (unsigned)(sizeof c.arg - 1));
     if (xQueueSend(g_commands, &c, 0) != pdTRUE) Serial.println("[net] WARNING: command queue full, command dropped");
 }
 }  // namespace

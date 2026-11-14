@@ -10,6 +10,7 @@ namespace libui {
 
 void build(lv_obj_t *scr);
 void open();
+void openFind(bool album, const String &name, const String &artist);   // cover view: artist/album tapped
 void close();
 bool isOpen();
 void refresh(const net::Snapshot &s);   // new page, thumbnails, messages, followed zone

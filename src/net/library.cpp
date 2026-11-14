@@ -219,6 +219,52 @@ void drill(int index) {
     publish();
 }
 
+bool sameText(const PStr &a, const String &b) {
+    return a.length() == b.length() && strcasecmp(a.c_str(), b.c_str()) == 0;
+}
+
+bool contains(const PStr &haystack, const String &needle) {
+    if (!needle.length()) return true;
+    String h(haystack.c_str()), n(needle);
+    h.toLowerCase();
+    n.toLowerCase();
+    return h.indexOf(n) >= 0;
+}
+
+// Opens the playing artist's page, or the playing album's track list, from their names: Roon has
+// no "browse by name", so search and open the one exact match ourselves. Anything else - no match,
+// several matches, no such category - leaves the search results on screen for the user to choose.
+void find(bool album, const String &name, const String &artist) {
+    const char *what = album ? "Albums" : "Artists";
+    openRoot("search", name);
+    if (g_page->error || g_page->items.empty()) return;
+
+    int cat = -1;
+    for (size_t i = 0; i < g_page->items.size(); i++)
+        if (g_page->items[i].hint == "list" && sameText(g_page->items[i].title, what)) cat = (int)i;
+    if (cat < 0) {
+        setMessage(String("No ") + what + " among the results: choose below", false);
+        return publish();
+    }
+    drill(cat);
+    if (g_page->error) return;
+
+    int hit = -1, hits = 0;
+    for (size_t i = 0; i < g_page->items.size(); i++) {
+        const LibItem &it = g_page->items[i];
+        if (it.hint != "list" || !sameText(it.title, name)) continue;
+        if (album && !contains(it.subtitle, artist)) continue;   // same album title, other artist
+        if (++hits == 1) hit = (int)i;
+    }
+    Serial.printf("[lib] find %s \"%s\": %d exact match(es)\n", album ? "album" : "artist", name.c_str(), hits);
+    if (hits != 1) {
+        setMessage(hits ? "Several match \"" + name + "\": choose below" : "No exact match for \"" + name + "\": choose below",
+                   false);
+        return publish();
+    }
+    drill(hit);
+}
+
 void back() {
     if (g_levels.size() <= 1 || !syncTo()) return publish();
     JsonDocument body(psram()), resp(psram());
@@ -333,6 +379,12 @@ void run(LibOp op, int index, const String &text) {
     if (!baseUrl().length()) return;
     if (op == LibOp::Search) return openRoot("search", text);
     if (op == LibOp::Browse) return openRoot("browse", "");
+    if (op == LibOp::Find) {
+        int nl = text.indexOf('\n');
+        String name = nl < 0 ? text : text.substring(0, nl);
+        if (!name.length()) return;
+        return find(index == 1, name, nl < 0 ? String() : text.substring(nl + 1));
+    }
     if (!g_page || g_levels.empty()) return;
     switch (op) {
         case LibOp::Drill: drill(index); break;
