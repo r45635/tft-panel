@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="brand/icon-32.png">
+<link rel="apple-touch-icon" href="brand/icon-180.png">
+<title>Install TFT Panel</title>
+<!-- ESP Web Tools, pinned (10.4 knows the ESP32-P4). It flashes at 115200 baud, which the CrowPanel's
+     CH340 handles; the Waveshare's USB is native. It picks the build matching the chip it finds. -->
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<style>
+  :root { --bg: #ffffff; --fg: #1d232a; --dim: #5b6672; --accent: #3b7a3b; --on-accent: #fff; --card: #f3f5f7; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15161a; --fg: #f6f4ee; --dim: #a9aaa6; --accent: #6db56d; --on-accent: #15161a; --card: #202127; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 1.8em; margin: 0 0 4px; }
+  .version { color: var(--dim); margin: 0 0 28px; }
+  ol { padding-left: 1.3em; }
+  li { margin: 0 0 10px; }
+  .card { background: var(--card); border-radius: 12px; padding: 18px 20px; margin: 24px 0; }
+  .install { margin: 28px 0; }
+  esp-web-install-button button, .install button { font-size: 1.1em; padding: 12px 28px; border-radius: 24px;
+    border: 0; background: var(--accent); color: var(--on-accent); cursor: pointer; }
+  esp-web-install-button { --esp-tools-button-color: var(--accent); --esp-tools-button-text-color: var(--on-accent); }
+  a { color: var(--accent); }
+  nav { margin: 0 0 28px; color: var(--dim); }
+  small, .dim { color: var(--dim); }
+  footer.site { max-width: 820px; margin: 0 auto 32px; padding: 0 16px; color: var(--dim); font-size: 0.85em; text-align: center; }
+  footer.site a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="index.html">TFT Panel</a> · <a href="guide.html">User guide</a> · <b>Install</b></nav>
+  <h1>Install TFT Panel</h1>
+  <p class="version">Firmware v0.1.18 for the Elecrow CrowPanel 7" (DIS08070H, board V3.0) and the
+    Waveshare ESP32-P4-WIFI6-Touch-LCD-7B. The right version is picked for the screen you connect.</p>
+  <div class="card">
+    <b>Only these two screens.</b><br>
+    The installer recognises the chip, not the screen: any other ESP32-P4 board (for example the Guition
+    JC1060P470C) would get the Waveshare firmware and its display would stay dark. Other boards are not
+    supported yet — see <a href="https://github.com/r45635/tft-panel/blob/main/docs/HARDWARE.md#other-boards">other boards</a>.
+  </div>
+
+  <ol>
+    <li>Use <b>Chrome or Edge on a computer</b> (Windows, macOS, Linux). Phones and Safari/Firefox cannot do this.</li>
+    <li>Connect the panel's <b>USB-C</b> port to the computer with a cable that carries data.</li>
+    <li>Click <b>Install</b>, pick the serial port and confirm. It takes about 3 minutes on the CrowPanel, about 1 minute
+      on the Waveshare.
+      <ul>
+        <li>CrowPanel: <i>USB Serial</i> / <i>CH340</i> / <i>usbserial</i></li>
+        <li>Waveshare: use the USB-C port <i>USB 1.1</i> (not <i>USB to UART</i>); the port is <i>USB JTAG/serial debug unit</i> / <i>usbmodem</i></li>
+      </ul></li>
+    <li>The panel restarts on its Wi-Fi setup screen: scan the first QR code with your phone to join it,
+      then the second one to choose your Wi-Fi network.</li>
+  </ol>
+
+  <div class="install">
+    <esp-web-install-button manifest="manifest.json">
+      <span slot="unsupported">This browser cannot flash devices: please open this page in Chrome or Edge on a computer.</span>
+      <span slot="not-allowed">Flashing needs a secure page (https).</span>
+    </esp-web-install-button>
+  </div>
+
+  <div class="card">
+    <b>No serial port in the list?</b><br>
+    CrowPanel on Windows: install the CH340 USB driver from
+    <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html">WCH</a>, then unplug and replug the panel
+    (macOS and Linux already include it). The Waveshare needs no driver. Some USB-C cables only charge: try another one.
+  </div>
+
+  <div class="card">
+    <b>After this, no cable needed.</b><br>
+    The panel checks for new versions by itself and shows <i>Update</i> at the top of the screen: tap it to
+    install. If an update ever fails to start, the panel goes back to the previous version.
+    The <a href="guide.html">user guide</a> explains the rest.
+  </div>
+
+  <p class="dim"><small>TFT Panel is open source (MIT):
+    <a href="https://github.com/r45635/tft-panel">github.com/r45635/tft-panel</a>. It shows synced lyrics from your own
+    TextFromTrack companion on your local network.</small></p>
+</main>
+<footer class="site">TFT Panel v0.1.18 · <a href="https://github.com/r45635/tft-panel/blob/main/LICENSE">MIT licence</a> · <a href="https://github.com/r45635/tft-panel/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a> · <a href="media-kit.html">Media kit</a> · <a href="https://github.com/r45635/tft-panel">GitHub</a></footer>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="brand/icon-32.png">
+<link rel="apple-touch-icon" href="brand/icon-180.png">
+<title>TFT Panel</title>
+<meta name="description" content="Synced lyrics and touch controls for your music, on a 7-inch screen. Open firmware for the Elecrow CrowPanel 7&quot; and the Waveshare ESP32-P4 7B.">
+<meta property="og:title" content="TFT Panel">
+<meta property="og:description" content="Synced lyrics and touch controls for your music, on a 7-inch screen.">
+<meta property="og:image" content="https://r45635.github.io/tft-panel/media/square.png">
+<style>
+  :root { --bg: #15161a; --fg: #f6f4ee; --dim: #a9aaa6; --warm: #ecd6be; --accent: #6db56d; --card: #202127; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--accent); }
+  header { padding: 20px 16px; max-width: 1100px; margin: 0 auto; display: flex; gap: 20px; align-items: center; }
+  header b { font-size: 1.15em; flex: 1; }
+  header a { color: var(--dim); text-decoration: none; }
+  .hero { max-width: 1100px; margin: 0 auto; padding: 8px 16px 0; }
+  .hero img { width: 100%; height: auto; border-radius: 14px; display: block; }
+  .lead { max-width: 780px; margin: 36px auto 0; padding: 0 16px; text-align: center; }
+  .lead h1 { font-size: 2.4em; margin: 0 0 8px; }
+  .lead p { color: var(--warm); font-size: 1.2em; margin: 0; }
+  .cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 30px 16px 0; }
+  .cta a { padding: 13px 28px; border-radius: 26px; text-decoration: none; font-weight: 600; }
+  .cta .primary { background: var(--accent); color: #15161a; }
+  .cta .secondary { background: var(--card); color: var(--fg); }
+  .video { max-width: 760px; margin: 48px auto 0; padding: 0 16px; }
+  .video video { width: 100%; height: auto; border-radius: 12px; display: block; }
+  .features { max-width: 1100px; margin: 48px auto 0; padding: 0 16px; display: grid; gap: 16px;
+              grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .features div { background: var(--card); border-radius: 12px; padding: 18px 20px; }
+  .features b { display: block; margin-bottom: 4px; }
+  .features span { color: var(--dim); font-size: 0.93em; }
+  .shots { max-width: 1100px; margin: 48px auto 0; padding: 0 16px; }
+  .shots img { width: 100%; height: auto; border-radius: 12px; display: block; }
+  footer { max-width: 780px; margin: 56px auto 40px; padding: 0 16px; color: var(--dim); font-size: 0.85em; text-align: center; }
+  footer.site { max-width: 820px; margin: 0 auto 32px; padding: 0 16px; color: #a9aaa6; font-size: 0.85em; text-align: center; }
+  footer.site a { color: inherit; }
+</style>
+</head>
+<body>
+<header><b><img src="brand/icon-32.png" width="32" height="32" alt="" style="vertical-align:-8px;margin-right:8px">TFT Panel</b><a href="guide.html">User guide</a><a href="install.html">Install</a><a href="media-kit.html">Media kit</a><a href="https://github.com/r45635/tft-panel">GitHub</a></header>
+
+<div class="hero"><img src="media/hero.png" width="1600" height="900" alt="TFT Panel showing synced lyrics"></div>
+
+<div class="lead">
+  <h1>Your lyrics, in time with the music</h1>
+  <p>A 7-inch touch screen that shows the words of the song as it plays, with the cover, and puts
+    play, skip, volume and zone at your fingertips.</p>
+</div>
+<div class="cta">
+  <a class="primary" href="install.html">Install in your browser</a>
+  <a class="secondary" href="guide.html">Read the user guide</a>
+</div>
+
+<div class="video">
+  <video src="media/lyrics.mp4" autoplay muted loop playsinline width="1000" height="680" poster="media/square.png"></video>
+</div>
+
+<div class="features">
+  <div><b>Synced lyrics</b><span>The current line large, the next ones gently sliding up, timed to a few hundredths of a second.</span></div>
+  <div><b>Cover view</b><span>Swipe for the album art with the title and artist in large type. Songs without lyrics show it by themselves.</span></div>
+  <div><b>Touch controls</b><span>Play, pause, skip, a volume slider, mute, and the choice of the Roon zone to follow.</span></div>
+  <div><b>Set up from your phone</b><span>Two QR codes on the screen: join the panel, pick your Wi-Fi. No app, no account.</span></div>
+  <div><b>Updates over the air</b><span>A tap installs a new version; if it ever fails to start, the panel goes back by itself.</span></div>
+  <div><b>Private and open</b><span>Talks only to your own TextFromTrack companion on your network. MIT-licensed firmware.</span></div>
+</div>
+
+<div class="shots"><img src="media/grid.png" width="1700" height="1080" alt="Lyrics, cover view, controls and settings"></div>
+
+<footer>
+  Firmware v0.1.18 for the Elecrow CrowPanel ESP32 Display 7.0" (DIS08070H, board V3.0) and the Waveshare ESP32-P4-WIFI6-Touch-LCD-7B.
+  Needs Roon and the <a href="https://github.com/r45635/roon.app.textfromtrack.com">TextFromTrack companion</a>.
+  Pictures from the panel's showcase mode: the song, lyrics and cover are invented.<br>
+  Roon is a trademark of Roon Labs. TFT Panel is an independent project, not affiliated with Roon Labs, Elecrow or Waveshare.
+</footer>
+<footer class="site">TFT Panel v0.1.18 · <a href="https://github.com/r45635/tft-panel/blob/main/LICENSE">MIT licence</a> · <a href="https://github.com/r45635/tft-panel/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a> · <a href="media-kit.html">Media kit</a> · <a href="https://github.com/r45635/tft-panel">GitHub</a></footer>
+</body>
+</html>
