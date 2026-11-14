@@ -66,8 +66,8 @@ lv_obj_t *g_bar = nullptr, *g_elapsed = nullptr, *g_total = nullptr;
 // Two views, switched by a horizontal swipe (instantly: a full-screen frame costs ~130 ms,
 // an animated wipe would only get 3-4 frames). Lyrics view = everything above in a
 // transparent container; cover view = big cover, large title/artist, current lyric line.
-enum class View : uint8_t { Lyrics, Cover };
-constexpr int VIEW_COUNT = 2;   // swipes wrap around: left = next, right = previous
+enum class View : uint8_t { Lyrics, Cover, Clock };
+constexpr int VIEW_COUNT = 3;   // swipes wrap around: left = next, right = previous
 lv_obj_t *g_lyricsView = nullptr, *g_coverView = nullptr;
 lv_obj_t *g_bigCover = nullptr, *g_cvTitle = nullptr, *g_cvArtist = nullptr, *g_cvAlbum = nullptr;
 lv_obj_t *g_cvLyric = nullptr, *g_cvBar = nullptr, *g_cvElapsed = nullptr, *g_cvTotal = nullptr;
@@ -543,10 +543,25 @@ void buildPageDots() {
     }
 }
 
+void fillClock(bool force);   // below: the clock face's text
+
+// The clock face is shown when the panel has gone quiet, and whenever it is the chosen view.
+bool clockWanted() {
+    if (g_view == View::Clock && !g_s.portalActive && !g_demo) return true;
+    time_t t = time(nullptr);
+    struct tm lt;
+    localtime_r(&t, &lt);
+    bool timeKnown = lt.tm_year + 1900 >= 2025;   // SNTP has answered
+    return settings::clock() && timeKnown && g_screen == Screen::Dimmed && !g_s.playing() && !g_demo &&
+           !g_s.portalActive;
+}
+
 void showView(View v) {
     g_view = v;
     setHidden(g_lyricsView, v != View::Lyrics);
     setHidden(g_coverView, v != View::Cover);
+    if (v == View::Clock) fillClock(true);
+    setHidden(g_clock, !clockWanted());
     for (int i = 0; i < VIEW_COUNT; i++) {
         lv_color_t c = lv_color_hex(i == (int)v ? COL_TEXT : COL_DIM);
         if (!lv_color_eq(lv_obj_get_style_bg_color(g_pageDots[i], LV_PART_MAIN), c))
@@ -567,12 +582,16 @@ bool noLyrics() {
            g_s.lyricsStatus == net::LyricsStatus::Error;
 }
 
-// No track → lyrics view (it carries the status message). A track without lyrics → cover view,
-// or what the user swiped to on this track. Lyrics found or loading → the saved view.
+// No track → lyrics view (it carries the status message), unless the clock was chosen. A track
+// without lyrics → cover view, or what the user swiped to on this track. Otherwise the saved view.
 View wantedView() {
-    if (!hasTrack()) return View::Lyrics;
-    if (noLyrics()) return g_overrideTrack == trackKey() ? g_overrideView : View::Cover;
-    return settings::view() ? View::Cover : View::Lyrics;
+    uint8_t savedView = settings::view();
+    if (!hasTrack()) return savedView >= 2 ? View::Clock : View::Lyrics;
+    if (noLyrics() && savedView < 2) return g_overrideTrack == trackKey() ? g_overrideView : View::Cover;
+    uint8_t saved = settings::view();
+    View chosen = saved >= 2 ? View::Clock : saved == 1 ? View::Cover : View::Lyrics;
+    // Asking for the clock means asking for the clock, whatever the track has.
+    return chosen;
 }
 
 void applyView() {
@@ -588,7 +607,7 @@ void chooseView(View v) {
         g_overrideTrack = trackKey();
         g_overrideView = v;
     } else {
-        settings::setView(v == View::Cover ? 1 : 0);
+        settings::setView((uint8_t)v);
     }
     showView(v);
 }
@@ -1099,7 +1118,7 @@ void build() {
     lv_obj_add_event_cb(g_scr, onScreenTap, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(g_scr, onGesture, LV_EVENT_GESTURE, nullptr);
     lv_obj_add_event_cb(g_scr, onLongPress, LV_EVENT_LONG_PRESSED, nullptr);
-    showView(settings::view() ? View::Cover : View::Lyrics);
+    showView(settings::view() >= 2 ? View::Clock : settings::view() == 1 ? View::Cover : View::Lyrics);
 }
 
 void setRows(int index) {
@@ -1367,20 +1386,14 @@ void hookTouch() {
         lv_indev_add_event_cb(indev, onIndevEvent, c, nullptr);
 }
 
-void tickClock() {
-    if (g_clockForced) return;
+// The clock face's text: the time, the date, the weather and the headlines. Called once a
+// minute while it is on screen, and whenever something it shows has changed.
+void fillClock(bool force) {
     time_t t = time(nullptr);
     struct tm lt;
     localtime_r(&t, &lt);
-    bool timeKnown = lt.tm_year + 1900 >= 2025;   // SNTP has answered
-    bool show = settings::clock() && timeKnown && g_screen == Screen::Dimmed && !g_s.playing() && !g_demo &&
-                !g_s.portalActive;
-    setHidden(g_clock, !show);
-    if (!show) {
-        g_clockMinute = -1;
-        return;
-    }
-    if (lt.tm_min == g_clockMinute && g_s.weatherSerial == g_clockWeatherSerial &&
+    if (lt.tm_year + 1900 < 2025) return;   // SNTP has not answered yet
+    if (!force && lt.tm_min == g_clockMinute && g_s.weatherSerial == g_clockWeatherSerial &&
         g_s.newsSerial == g_clockNewsSerial)
         return;
     g_clockMinute = lt.tm_min;
@@ -1413,6 +1426,17 @@ void tickClock() {
     setText(g_clockTrack, track.c_str());
 }
 
+void tickClock() {
+    if (g_clockForced) return;
+    bool show = clockWanted();
+    setHidden(g_clock, !show);
+    if (!show) {
+        g_clockMinute = -1;
+        return;
+    }
+    fillClock(false);
+}
+
 void tickSleep(uint32_t now) {
     hookTouch();
     bool busy = g_demo || g_s.portalActive || g_s.playing() || !isHidden(g_picker) || g_swallowTouch ||
@@ -1442,9 +1466,11 @@ void tickSleep(uint32_t now) {
 
 }  // namespace
 
-void setView(bool cover) { chooseView(cover ? View::Cover : View::Lyrics); }
+void setView(const String &name) {
+    chooseView(name == "clock" ? View::Clock : name == "cover" ? View::Cover : View::Lyrics);
+}
 
-const char *viewName() { return g_view == View::Cover ? "cover" : "lyrics"; }
+const char *viewName() { return g_view == View::Clock ? "clock" : g_view == View::Cover ? "cover" : "lyrics"; }
 
 const char *screenState() {
     return g_screen == Screen::On ? "on" : g_screen == Screen::Dimmed ? "dimmed" : "off";
@@ -1514,6 +1540,7 @@ bool showcase(const String &what) {
     }
     if (!g_demo) return false;
     if (what == "lyrics" || what == "cover") showView(what == "cover" ? View::Cover : View::Lyrics);
+    else if (what == "clockview") showView(View::Clock);
     else if (what == "controls") showControls(true);
     else if (what == "settings") {
         settingsui::open();

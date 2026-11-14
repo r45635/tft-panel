@@ -231,7 +231,7 @@ void setSleepMin(int32_t minutes) {
 int32_t sleepMin() { return g_sleepMin; }
 
 void setView(uint8_t view) {
-    view = view ? 1 : 0;
+    if (view > 2) view = 0;   // lyrics, cover, clock
     if (view == g_view) return;   // a swipe back and forth should not rewrite flash for nothing
     xSemaphoreTake(g_lock, portMAX_DELAY);
     g_s.view = view;

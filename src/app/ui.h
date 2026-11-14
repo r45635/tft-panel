@@ -25,8 +25,8 @@ bool showcase(const String &what);
 const char *screenState();
 
 // Shows the lyrics view (false) or the cover view (true) and saves it as the chosen view,
-// like a swipe. viewName(): the view on screen, "lyrics" or "cover".
-void setView(bool cover);
+// like a swipe. viewName(): the view on screen, "lyrics", "cover" or "clock".
+void setView(const String &name);
 const char *viewName();
 
 }  // namespace ui

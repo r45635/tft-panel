@@ -54,7 +54,8 @@ void printStatus() {
         Serial.printf("[status] news %s\n", s.news.length() ? s.news.substring(0, 120).c_str() : "off");
     }
     Serial.printf("[status] screen %s, view %s (saved %s), backdrop=%d scroll=%d sleep=%d min, brightness %d %%, "
-                  "warmth %d %%\n", ui::screenState(), ui::viewName(), settings::view() ? "cover" : "lyrics",
+                  "warmth %d %%\n", ui::screenState(), ui::viewName(),
+                  settings::view() >= 2 ? "clock" : settings::view() == 1 ? "cover" : "lyrics",
                   settings::backdrop(), settings::scroll(), (int)settings::sleepMin(), (int)settings::brightness(),
                   (int)settings::warmth());
     time_t now = time(nullptr);
@@ -113,7 +114,7 @@ void help() {
     Serial.println("[cmd] status | portal | wifi <ssid> [password] | forget-wifi | companion <http://host:port>|auto");
     Serial.println("[cmd] source companion|direct | server <host:port>|auto | lyrics auto|<url>|none | lyrics-token <t>|none | forget-pairing");
     Serial.println("[cmd] weather <town>|none | news <rss url>|none");
-    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off|pos <ms>|manual on|off|slide <%>] | show <screen>|none | shots on|off | screenshot | lib ... | touchdiag | erase-all | bringup | restart");
+    Serial.println("[cmd] token <token>|none | zone <zone_id>|auto | lead <ms> | backdrop on|off | scroll on|off | sleep <min>|off | view lyrics|cover|clock | ota check|install | settings [close] | tz <POSIX TZ>|default | warmth <0-100> | colours | backlight <0-100> | demo [off|pos <ms>|manual on|off|slide <%>] | show <screen>|none | shots on|off | screenshot | lib ... | touchdiag | erase-all | bringup | restart");
 }
 
 // Development console on the USB serial port (115200).
@@ -209,8 +210,8 @@ void handleCommand(String line) {
         settingsui::applyTz();
         Serial.printf("[cmd] time zone %s\n", settings::tz().c_str());
     } else if (cmd == "view" && arg.length()) {
-        ui::setView(arg == "cover");
-        Serial.printf("[cmd] view %s\n", arg == "cover" ? "cover" : "lyrics");
+        ui::setView(arg);
+        Serial.printf("[cmd] view %s\n", ui::viewName());
     } else if (cmd == "colours") {
         settingsui::showColourTest();
     } else if (cmd == "warmth" && arg.length()) {
