@@ -3,22 +3,50 @@
 #pragma once
 
 #include <ctype.h>
+#include <math.h>
+#include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <string>
+#include <utility>
 
 class String {
 public:
     String() = default;
     String(const char *s) : s_(s ? s : "") {}
     String(const std::string &s) : s_(s) {}
+    String(char c) : s_(1, c) {}
+    String(int v) : s_(std::to_string(v)) {}
+    String(unsigned int v) : s_(std::to_string(v)) {}
+    String(long v) : s_(std::to_string(v)) {}
+    String(unsigned long v) : s_(std::to_string(v)) {}
+    String(long long v) : s_(std::to_string(v)) {}
+    String(unsigned long long v) : s_(std::to_string(v)) {}
 
     unsigned int length() const { return (unsigned int)s_.size(); }
     const char *c_str() const { return s_.c_str(); }
     char operator[](unsigned int i) const { return i < s_.size() ? s_[i] : 0; }
     bool operator==(const String &o) const { return s_ == o.s_; }
-    bool operator==(const char *o) const { return s_ == o; }
+    bool operator==(const char *o) const { return s_ == (o ? o : ""); }
+    bool operator!=(const String &o) const { return !(*this == o); }
+    bool operator!=(const char *o) const { return !(*this == o); }
+    String &operator+=(const String &o) { s_ += o.s_; return *this; }
+    String &operator+=(const char *o) { s_ += o ? o : ""; return *this; }
+    String &operator+=(char c) { s_ += c; return *this; }
+    friend String operator+(String a, const String &b) { return a += b; }
+    friend String operator+(String a, const char *b) { return a += b; }
+    friend String operator+(const char *a, const String &b) { return String(a) += b; }
+
+    bool startsWith(const char *p) const { return p && s_.compare(0, strlen(p), p) == 0; }
+    bool endsWith(const char *p) const {
+        if (!p) return false;
+        size_t n = strlen(p);
+        return n <= s_.size() && s_.compare(s_.size() - n, n, p) == 0;
+    }
+    long toInt() const { return strtol(s_.c_str(), nullptr, 10); }
 
     int indexOf(char c, unsigned int from = 0) const {
         size_t p = s_.find(c, from);
@@ -46,3 +74,22 @@ public:
 private:
     std::string s_;
 };
+
+// The simulator advances this clock itself (sim/src/main.cpp), so pictures do not depend on timing.
+uint32_t millis();
+
+struct HostSerial {
+    void begin(unsigned long) {}
+    int printf(const char *fmt, ...) __attribute__((format(printf, 2, 3))) {
+        va_list ap;
+        va_start(ap, fmt);
+        int n = vfprintf(stderr, fmt, ap);
+        va_end(ap);
+        return n;
+    }
+    void print(const char *s) { fputs(s, stderr); }
+    void print(const String &s) { print(s.c_str()); }
+    void println(const char *s = "") { fprintf(stderr, "%s\n", s); }
+    void println(const String &s) { println(s.c_str()); }
+};
+inline HostSerial Serial;
