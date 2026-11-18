@@ -12,6 +12,7 @@
 #include "../board/board.h"
 #include "../board/board_pins.h"
 #include "../version.h"
+#include "version_compare.h"
 
 // Defer Arduino's automatic "image valid" at boot: we decide in markHealthy().
 extern "C" bool verifyRollbackLater() { return true; }
@@ -73,25 +74,6 @@ struct PsramAllocator : ArduinoJson::Allocator {
     void *reallocate(void *p, size_t n) override { return heap_caps_realloc(p, n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); }
 };
 
-// "v1.2.3[-anything]" → {1,2,3}, dev = has a suffix. false if not a version.
-bool parseVersion(const String &v, int out[3], bool &dev) {
-    int n = sscanf(v.c_str(), "v%d.%d.%d", &out[0], &out[1], &out[2]);
-    int dash = v.indexOf('-');
-    dev = dash >= 0;
-    return n == 3;
-}
-
-// Newer release than what runs? A dev build (suffix) counts as newer than its base tag.
-bool isNewer(const String &tag, const String &running) {
-    int a[3], b[3];
-    bool devA, devB;
-    if (!parseVersion(tag, a, devA) || devA) return false;   // only plain release tags
-    if (!parseVersion(running, b, devB)) return true;
-    for (int i = 0; i < 3; i++)
-        if (a[i] != b[i]) return a[i] > b[i];
-    return false;   // same base: the release is not newer (even if running a dev build of it)
-}
-
 void beginHttps(HTTPClient &http, NetworkClientSecure &client, const String &url) {
     client.useBuiltinCACertBundle();
     http.setConnectTimeout(8000);
@@ -146,7 +128,7 @@ void check() {
         if (name == binName) bin = a["browser_download_url"] | "";
         if (name == shaName) sha = a["browser_download_url"] | "";
     }
-    bool newer = isNewer(tag, FW_VERSION) && bin.length() && sha.length();
+    bool newer = isNewer(tag.c_str(), FW_VERSION) && bin.length() && sha.length();
     g_binUrl = newer ? bin : String();   // install() only ever takes a newer release
     g_shaUrl = newer ? sha : String();
     Serial.printf("[ota] latest release %s, running %s: %s\n", tag.c_str(), FW_VERSION,
