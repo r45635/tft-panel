@@ -41,6 +41,7 @@ String g_binUrl, g_shaUrl;
 volatile bool g_pendingVerify = false;
 esp_timer_handle_t g_deadline = nullptr;
 uint32_t g_wifiUpSince = 0;   // SELF_PROOF_MS is counted from here, and a drop resets it
+bool g_selfProofSaid = false;  // the 90 s proof is announced and acted on once, see tick()
 
 template <typename F>
 void update(F &&fn) {
@@ -379,7 +380,12 @@ void tick(bool wifiUp) {
         uint32_t now = millis();
         if (!wifiUp) g_wifiUpSince = 0;
         else if (!g_wifiUpSince) g_wifiUpSince = now;
-        else if (now - g_wifiUpSince >= SELF_PROOF_MS) {
+        else if (now - g_wifiUpSince >= SELF_PROOF_MS && !g_selfProofSaid) {
+            // Once. markHealthy() normally clears g_pendingVerify and ends this branch by itself,
+            // but the rollback test build (OTA_TEST_NEVER_HEALTHY) makes it return early on
+            // purpose: without this latch the line below printed 8,376 times in the three minutes
+            // before the rollback, burying the only message anyone is watching that log for.
+            g_selfProofSaid = true;
             Serial.println("[ota] no server answered, but the Wi-Fi link has held for 90 s: the image works");
             markHealthy();
         }
