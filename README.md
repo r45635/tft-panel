@@ -135,6 +135,7 @@ change asks once for the six digits shown on that panel's screen, then remembers
 - [User guide](docs/USER_GUIDE.md) — install, Wi-Fi setup, screens, gestures, settings, updates
 - [Architecture](docs/ARCHITECTURE.md) — how the panel talks to the companion, firmware layers, technical choices
 - [Hardware](docs/HARDWARE.md) — pin map, bring-up log, pitfalls
+- [Hardware test](docs/HARDWARE_TEST.md) — the checklist a maintainer runs on each board to validate a change
 - [Roadmap](docs/ROADMAP.md)
 - [Releasing](docs/RELEASING.md) — how a version is published (GitHub release + web installer)
 - [Media kit](https://r45635.github.io/tft-panel/media-kit.html) — logos, pictures, video and texts for coverage
