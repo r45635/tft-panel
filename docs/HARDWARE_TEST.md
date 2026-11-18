@@ -22,7 +22,7 @@ itself.
 | Update screen | frozen picture, live bar | live | live |
 
 The console is 115200 baud on all three (`pio device monitor -e <env>`, type `help`). Open the
-Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts it (see step 12).
+Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts it whatever DTR and RTS say (docs/HARDWARE.md).
 
 ## Core steps (every board)
 
@@ -84,26 +84,13 @@ Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts
     image works`: expected, the test build ignores it. At 3 minutes: `[ota] new firmware never got
     healthy: restarting into the previous one`, and the boot line shows step 10's version again,
     without a `first boot` line.
-12. **VIEWE only, console without a reset**: with the panel running, open the port with DTR and RTS
-    both deasserted (`--dtr 0 --rts 0`, which spares the CrowPanel). Report whether it restarted.
-    Until this is known, never open the VIEWE's port during the three minutes after an update:
-    open it before the upload and keep it open.
+
+    On the VIEWE, opening the port restarts the panel even with DTR and RTS deasserted
+    (docs/HARDWARE.md): open it before the upload and keep it open through the three minutes after.
 
 ## Changes in this release
 
-Each change that needs the board adds its steps under its heading when it lands (docs/ROADMAP.md).
-
-### Scrub on the progress bar
-
-### First run finds the companion or the server
-
-### French interface
-
-### Signed updates
-
-### Queue and zone grouping
-
-### Render speed: P4 draw unit, S3 DMA flush
+Each change that needs the board adds a heading here with its steps when it lands (docs/ROADMAP.md).
 
 ## Results block
 
@@ -113,7 +100,7 @@ Copy once per board, fill in, paste into the pull request.
 Board: <CrowPanel | Waveshare | VIEWE>   firmware: <version from the boot line>
 [ ] 1 backup        [ ] 2 flash         [ ] 3 colour bars   [ ] 4 touch corners
 [ ] 5 Internet      [ ] 6 companion     [ ] 7 direct        [ ] 8 timing, lead = ___ ms
-[ ] 9 render        [ ] 10 update       [ ] 11 rollback     [ ] 12 VIEWE port: reset? ___
+[ ] 9 render        [ ] 10 update       [ ] 11 rollback
 [ui] scroll lines:
 <paste the three lines>
 Change sections run: <names>
