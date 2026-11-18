@@ -26,7 +26,13 @@ pio run -e waveshare-p4-7b -t upload --upload-port /dev/cu.usbmodem*   # Wavesha
 pio run -e p4-s070-wba -t upload --upload-port /dev/cu.usbserial-*     # VIEWE P4 (CH340, 230400)
 pio device monitor                                   # 115200, exception decoder on
 PLATFORMIO_BUILD_FLAGS="-DTOUCH_DIAG" pio run -t upload   # touch reset diagnostic at boot
+pio test -e native                                   # host tests (test/); a plain `pio test` runs none, by design
+sim/shoot.sh [OUT_DIR] [SCREEN,...]                  # simulator PNGs at 800x480 and 1024x600 (default sim/out/)
+pio run -e sim && .pio/build/sim/program --window    # click through the screens (or -e sim-1024)
 ```
+Simulator setup (sim/README.md): PlatformIO 6.2.0, a C++17 compiler, SDL2 and zlib
+(`apt install build-essential libsdl2-dev zlib1g-dev`; macOS `brew install sdl2`, sdl2-compat works too).
+It shows the showcase data only; warmth, backlight, touch on glass and frame rate need a board.
 
 From an agent shell (no TTY), read the serial log with pyserial from PlatformIO's Python:
 CrowPanel: to **watch a running panel**, open with `dtr=False, rts=False` — both deasserted, the CH340
