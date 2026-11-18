@@ -27,9 +27,11 @@ PlatformIO Core (`pip install platformio==6.2.0`, or `uv tool install platformio
 a C++17 compiler, SDL2 and zlib. `PIO=/path/to/pio` if `pio` is not on the `PATH`.
 
 - Debian / Ubuntu: `apt install build-essential libsdl2-dev zlib1g-dev`
-- macOS: `brew install sdl2`. Not checked yet: the build has only run on Linux so far.
+- macOS: `brew install sdl2` (Homebrew's `sdl2-compat` works too); checked by the maintainer on his Mac.
 
-The build asks `sdl2-config` where SDL2 is (`sim/sdl_flags.py`).
+At build time `sim/sdl_flags.py` asks `sdl2-config` for SDL2's compiler and linker flags, so no
+install prefix is written down. Both sim environments pass `-std=gnu++17` explicitly: the maintainer's macOS build did not
+compile the UI without it.
 
 First build ~20 s (LVGL), then a few seconds. After `tools/fonts/build_fonts.sh`, delete
 `.pio/build/sim*`: the build does not see that the font files changed. A run takes well under a second.
@@ -41,7 +43,7 @@ First build ~20 s (LVGL), then a few seconds. After `tools/fonts/build_fonts.sh`
 | `[env:sim]`, `[env:sim-1024]` in `platformio.ini` | Native builds of `src/app`, one per screen size: `src/layout.h` scales at compile time from the board's pin header. |
 | `sim/lv_conf_sim.h` | The firmware's `include/lv_conf.h`, plus the C heap and the SDL driver. |
 | `sim/src/main.cpp` | Display (headless buffer or SDL window), the board functions the UI calls, the clock, PNG output. |
-| `sim/src/fake_services.cpp` | Settings in memory, and network, update and web page calls that do nothing. |
+| `sim/src/fake_services.cpp` | Settings in memory, starting from the version and settings of the panel that took `docs/images` (so each picture matches its device capture), and network, update and web page calls that do nothing. |
 | `sim/src/wall_clock.c` | `time()` fixed at the showcase's date and time. |
 | `sim/src/fonts_embed.c` | The Noto Sans files under the names `board_build.embed_files` gives them. |
 | `sim/shim/` | The few ESP-IDF headers the UI includes. `host/shim/Arduino.h` (shared with the host tests) stands in for Arduino. |

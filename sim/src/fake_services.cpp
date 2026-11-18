@@ -9,10 +9,23 @@
 #include "../../src/net/settings.h"
 #include "../../src/net/web_update.h"
 #include "../../src/net/weather.h"
+#include "../../src/version.h"
+
+// The version and settings of the panel that took docs/images, so a picture can be compared with
+// its device capture pixel for pixel. git describe would change them with every checkout.
+const char *const FW_VERSION = "v0.1.18-30-ge716008-dirty";
 
 namespace settings {
 namespace {
-Settings g;
+Settings capturePanel() {
+    Settings s;
+    s.brightness = 72;
+    s.warmth = 0;  // tools/showcase.py captures at 0 %: the UI's own colours
+    s.sleepMin = 5;
+    s.leadMs = 350;
+    return s;
+}
+Settings g = capturePanel();
 }
 void begin() {}
 Settings get() { return g; }
@@ -50,7 +63,7 @@ uint8_t warmth() { return g.warmth; }
 void setTz(const String &tz) { g.tz = tz; }
 String tz() { return g.tz.length() ? g.tz : String(DEFAULT_TZ); }
 void forgetWifi() { setWifi(String(), String()); }
-void eraseAll() { g = Settings(); }
+void eraseAll() { g = capturePanel(); }
 }  // namespace settings
 
 namespace net {
