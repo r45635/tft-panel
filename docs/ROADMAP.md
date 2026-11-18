@@ -230,6 +230,30 @@ dark in direct mode, which is what a new panel now chooses. The review asks for 
 and grouping in `tft-core-client` first so both modes gain them — undecided, and the contributor's
 call whether that is a detour worth taking.
 
+### Batch 1, tooling and tests: PR #3 (2026-11-18)
+
+The first batch arrived as its own pull request: host tests, an SDL simulator of the real
+`src/app` screens, the VIEWE backup read in pieces, and `docs/HARDWARE_TEST.md` — the checklist a
+maintainer runs on each board. Both macOS fixes the review asked for are in it (the signature
+suite in an environment of its own; `-std=gnu++17` on the simulator), and CI builds all three
+boards.
+
+Re-checked here, not taken on trust: 11 host suites green on this Mac, the simulator renders all
+ten screens at both sizes, and `settings.png` comes out pixel-identical to the committed
+showcase picture.
+
+- [x] `docs/HARDWARE_TEST.md` run end to end on the Waveshare (2026-11-18): backup, flash,
+      Internet, companion, direct, update and rollback all pass; results on the PR
+- [ ] The four steps a console cannot do: colour bars, touch at the four corners, lyrics timing
+      on a real song, render speed from the three `[ui] scroll:` lines
+- [ ] `docs/images/lyrics.png` is stale: the simulator's own render differs from it in 530
+      pixels, all inside the status corner (x 722-775, y 11-33), i.e. the picture predates a
+      change to that corner. The renderer is right and the picture is old — regenerate it with
+      `tools/showcase.py` at the next release, and the comparison becomes a real regression test
+- [x] The OTA self-proof message printed once instead of on every loop (2026-11-18): under the
+      rollback test build it filled the log with 8,376 identical lines in the three minutes that
+      matter, which is exactly when someone is reading it
+
 ## Other boards (not started)
 
 - **Guition JC1060P470C** (ESP32-P4, JD9165, 16 MB flash) — asked by a user 2026-11-11; about half a day
