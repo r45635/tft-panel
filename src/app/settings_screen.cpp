@@ -9,6 +9,7 @@
 
 #include "../net/settings.h"
 #include "../board/board.h"
+#include "../board/board_pins.h"
 #include "../version.h"
 #include "fonts.h"
 
@@ -570,7 +571,12 @@ void refresh(const net::Snapshot &s, const ota::Status &o) {
     // "Companion" was true of the only source there used to be; in direct mode that address is
     // the music server itself. And the panel is the only place someone holds this product: it
     // should be able to say where it comes from, without a search engine.
-    setText(g_about, "Panel " + net::hostName() + ".local  (" + (s.staIp.length() ? s.staIp : String("-")) + ")\nMusic server " +
+    // The board goes first: three different 7" boards run this firmware, the Firmware row above
+    // gives only a version, and someone opening an issue has no other way to say which one they
+    // hold. BOARD_NAME is already in the image (the boot line and the WRONG BOARD guard use it),
+    // so naming it here costs the format string and nothing else.
+    setText(g_about, String("TFT Panel on ") + board::BOARD_NAME + "\n" + net::hostName() +
+                         ".local  (" + (s.staIp.length() ? s.staIp : String("-")) + ")\nMusic server " +
                          (s.companion.length() ? s.companion : String("searching...")) + "\nFree internal RAM " + ram +
                          "\nSource, guide and releases: github.com/r45635/tft-panel");
 }

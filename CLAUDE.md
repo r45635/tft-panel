@@ -56,7 +56,12 @@ Changing `PLATFORMIO_BUILD_FLAGS` rebuilds the whole framework (~3 min).
 second stage runs PlatformIO 6.2.0.post1 from `~/.platformio/penv`, which the platform rejects
 ("needs >=6.2.0") and **uninstalls the platform**. Fix: reinstall it
 (`pio pkg install -e crowpanel7 -p <platform URL from platformio.ini>`), then `pio run` again —
-the rebuilt libraries are kept and the build goes through.
+the rebuilt libraries are kept and the build goes through. 🪤 **Reinstall with the right `pio`**:
+this Mac has two, and `~/.platformio/penv/bin/pio` is the 6.2.0.post1 the platform rejects, so
+running the fix with it fails exactly the way the failure did and looks like the fix not working.
+Use `~/.local/bin/pio` (plain 6.2.0, what `pio` on PATH resolves to) for the reinstall *and* the
+build. Then expect the `.sconsign312.tmp` failure below on the first run and simply run it again:
+the two traps fire in that order, every time (2026-11-19).
 Serial console (115200, type `help`): `status`, `portal`, `wifi <ssid> [password]`, `companion <url>|auto`,
 `source companion|direct` (restarts), `server <host:port>|auto` (restarts), `lyrics auto|<url>|none`, `lyrics-token <t>|none`,
 `forget-pairing` (restarts), `weather <town>|none`, `news <rss url>|none`, `zone <id>|auto`, `token`, `lead <ms>`,
