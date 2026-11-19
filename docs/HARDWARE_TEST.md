@@ -77,14 +77,19 @@ Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts
    slide. Only those first three print a line:
    `[ui] scroll: <steps> steps in <ms> ms, <n> refreshes <ms> ms, <n> flushes <ms> ms`. A slide
    lasts 400 ms (`SCROLL_MS`, src/app/ui.cpp). Reference:
-   All three measured 2026-11-18, on a real song in direct mode, and these replace the derived
-   figures that were here before:
-   - CrowPanel: 15 steps in 404-439 ms, 47-60 flushes in 6-13 ms (the old entry said 4-5 steps per
-     slide, derived from a 2026-11-12 full-frame timing and wrong by three times);
-   - Waveshare: 8-9 steps in 402-441 ms, ~0.9 ms per flush (the 2026-11-12 reference said ~1.3 ms
-     per 48-line strip, so flushing got faster, not slower);
-   - VIEWE: 21-22 steps in 406-416 ms, ~0.13 ms per flush — it draws about 2.5x more frames per
-     slide than the Waveshare.
+   🪤 **The backdrop decides these numbers, so say which state you measured in.** Shortly after a
+   restart, before the cover and its blurred backdrop are drawn, every board reports ~21 steps with
+   refreshes around 100 ms and a flush near free; once the backdrop is up the step count falls and
+   the refresh cost rises by three to four times. Only the second is the state a panel spends its
+   life in, so measure there: let the cover appear first.
+   All three measured 2026-11-18 on a real song in direct mode, backdrop up, replacing figures that
+   were derived rather than measured:
+   - CrowPanel: 12-16 steps in 413-445 ms, 49-56 flushes in 11-15 ms (~0.25 ms each). The old entry
+     said 4-5 steps per slide, derived from a 2026-11-12 full-frame timing and wrong by three times;
+   - Waveshare: 8-9 steps in 402-441 ms, 91-103 flushes in 78-93 ms (~0.9 ms each). The 2026-11-12
+     reference said ~1.3 ms per 48-line strip, so flushing got faster, not slower;
+   - VIEWE: 8-9 steps in 451-453 ms, 104-107 flushes in 93 ms (~0.9 ms each) — the same as the
+     Waveshare, which is what two boards sharing the P4 display path should give.
 
    By eye: no flickering dots around the lyrics, no image shift.
 10. **Update**: build the image under test (`pio run -e <env>`), compute
