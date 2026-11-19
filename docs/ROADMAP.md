@@ -229,10 +229,18 @@ What a board still has to say, and nothing else is blocking:
 - [ ] The render A/B on the CrowPanel: `flush cpu|dma|dma2`, watching for tearing and for a torn
       strip after a backdrop change; `cpu` stays the default until a measurement says otherwise
 
-Not a hardware question but open: queue and grouping go through the companion only, so they are
-dark in direct mode, which is what a new panel now chooses. The review asks for `subscribe_queue`
-and grouping in `tft-core-client` first so both modes gain them — undecided, and the contributor's
-call whether that is a detour worth taking.
+Two design questions from the review, both decided on 2026-11-18:
+
+- **Batch 3, the first run: the grace delay becomes symmetric.** `choose()` let a music server win
+  immediately while a companion waited `GRACE_MS`, which is backwards — direct mode cannot play
+  anything until someone enables the extension in Roon, so the panel was picking the source that
+  needs a human and making the user wait on the one that would have played. Both sources now wait
+  the same grace. Preferring the companion and moving to direct once the pairing is approved would
+  be better still; the symmetric delay is the cheap half of it, and at least it is not backwards.
+- **Batch 5, queue and grouping: through `tft-core-client` first.** Both features go through the
+  companion only, so they would land dark in direct mode — which is what a new panel chooses and
+  what both of the maintainer's panels run. `subscribe_queue` and grouping go into the library, and
+  then both modes gain them. The detour is accepted rather than merging a companion-only version.
 
 ### Batch 1, tooling and tests: PR #3 (2026-11-18)
 
