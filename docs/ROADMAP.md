@@ -26,8 +26,11 @@
 - [x] Timing: PositionClock (window ~36 ms on the board) + 250 ms display lead
 - [x] Vincent's eye check on the real LCD (white balance picked on the colour test card)
 - [x] Flash budget: the CrowPanel image was 1,889,435 B of its 2,031,616 B OTA slot on 2026-11-14
-      (93.0 %); with direct mode it became 95.3 %, and at **v0.1.19 it is 1,982,880 B — 97.6 %,
-      47 KiB left**, which is now the binding constraint of this repo. The P4 boards have 6 MB
+      (93.0 %); with direct mode it became 95.3 %, and at **v0.1.20 it is 1,983,424 B — 97.6 %,
+      48,192 B left**, which is now the binding constraint of this repo. 🪤 Measure the *published
+      image*, `firmware.bin`, against the slot: that is what has to fit. The linker's own line
+      (`Flash: 95.7 % (used 1945023 bytes)`) counts the application without the image header and
+      padding, so it reads ~38 KB smaller and makes the headroom look like twice what it is. The P4 boards have 6 MB
       slots and sit near 35 % (VIEWE) and 56 % (Waveshare, which also carries the C6 firmware).
 
 ## Phase 2 — lyrics and controls UI (in progress)
@@ -177,7 +180,7 @@ with that, and lyrics became a section. What is still missing to be a credible r
 - [ ] First run should not ask "companion or direct": the panel can look for both and say what it
       found, so a newcomer never has to understand the project's history to hear music
 
-🪤 None of this fits the CrowPanel: it is at **97.6 % of its OTA slot, 47 KiB left**. These are P4
+🪤 None of this fits the CrowPanel: it is at **97.6 % of its OTA slot, 48,192 B left**. These are P4
 screens; the S3 stays the panel it already is — and the next thing added to it has to pay for
 itself in bytes.
 
