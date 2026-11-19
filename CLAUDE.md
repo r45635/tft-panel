@@ -20,6 +20,10 @@ tools/backup-firmware.py --port /dev/cu.usbserial-*  # identify the board, dump 
                                                      # (read baud is below the flash baud: 230400 on both CH340s;
                                                      #  the VIEWE reads in retried 512 KB pieces)
 python3 -I tools/test_backup_firmware.py             # host test of that tool, esptool mocked (no board)
+tools/flashmap.py [env]                              # where the image's flash goes, by library and object
+                                                     # (link map + ELF, self-checking; the CrowPanel is the
+                                                     #  board that decides what this firmware can still grow)
+python3 -I tools/test_flashmap.py                    # host test of that tool (no build, no toolchain)
 pio run                                              # CrowPanel build (first build ~6 min + framework rebuild ~2 min, then ~30 s)
 pio run -t upload --upload-port /dev/cu.usbserial-*  # CrowPanel flash; 921600 fails on this board, 460800 works
 pio run -e waveshare-p4-7b -t upload --upload-port /dev/cu.usbmodem*   # Waveshare P4 (native USB, 921600 fine)

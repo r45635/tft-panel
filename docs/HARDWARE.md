@@ -321,6 +321,18 @@ What stays true:
   not work here, so every console command on this board costs a reboot and about 30 s before it has
   rejoined Wi-Fi, re-paired and found its zone again. A pending-verify OTA window must be left alone.
 - 🪤 **16 MB of flash**: the image header has to say 16 MB or the bootloader refuses to probe.
+- 🪤 **The C6 Wi-Fi coprocessor has no update path on this board** (found 2026-11-19 while mapping
+  where the flash goes). `src/net/coprocessor.cpp` compiles its updater only under
+  `BOARD_WAVESHARE_P4_7B`, so on this board `updateIfNeeded()` is the empty stub, and the
+  `assets/hosted/esp32c6.bin` blob that `platformio.ini` embeds for this env is never referenced
+  and the linker drops it — which is why the VIEWE image is 2,180,480 B while the Waveshare's is
+  3,508,320 B, 1,226,976 of them that one blob. Nothing is wrong with the image, but two things
+  follow: the embed line in this env is a dead build dependency (it still makes `tools/hosted_fw.py`
+  fetch and verify a blob nobody uses), and **a VIEWE whose C6 ships with older firmware than ours
+  expects would have no way to be updated** — this one's C6 happens to be compatible, and its boot
+  log simply prints no `[c6]` line at all. The Waveshare's factory Wi-Fi chip did fail exactly that
+  way, so a different unit is a plausible support case. Neither is fixed: changing the env costs a
+  rebuild, and the guard should probably become a board capability rather than a board name.
 - 🪤 **Vendor sources beat look-alike sources.** Every published table, timing, reset pin, pixel
   format, lane rate and clock source for boards with the same controller was tried and none of it
   mattered, because the missing piece was not in the display configuration at all. The BSP for the

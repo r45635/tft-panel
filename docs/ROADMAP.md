@@ -32,6 +32,39 @@
       (`Flash: 95.7 % (used 1945023 bytes)`) counts the application without the image header and
       padding, so it reads ~38 KB smaller and makes the headroom look like twice what it is. The P4 boards have 6 MB
       slots and sit near 35 % (VIEWE) and 56 % (Waveshare, which also carries the C6 firmware).
+- [x] Where those bytes go: `tools/flashmap.py <env>`, read out of the link map PlatformIO already
+      writes beside the image and checked against the ELF's own section sizes before it prints
+      anything — a wrong table is worse than no table, so it refuses to print one that does not add
+      up. `python3 -I tools/test_flashmap.py` covers the four ways of reading an ld map wrongly,
+      each of which produced a confident wrong table while the tool was written (the funniest
+      charged 168 KB of strings shared by the whole firmware to Arduino's `FS.cpp.o`).
+      At v0.1.20 the CrowPanel's image is: **LVGL 372,417 B (18.9 %)**, this repo's `src/`
+      216,070 (11.0 %), read-only strings merged across every object 174,457 (8.9 %), the Wi-Fi
+      stack (net80211 + lwip + pp + wpa_supplicant + phy) ~415,000 (21 %), TLS
+      (mbedcrypto + mbedtls + x509) ~160,000 (8 %), the two embedded Noto faces 49,444, and
+      tft-core-client 30,747.
+      Three candidate savings, measured rather than guessed, in the order they are worth taking:
+      - **The three stock LVGL Montserrat faces cost 72,712 B and are there for 17 glyphs.**
+        `lv_font_montserrat_28` (37,309), `_20` (21,811) and `_14` (13,592) are in the image only
+        as the `f->fallback` symbol font (`src/app/fonts.cpp`) and as the fallback if tiny_ttf
+        fails to load NotoSans — `grep -rhoE 'LV_SYMBOL_[A-Z_]+' src/ | sort -u` finds 17 symbols
+        actually drawn, against the full Latin alphabet each face carries. A symbols-only subset of
+        each should save on the order of 60 KB, which more than doubles the headroom;
+        `tools/fonts/build_fonts.sh` already builds fonts. The cost is real: the tiny_ttf failure
+        path would lose readable Latin text, so keeping `_14` whole as the emergency face and
+        subsetting only `_28` and `_20` still saves ~47 KB. Not attempted yet.
+      - **mbedTLS error strings, 13,298 B** (`libmbedcrypto.a(error.c.o)`):
+        `CONFIG_MBEDTLS_ERROR_STRINGS=n` drops `mbedtls_strerror`'s tables. Read what the OTA and
+        lyrics error paths actually print before taking it — a TLS failure that reports a bare
+        number is a bad trade on a device with no debugger attached.
+      - Rejected for now: the full Mozilla CA bundle, `x509_crt_bundle.S.o`, 17,260 B. Trimming it
+        to the roots GitHub uses recovers most of it, but the panel is meant to accept any
+        LRCLIB-compatible lyrics server its owner points it at, and breaking TLS to one of those
+        is worse than the bytes. 🪤 On the P4 boards the same bundle costs 68,839 B.
+      Not a saving: `vfprintf` + `svfprintf`, 26,558 B, are earned — `%.4f` for the weather
+      coordinates and `%.1f dB` for volume.
+      The P4 images are dominated by something else entirely: the Waveshare embeds the C6 Wi-Fi
+      firmware, `esp32c6.bin`, **1,226,976 B — 36 % of its 3,508,320 B image**.
 
 ## Phase 2 — lyrics and controls UI (in progress)
 
