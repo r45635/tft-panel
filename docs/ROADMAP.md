@@ -242,7 +242,7 @@ Two design questions from the review, both decided on 2026-11-18:
   what both of the maintainer's panels run. `subscribe_queue` and grouping go into the library, and
   then both modes gain them. The detour is accepted rather than merging a companion-only version.
 
-### Batch 1, tooling and tests: PR #3 (2026-11-18)
+### Batch 1, tooling and tests: PR #3, merged 2026-11-18
 
 The first batch arrived as its own pull request: host tests, an SDL simulator of the real
 `src/app` screens, the VIEWE backup read in pieces, and `docs/HARDWARE_TEST.md` — the checklist a
@@ -256,12 +256,17 @@ showcase picture.
 
 - [x] `docs/HARDWARE_TEST.md` run end to end on the Waveshare (2026-11-18): backup, flash,
       Internet, companion, direct, update and rollback all pass; results on the PR
-- [ ] The four steps a console cannot do: colour bars, touch at the four corners, lyrics timing
-      on a real song, render speed from the three `[ui] scroll:` lines
-- [ ] `docs/images/lyrics.png` is stale: the simulator's own render differs from it in 530
-      pixels, all inside the status corner (x 722-775, y 11-33), i.e. the picture predates a
-      change to that corner. The renderer is right and the picture is old — regenerate it with
-      `tools/showcase.py` at the next release, and the comparison becomes a real regression test
+- [x] The four steps a console cannot do, on the Waveshare (2026-11-18): colour bars and the four
+      corners by eye and finger, lyrics timing on a real song, and the three `[ui] scroll:` lines.
+      **11 of 11.** Four findings came out of running it, all now in the checklist itself: step 3
+      cannot be done remotely, step 8 asked for a `lead` value on the strength of one song, step 9's
+      references were derived and wrong, and the CrowPanel needed the VIEWE's chunked read to have
+      a backup at all
+- [x] The showcase pictures were stale and one came from a dirty tree (2026-11-18): twelve of
+      nineteen differed, all inside the status corner the simulator had pointed at, and
+      `update-confirm.png` advertised `v0.1.18-30-ge716008-dirty` in a public repository. Reshot on
+      the CrowPanel, `docs/media` rebuilt from them and the site republished. Six came out
+      byte-identical, so the comparison is now a regression test rather than a false alarm
 - [x] The OTA self-proof message printed once instead of on every loop (2026-11-18): under the
       rollback test build it filled the log with 8,376 identical lines in the three minutes that
       matter, which is exactly when someone is reading it
