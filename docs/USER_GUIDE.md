@@ -1,7 +1,7 @@
 # TFT Panel — user guide
 
 TFT Panel turns a 7" touch screen (Elecrow CrowPanel 7", Waveshare ESP32-P4 7B or VIEWE ESP32-P4 7")
-into a remote for the music you play with Roon, and a screen that shows it: pause, skip, change the
+into a remote for the music you play on your music server, and a screen that shows it: pause, skip, change the
 volume, pick the zone, search your library and start an album, all with a touch — while the cover
 and the words of the song scroll in time with the music.
 

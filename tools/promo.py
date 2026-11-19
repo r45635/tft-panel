@@ -16,7 +16,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT_BOLD = os.path.join(ROOT, "assets/fonts/NotoSans-600.ttf")
 FONT_REG = os.path.join(ROOT, "assets/fonts/NotoSans-400.ttf")
-TAGLINE = "A 7-inch touch screen that controls what you play in Roon and shows it."
+TAGLINE = "A 7-inch touch screen that controls what you play on your music server and shows it."
 SUB = "Open firmware for three 7\" ESP32 screens. It finds your music server by itself: no computer left running, no app to launch."
 
 

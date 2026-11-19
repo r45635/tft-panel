@@ -217,7 +217,11 @@ comment on the PR.
 What a board still has to say, and nothing else is blocking:
 
 - [x] Seek by finger on the VIEWE (2026-11-17): tap and drag on the progress bar both behave
-- [ ] Seek against the offset popup: a drag that starts where the popup opens, on each screen
+- [x] Seek against the offset popup (2026-11-18, VIEWE): the drag seeks, the popup does not steal
+      it. 🪤 The same drag on the CrowPanel and the Waveshare swipes between views instead — not a
+      regression and not a conflict: seek lives in batch 2, so `main` has no `makeSeekable()` at
+      all and those two boards were running firmware without the feature. Comparing a gesture
+      across boards means putting the same build on them first
 - [ ] Tap a queue row to play it
 - [ ] Group and ungroup two real zones
 - [ ] A signed install end to end — before any private key is compiled into a release, because a
