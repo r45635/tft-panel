@@ -28,8 +28,9 @@ Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts
 
 1. **Backup**, first time on a board only: `tools/backup-firmware.py --port <port>`. It names the
    board from its chip and flash size and verifies the copy. A board it does not name is not one
-   of the three: stop there. The VIEWE is read in 32 pieces of 512 KB, up to 3 attempts each (its
-   adapter drops bytes on a long read). The backup restarts the board, so never run it in the
+   of the three: stop there. Both CH340 boards are read in 512 KB pieces, up to 3 attempts each,
+   because their adapters drop bytes on a long read: a single 4 MB read of the CrowPanel died at
+   ~28 % (2026-11-18), and in pieces two of the eight needed a retry. The backup restarts the board, so never run it in the
    3 minutes after an update (the update would roll back). `--restore <file>` prints the command
    at the board's own flash speed, read from the file's name.
 2. **Flash**: `pio run -e <env> -t upload --upload-port <port>`. The boot log shows
@@ -38,7 +39,10 @@ Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts
    also print `[c6] Wi-Fi chip firmware …, up to date`; on a factory Wi-Fi chip they first print
    `[c6] updating the Wi-Fi chip …` (~40 s, Waveshare, 2026-11-11, docs/HARDWARE.md).
 3. **Colour bars**: console `bringup`. Bars read R, G, B, W, K from left to right, the gradient
-   below them has no bands, the title is upright. `restart` leaves the screen.
+   below them has no bands, the title is upright. `restart` leaves the screen. 🪤 This step cannot
+   be done remotely: `bringup` prints nothing on the console and draws *below* the application, so
+   `GET /screenshot` keeps returning the normal interface while the bars are on the glass. Someone
+   working over Wi-Fi gets no signal at all, not even that the command ran.
 4. **Touch at the four corners**, still on `bringup`: the dot sits under the finger in each corner,
    and the on-screen `touch: x=… y=…` reads near `0,0` top left and near the screen size bottom
    right. No axis mirrored.
@@ -54,18 +58,28 @@ Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts
    that zone. Go back with `source companion`.
 8. **Lyrics timing**: on a song with synced lyrics, each line lights up as the singer starts it.
    `status` prints `lead=250` unless it was changed (the default, src/net/settings.h) and a
-   `clock window`: ~36 ms recorded in companion mode (CrowPanel, docs/ROADMAP.md phase 1), ~7 ms
-   for the pushed position in direct mode (2026-11-14, docs/ROADMAP.md). If lines are early or
-   late, find the `lead <ms>` that fixes it and report the value.
+   `clock window`: ~36 ms recorded in companion mode (CrowPanel, docs/ROADMAP.md phase 1). In
+   direct mode, measured 2026-11-18 on the same Core and zone while playing: Waveshare 47 ms,
+   VIEWE 109 ms, CrowPanel 120 ms. (docs/ROADMAP.md quotes ~7 ms for direct mode; that came from
+   the tft-core-client proof of concept on a bare board, not from the panel firmware, so it is not
+   the same quantity — do not judge a board against it.)
+   🪤 If lines are early or late, first play **several different songs**. A consistent offset across
+   all of them is the panel's, and `lead <ms>` is the fix: report the value. An offset on one song
+   is in its lyrics file, and `lead` is the wrong lever — it is a single global correction, so
+   tuning it for one track writes that track's error into every other. The per-track offset
+   (companion, `/api/lyrics/offset`) is what that case needs.
 9. **Render speed**: after a restart, with `scroll on` (the default), let three lyric lines
    slide. Only those first three print a line:
    `[ui] scroll: <steps> steps in <ms> ms, <n> refreshes <ms> ms, <n> flushes <ms> ms`. A slide
    lasts 400 ms (`SCROLL_MS`, src/app/ui.cpp). Reference:
-   - Waveshare: 8-9 frames in 400 ms (~20 fps), flush ~1.3 ms per 48-line strip (2026-11-12,
-     docs/HARDWARE.md);
-   - CrowPanel: ~88 ms per full-stage frame with the backdrop, ~70 ms without (measured before the
-     64-byte cache lines, docs/HARDWARE.md), so about 4-5 steps per slide (derived, not measured);
-   - VIEWE: no reference yet; the first figure becomes it.
+   All three measured 2026-11-18, on a real song in direct mode, and these replace the derived
+   figures that were here before:
+   - CrowPanel: 15 steps in 404-439 ms, 47-60 flushes in 6-13 ms (the old entry said 4-5 steps per
+     slide, derived from a 2026-11-12 full-frame timing and wrong by three times);
+   - Waveshare: 8-9 steps in 402-441 ms, ~0.9 ms per flush (the 2026-11-12 reference said ~1.3 ms
+     per 48-line strip, so flushing got faster, not slower);
+   - VIEWE: 21-22 steps in 406-416 ms, ~0.13 ms per flush — it draws about 2.5x more frames per
+     slide than the Waveshare.
 
    By eye: no flickering dots around the lyrics, no image shift.
 10. **Update**: build the image under test (`pio run -e <env>`), compute

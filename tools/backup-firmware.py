@@ -42,12 +42,14 @@ PY = sys.executable
 # Reading is not writing: a CH340 that flashes happily at 460800 loses bytes somewhere in four
 # megabytes of read ("Serial data stream stopped"), and a backup that stops early is not a backup.
 # The VIEWE's CH340 even loses them at 230400 over its 16 MB in one go (died after 284 KB), so it
-# is read in retryable 512 KB pieces, which worked with one retry in 32. Measured on the boards.
+# is read in retryable 512 KB pieces. Both CH340 boards need it: the VIEWE took one retry in 32,
+# and the CrowPanel's single 4 MB read died at ~28 % (2026-11-18) where pieces got it, two of
+# them on a second or third attempt. Measured on the boards.
 # flash_baud is the board's upload_speed in platformio.ini; keep them equal (the test pins all three).
 Board = namedtuple("Board", "name env asset read_baud flash_baud piece")
 BOARDS = {
     ("ESP32-S3", 4): Board("Elecrow CrowPanel 7\" V3.0", "crowpanel7", "tft-panel",
-                           230400, 460800, None),
+                           230400, 460800, 512 * 1024),
     ("ESP32-P4", 32): Board("Waveshare ESP32-P4-WIFI6-Touch-LCD-7B", "waveshare-p4-7b",
                             "tft-panel-waveshare-p4-7b", 921600, 921600, None),
     ("ESP32-P4", 16): Board("VIEWE UEP4S070H1024V600C-WB-C", "p4-s070-wba",
