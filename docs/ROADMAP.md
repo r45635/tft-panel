@@ -267,6 +267,16 @@ showcase picture.
       `update-confirm.png` advertised `v0.1.18-30-ge716008-dirty` in a public repository. Reshot on
       the CrowPanel, `docs/media` rebuilt from them and the site republished. Six came out
       byte-identical, so the comparison is now a regression test rather than a false alarm
+- [x] The review's last open question — the three simulator screens that did not match the
+      pictures — investigated 2026-11-18 rather than papered over. Two causes, one behind the
+      other. The pictures predated the change that replaced the word "Playing" with the five-bar
+      equaliser (`g_eq`), which is the 530-pixel difference; reshooting removed it. What is left,
+      216-249 pixels in the same corner, is the **animation's phase**: two independent captures
+      catch the bars at different heights, and `lyrics`, `cover` and `clock` are precisely the
+      three screens that carry it — `library` and `settings` come out pixel-identical. Nothing is
+      wrong with the renderer. To make all five screens a usable regression test, the equaliser
+      has to be frozen during a showcase capture the way the news ticker already is; until then,
+      compare only the two screens without it
 - [x] The OTA self-proof message printed once instead of on every loop (2026-11-18): under the
       rollback test build it filled the log with 8,376 identical lines in the three minutes that
       matter, which is exactly when someone is reading it
