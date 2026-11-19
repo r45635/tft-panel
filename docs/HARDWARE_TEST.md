@@ -45,7 +45,11 @@ Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts
    working over Wi-Fi gets no signal at all, not even that the command ran.
 4. **Touch at the four corners**, still on `bringup`: the dot sits under the finger in each corner,
    and the on-screen `touch: x=… y=…` reads near `0,0` top left and near the screen size bottom
-   right. No axis mirrored.
+   right. No axis mirrored. 🪤 Worth knowing what this step is and is not for: a mirrored axis
+   cannot survive normal use of the panel — buttons would not answer under the finger and the seek
+   bar could not be dragged — so on a board already in daily use, that part is proved. What the
+   step actually adds is the calibration at the edges, where a few pixels of error never show up in
+   use. Don't hold a release open on it for a board that has been in service for days.
 5. **Wi-Fi to the Internet**: join from the setup screen's QR codes (or `wifi <ssid> <password>`).
    `status` shows an `ip=` and a `dns=`. `ota check` prints `[ota] latest release …, running …`,
    which needs DNS and TLS to GitHub: a LAN-only link fails here (the Waveshare's factory Wi-Fi
