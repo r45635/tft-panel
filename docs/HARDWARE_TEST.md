@@ -58,11 +58,16 @@ Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts
    that zone. Go back with `source companion`.
 8. **Lyrics timing**: on a song with synced lyrics, each line lights up as the singer starts it.
    `status` prints `lead=250` unless it was changed (the default, src/net/settings.h) and a
-   `clock window`: ~36 ms recorded in companion mode (CrowPanel, docs/ROADMAP.md phase 1). In
-   direct mode, measured 2026-11-18 on the same Core and zone while playing: Waveshare 47 ms,
-   VIEWE 109 ms, CrowPanel 120 ms. (docs/ROADMAP.md quotes ~7 ms for direct mode; that came from
-   the tft-core-client proof of concept on a bare board, not from the panel firmware, so it is not
-   the same quantity — do not judge a board against it.)
+   🪤 `clock window` is **not a board characteristic and a single reading means nothing**. It is
+   the width of `PositionClock`'s uncertainty window (`uncertaintyMs()`): each sample bounds the
+   offset, successive samples intersect, so the window only narrows — and any track change, seek
+   or stall empties the intersection and starts it over, printing `-1` until the first sample.
+   Read at an arbitrary moment it mostly says how long the clock has been converging. On one
+   CrowPanel in direct mode, two minutes apart: `-1`, `-1`, 1, 15, 30 ms, and 120 ms earlier the
+   same evening. So let one track play for a while and read it repeatedly; report the settled
+   value, not the first number the console gives you, and do not compare one board's reading with
+   another's. (docs/ROADMAP.md quotes ~36 ms for companion mode and ~7 ms for direct; the 7 ms came
+   from the tft-core-client proof of concept on a bare board, not from the panel firmware.)
    🪤 If lines are early or late, first play **several different songs**. A consistent offset across
    all of them is the panel's, and `lead <ms>` is the fix: report the value. An offset on one song
    is in its lyrics file, and `lead` is the wrong lever — it is a single global correction, so
