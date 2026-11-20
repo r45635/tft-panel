@@ -26,8 +26,8 @@
 - [x] Timing: PositionClock (window ~36 ms on the board) + 250 ms display lead
 - [x] Vincent's eye check on the real LCD (white balance picked on the colour test card)
 - [x] Flash budget: the CrowPanel image was 1,889,435 B of its 2,031,616 B OTA slot on 2026-11-14
-      (93.0 %); with direct mode it became 95.3 %, and at **v0.1.20 it is 1,983,424 B — 97.6 %,
-      48,192 B left**, which is now the binding constraint of this repo. 🪤 Measure the *published
+      (93.0 %); with direct mode it became 95.3 %, and at **v0.1.21 it is 1,983,840 B — 97.7 %,
+      47,776 B left** (v0.1.20: 1,983,424 B), which is now the binding constraint of this repo. 🪤 Measure the *published
       image*, `firmware.bin`, against the slot: that is what has to fit. The linker's own line
       (`Flash: 95.7 % (used 1945023 bytes)`) counts the application without the image header and
       padding, so it reads ~38 KB smaller and makes the headroom look like twice what it is. The P4 boards have 6 MB
@@ -316,6 +316,26 @@ showcase picture.
 - [x] The OTA self-proof message printed once instead of on every loop (2026-11-18): under the
       rollback test build it filled the log with 8,376 identical lines in the three minutes that
       matter, which is exactly when someone is reading it
+
+## The instruction that was not true (2026-11-20, v0.1.21)
+
+- [x] **A paired panel asked, at every boot, to be enabled in the server it was already paired
+      with.** The first explanation written down was that the server answered the registration
+      later than the 2.5 s the client allowed. It was wrong, and wrong in the direction that stops
+      you looking: the server answers in **43 ms**. The wait itself was the defect — it was
+      implemented with the pump that also serves synchronous calls, and that pump returns as soon
+      as the flag of the *previous* reply is set, which it still was. So the wait ended on its
+      first line and every connection passed through "needs approval".
+      Fixed in tft-core-client **v0.1.1** (a real loop, 2.5 s without a saved token and 15 s with
+      one) and pinned by the three environments. 🪤 A timeout whose flag is not reset is not a
+      timeout; and a state the user reads deserves a test that waits — the library now has a fake
+      server that answers late, which fails on the old code.
+- [x] The user guide answers the question this produced on the way: *the panel says Paused while
+      music is playing*. It shows what the music server knows, and AirPlay, Spotify Connect or an
+      input on the amplifier are invisible to it.
+- [x] Rollback proved on the VIEWE (2026-11-20), the last console step never run on that board: a
+      build that never reports itself healthy, three minutes, `never got healthy: restarting into
+      the previous one`, back on the previous image with no `first boot` line.
 
 ## Other boards (not started)
 
