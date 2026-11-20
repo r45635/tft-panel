@@ -22,7 +22,9 @@ itself.
 | Update screen | frozen picture, live bar | live | live |
 
 The console is 115200 baud on all three (`pio device monitor -e <env>`, type `help`). Open the
-Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts it whatever DTR and RTS say (docs/HARDWARE.md).
+console of any of them with `--dtr 1 --rts 0`: that is the one open that leaves all three running.
+Every other combination resets the Waveshare, and both lines deasserted resets the two CH340 boards
+too — measured 2026-11-19, correcting what this file said about the VIEWE (docs/HARDWARE.md).
 
 ## Core steps (every board)
 
@@ -113,8 +115,10 @@ Waveshare's with `--dtr 1 --rts 0`, or it restarts. Opening the VIEWE's restarts
     healthy: restarting into the previous one`, and the boot line shows step 10's version again,
     without a `first boot` line.
 
-    On the VIEWE, opening the port restarts the panel even with DTR and RTS deasserted
-    (docs/HARDWARE.md): open it before the upload and keep it open through the three minutes after.
+    Open the console before the upload and keep it open through the three minutes after. Opened
+    with `--dtr 1 --rts 0` it leaves any of the three boards running (docs/HARDWARE.md) — the VIEWE
+    was wrongly believed to reset on every open until 2026-11-19 — but no one has yet opened a port
+    during a pending-verify window, so don't make this step the first time.
 
 ## Changes in this release
 
