@@ -289,6 +289,7 @@ flash until the new one has proved it starts.
 | The setup QR codes come back | The panel cannot join your Wi-Fi for a minute: check the password, or that the network is 2.4 GHz. |
 | "Looking for the TextFromTrack companion" | Start the companion on its computer; same network as the panel. If it runs on a laptop with a dock or a second network adapter, give the panel its address on the panel's page instead: a machine can announce an address that is not reachable from the panel. |
 | "Enable TFT Panel in Roon" | Direct mode: open Roon → Settings → Extensions and enable it once. |
+| The panel says *Paused* while music is playing | The panel shows what your music server is playing, and nothing else. Sound sent to the same amplifier from somewhere else — AirPlay, Spotify Connect, Bluetooth, an input on the amplifier — is invisible to it: the zone really is paused. |
 | The weather shows the wrong town | On the panel's page, add a region or country after the name (`Paris, Texas`). |
 | The page says the code is wrong | The code on the screen changes every five minutes; read the new one. |
 | "No lyrics found for this track" | The lyrics server found none; the cover view shows instead. |
