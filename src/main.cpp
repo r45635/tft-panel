@@ -36,9 +36,18 @@ void printStatus() {
                   o.error.length() ? (", " + o.error).c_str() : "", s.status.c_str());
     Serial.printf("[status] wifi ssid=\"%s\" ip=%s dns=%s,%s portal=%d ap=\"%s\"\n", st.wifiSsid.c_str(), s.staIp.c_str(),
                   WiFi.dnsIP(0).toString().c_str(), WiFi.dnsIP(1).toString().c_str(), s.portalActive, s.apSsid.c_str());
-    Serial.printf("[status] source=%s server=%s (%s) token=%s\n",
-                  settings::source() == settings::SourceKind::Direct ? "direct" : "companion",
-                  s.companion.c_str(), st.companionUrl.length() ? "manual" : "mDNS", st.accessToken.length() ? "set" : "none");
+    // Each mode is asked about its own credential and its own address. Printing the companion's
+    // bearer token in direct mode read "token=none" on a panel that was paired and playing, which
+    // is exactly the line someone trusts while diagnosing (2026-11-19).
+    bool direct = settings::source() == settings::SourceKind::Direct;
+    if (direct)
+        Serial.printf("[status] source=direct server=%s (%s) pairing=%s%s\n", s.companion.c_str(),
+                      st.serverHost.length() ? "manual" : "discovered",
+                      st.serverToken.length() ? "saved for " : "none yet (enable the panel in the server's extensions)",
+                      st.serverToken.length() ? st.serverId.c_str() : "");
+    else
+        Serial.printf("[status] source=companion server=%s (%s) token=%s\n", s.companion.c_str(),
+                      st.companionUrl.length() ? "manual" : "mDNS", st.accessToken.length() ? "set" : "none");
     // The id as well as the name: `zone <id>` is the only way to pin one without the touch
     // screen, and nothing else prints it.
     Serial.printf("[status] zone=\"%s\" (%s) %s state=%s track=\"%s - %s\" pos=%d/%u ms\n", s.zoneName.c_str(),
