@@ -145,6 +145,15 @@ Pin map in code: [`src/board/pins_crowpanel7.h`](../src/board/pins_crowpanel7.h)
   RGB888 memory order). `cover.cpp` swaps to R, G, B in its output callback. Check against the
   companion's own JPEG (`/api/roon/image/<key>`) with `warmth 0`, not by eye on the bluish panel.
 - Old Elecrow comment `TOUCH_GT911_RST 38` is a leftover; GPIO38 is the J4/J7 header pin.
+- 🪤 **Its CH340 resets the board when the port is opened with DTR and RTS both deasserted** —
+  the opposite of what this repo documented until 2026-11-19, when a panel opened to read a frozen
+  state rebooted and the state was lost. The four combinations, one open each (2026-11-19):
+  `(dtr=1, rts=0)` and `(1, 1)` keep the panel running and answering, `(0, 0)` resets it, and
+  `(0, 1)` holds it in reset — silent console, booting when the port closes, which is what the
+  deliberate `rts=True` → `False` boot capture relies on. Use `dtr=True, rts=False`: it is also the
+  Waveshare's recipe, so one open fits all three boards. A `restart` typed with the port held open
+  boots `SPI_FAST_FLASH_BOOT`, so leaving DTR asserted does not arm the serial bootloader. The VIEWE
+  was checked on the two combinations that matter, not the whole table.
 
 ### Touch diagnostic
 
@@ -316,10 +325,12 @@ What stays true:
   vendor's own choice, the driver default reference at 600 Mbps, works.
 - 🪤 **Its CH340 drops bytes on a long transfer**: a 16 MB read died after 284 KB at 460800 and
   again at 230400 in one go. Reading in retryable 512 KB pieces at 230400 works (one retry in 32).
-  Flashing at 230400 is reliable. Opening the port resets the board **even with DTR and RTS both
-  deasserted** (2026-11-16): the trick that lets a CrowPanel be watched without restarting it does
-  not work here, so every console command on this board costs a reboot and about 30 s before it has
-  rejoined Wi-Fi, re-paired and found its zone again. A pending-verify OTA window must be left alone.
+  Flashing at 230400 is reliable. Opening the port with **DTR and RTS both deasserted resets the
+  board** (2026-11-16) — and it resets a CrowPanel too, which this note used to hold up as the
+  counter-example. Opened with `dtr=True, rts=False` this board keeps running: 3 sessions out of 3
+  stayed up and answered `status`, as did 4 out of 4 with both lines asserted (2026-11-19). So a
+  console command costs a reboot only when the port is opened the wrong way; what is still untested
+  is watching a real pending-verify OTA window.
 - 🪤 **16 MB of flash**: the image header has to say 16 MB or the bootloader refuses to probe.
 - 🪤 **The C6 Wi-Fi coprocessor has no update path on this board** (found 2026-11-19 while mapping
   where the flash goes). `src/net/coprocessor.cpp` compiles its updater only under

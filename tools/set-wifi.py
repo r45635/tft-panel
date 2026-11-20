@@ -45,8 +45,9 @@ def main():
         print(f"Cannot open {PORT}: {e}")
         print("A serial monitor holding that port is the usual reason.")
         return 1
-    # Both lines low: on a CH340 board, asserting either one resets the panel.
-    port.dtr = False
+    # DTR asserted, RTS not: measured on both CH340 boards as the open that does not reset them
+    # (both lines low does, which used to lose the credentials typed just before).
+    port.dtr = True
     port.rts = False
     time.sleep(0.2)
     port.reset_input_buffer()

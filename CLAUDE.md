@@ -38,13 +38,19 @@ Simulator setup (sim/README.md): PlatformIO 6.2.0, a C++17 compiler, SDL2 and zl
 (`apt install build-essential libsdl2-dev zlib1g-dev`; macOS `brew install sdl2`, sdl2-compat works too).
 It shows the showcase data only; warmth, backlight, touch on glass and frame rate need a board.
 
-From an agent shell (no TTY), read the serial log with pyserial from PlatformIO's Python:
-CrowPanel: to **watch a running panel**, open with `dtr=False, rts=False` — both deasserted, the CH340
-leaves EN and IO0 alone and nothing restarts; commands typed on it answer normally. Only to capture the
-**boot** log do you reset it: `rts=True` → `False` (`dtr=False`), then read for a few seconds. Waveshare P4
-(USB-Serial/JTAG): open with **`dtr=True, rts=False`** — other states reset it on open, and a logger
-that reopens after each reset loops forever. VIEWE (CH340 on UART0): opening the port resets it even
-with DTR and RTS deasserted (docs/HARDWARE.md), so leave its port alone during a pending-verify OTA window.
+From an agent shell (no TTY), read the serial log with pyserial from PlatformIO's Python.
+One recipe for all three boards: open with **`dtr=True, rts=False`** and the panel keeps running;
+commands typed on it answer normally. 🪤 **`dtr=False, rts=False` resets both CH340 boards**
+(CrowPanel, VIEWE) — this file said the opposite, and following it rebooted a panel opened to read a
+frozen state, destroying the evidence (2026-11-19). The CH340 truth table, one open each: `(dtr=1,
+rts=0)` and `(1, 1)` keep running and answer, `(0, 0)` resets, `(0, 1)` holds the board in reset
+(console silent, and it boots when the port closes — which is why the deliberate boot-log capture is
+`rts=True` → `False` with `dtr=False`). A `restart` typed with the port held open comes back
+`boot:0x8 (SPI_FAST_FLASH_BOOT)`, not the serial bootloader, so asserting DTR is safe to leave on.
+Waveshare P4 (USB-Serial/JTAG): the same `dtr=True, rts=False`; other states reset it on open, and a
+logger that reopens after each reset loops forever. The VIEWE is no worse than the CrowPanel here, so
+its pending-verify OTA window no longer has to be left alone for this reason — not re-watched during
+a real one, though.
 🪤 `pio run -e <other env>` can wipe the whole `.pio/build/` (`project.checksum` is rewritten), so an
 image built a minute earlier is simply gone — and `curl -F firmware=@…` then uploads 0 bytes and says
 nothing useful. Copy the `.bin` somewhere else before building another environment.

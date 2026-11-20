@@ -52,8 +52,8 @@ class Console:
         import serial  # pyserial
         self.s = serial.Serial()
         self.s.port, self.s.baudrate, self.s.timeout = port, 115200, 0.2
-        # DTR high, RTS low opens both boards without a reset (other states reset the P4, whose
-        # settings read before the reset were then lost).
+        # DTR high, RTS low opens all three boards without a reset — measured on the CH340 boards
+        # too (other states reset the P4, whose settings read before the reset were then lost).
         self.s.dtr, self.s.rts = True, False
         self.s.open()
         self.s.reset_input_buffer()

@@ -75,7 +75,9 @@ def write_png(path, w, h, rgb):
 def from_port(port):
     import serial  # pyserial (bundled with PlatformIO's Python)
     s = serial.Serial()
-    s.port, s.baudrate, s.timeout, s.dtr, s.rts = port, 115200, 0.5, False, False
+    # DTR asserted, RTS not: the one open that leaves every board running. Both deasserted resets
+    # a CH340 board, which would have replaced the screen being captured with a fresh boot.
+    s.port, s.baudrate, s.timeout, s.dtr, s.rts = port, 115200, 0.5, True, False
     s.open()
     s.reset_input_buffer()
     s.write(b"screenshot\n")
