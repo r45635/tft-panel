@@ -170,9 +170,11 @@ void handleCommand(String line) {
     } else if (cmd == "lyrics" && arg.length()) {
         settings::setLyricsUrl(arg == "auto" ? "" : arg);
         net::lyricsrc::forgetDiscovered();
+        net::relookupLyrics();
         Serial.printf("[cmd] lyrics from %s\n", arg == "auto" ? "a companion on the network" : arg.c_str());
     } else if (cmd == "lyrics-token" && arg.length()) {
         settings::setLyricsToken(arg == "none" ? "" : arg);
+        net::relookupLyrics();
         Serial.println("[cmd] lyrics token saved");
     } else if (cmd == "weather" && arg.length()) {
         settings::setWeatherPlace(arg == "none" ? "" : arg);

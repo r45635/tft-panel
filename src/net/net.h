@@ -147,6 +147,10 @@ struct Snapshot {
 
 void begin();                // starts the network task
 String hostName();           // "tft-panel-xxxx" (mDNS: tft-panel-xxxx.local, its web page)
+// Ask for the lyrics of what is playing again, without waiting for the next track: the
+// lyrics server was just changed, and a panel that answers "no lyrics source" until the
+// song ends looks broken to the person who just told it where to look.
+void relookupLyrics();
 String macAddress();         // "94:a9:90:xx:xx:xx", the one identity that never changes
 String displayName();        // "TFT Panel f068", what a person calls this one
 uint32_t version();          // bumps on every snapshot change (cheap to poll)

@@ -448,6 +448,7 @@ void handleSettingsSave() {
     settings::setWeatherPlace(weather);
     settings::setNewsUrl(news);
     net::lyricsrc::forgetDiscovered();
+    net::relookupLyrics();
     net::weather::reset();
     net::news::reset();
     g_code = 0;

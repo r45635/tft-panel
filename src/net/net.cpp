@@ -407,6 +407,9 @@ namespace {
 
 // Asks the source for the lyrics of what is playing. A source that has none says so and is
 // never asked again for that track.
+// Set from the console and the web page (other tasks), read by the net task.
+volatile bool g_relookup = false;
+
 void askLyrics(const String &zoneId) {
     if (!source().fetchLyrics(zoneId)) {
         String why = source().whyNoLyrics();
@@ -547,6 +550,12 @@ void publishNowPlaying(NowPlaying np) {
         if (np.imageKey != g_imageKey || settings::backdrop() != g_backdropWanted) {
             g_backdropWanted = settings::backdrop();
             fetchCover(np.imageKey);
+        }
+        if (g_relookup) {
+            g_relookup = false;
+            g_lyricsRetries = 0;
+            askLyrics(np.zoneId);
+            return;
         }
         LyricsStatus ls;
         xSemaphoreTake(g_lock, portMAX_DELAY);
@@ -849,6 +858,7 @@ Snapshot snapshot() {
 }
 
 void openPortal() { g_portalRequested = true; }
+void relookupLyrics() { g_relookup = true; }
 void requestScan() { g_scanRequested = true; }
 void reconnect() { g_reconnectRequested = true; }
 void pause(bool on) { g_paused = on; }
