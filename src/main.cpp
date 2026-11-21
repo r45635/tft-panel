@@ -57,6 +57,15 @@ void printStatus() {
     Serial.printf("[status] lyrics status=%d lines=%u synced=%d offset=%d lead=%d source=%s clock window=%d ms\n",
                   (int)s.lyricsStatus, s.lyrics ? (unsigned)s.lyrics->lines.size() : 0u, s.lyrics ? s.lyrics->synced : 0,
                   (int)s.offsetMs, (int)settings::leadMs(), s.lyricsSource.c_str(), (int)s.positionUncertaintyMs);
+    {
+        // The ladder as it stands: what is typed, and what the last look for a companion found.
+        net::lyricsrc::CompanionInfo ci = net::lyricsrc::companionInfo();
+        Serial.printf("[status] lyrics ladder: fallback=%s companion=%s%s%s\n",
+                      st.lyricsUrl.length() ? st.lyricsUrl.c_str() : "(none typed)",
+                      ci.state == net::lyricsrc::CompanionInfo::State::Found ? ci.url.c_str()
+                      : ci.state == net::lyricsrc::CompanionInfo::State::NotFound ? "none on the network" : "not looked for yet",
+                      ci.version.length() ? " v" : "", ci.version.c_str());
+    }
     if (s.weather.valid || s.weather.problem.length() || s.news.length() || s.newsProblem.length()) {
         Serial.printf("[status] weather %s\n",
                       s.weather.valid ? (s.weather.place + " " + String((int)s.weather.tempC) + " C, " +

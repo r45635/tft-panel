@@ -200,7 +200,7 @@ HttpResult getBytes(const String &url, uint8_t *&buf, size_t &len, size_t maxLen
 
 // See net_internal.h: ESPmDNS only ever hands back the first IPv4 of an answer, and the first
 // is not always one we can reach. Ask the IDF for the whole list and choose.
-String mdnsServiceUrl(const char *service, const char *proto, String *hostOut) {
+String mdnsServiceUrl(const char *service, const char *proto, String *hostOut, String *txtApi, String *txtVersion) {
     // 🪤 The IDF wants the leading underscores that ESPmDNS adds for you.
     String srv = service[0] == '_' ? String(service) : "_" + String(service);
     String prt = proto[0] == '_' ? String(proto) : "_" + String(proto);
@@ -211,7 +211,7 @@ String mdnsServiceUrl(const char *service, const char *proto, String *hostOut) {
     uint32_t bestAddr = 0;
     uint16_t bestPort = 0;
     int bestScore = 0;
-    String bestHost;
+    String bestHost, bestApi, bestVersion;
     for (mdns_result_t *r = results; r; r = r->next) {
         for (mdns_ip_addr_t *a = r->addr; a; a = a->next) {
             if (a->addr.type != MDNS_IP_PROTOCOL_V4) continue;
@@ -231,12 +231,20 @@ String mdnsServiceUrl(const char *service, const char *proto, String *hostOut) {
                 bestAddr = (uint32_t)ip;
                 bestPort = r->port;
                 bestHost = r->hostname ? r->hostname : "";
+                bestApi = bestVersion = "";
+                for (size_t t = 0; t < r->txt_count; t++) {
+                    if (!r->txt[t].key || !r->txt[t].value) continue;
+                    if (!strcmp(r->txt[t].key, "api")) bestApi = r->txt[t].value;
+                    else if (!strcmp(r->txt[t].key, "version")) bestVersion = r->txt[t].value;
+                }
             }
         }
     }
     mdns_query_results_free(results);
     if (!bestScore) return String();
     if (hostOut) *hostOut = bestHost;
+    if (txtApi) *txtApi = bestApi;
+    if (txtVersion) *txtVersion = bestVersion;
     return "http://" + IPAddress(bestAddr).toString() + ":" + String(bestPort);
 }
 
@@ -409,10 +417,14 @@ namespace {
 // never asked again for that track.
 // Set from the console and the web page (other tasks), read by the net task.
 volatile bool g_relookup = false;
+// The last answer was "no source" and one may appear (a companion starting, a server typed):
+// ask again once a minute, so the words show up without waiting for the next song.
+bool g_waitingForServer = false;
 
 void askLyrics(const String &zoneId) {
     if (!source().fetchLyrics(zoneId)) {
         String why = source().whyNoLyrics();
+        g_waitingForServer = source().lyricsMayAppear();
         update([&why](Snapshot &s) {
             s.lyricsStatus = LyricsStatus::None;
             s.lyrics.reset();
@@ -421,6 +433,8 @@ void askLyrics(const String &zoneId) {
             s.lyricsError = why;   // shown on the screen: a blank screen explains nothing
         });
         g_lyricsRetries = LYRICS_MAX_RETRIES;
+    } else {
+        g_waitingForServer = false;
     }
     g_lyricsFetchedAt = millis();
 }
@@ -565,6 +579,8 @@ void publishNowPlaying(NowPlaying np) {
             millis() - g_lyricsFetchedAt > LYRICS_RETRY_MS) {
             g_lyricsRetries++;
             askLyrics(np.zoneId);
+        } else if (ls == LyricsStatus::None && g_waitingForServer && millis() - g_lyricsFetchedAt > LYRICS_RETRY_MS) {
+            askLyrics(np.zoneId);   // one mDNS look a minute, until something answers
         }
     }
 }

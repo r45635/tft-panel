@@ -24,11 +24,13 @@ own extension of the music server, through `tft-core-client`, and needs no compa
   (Wi-Fi, source, server address and pairing, lyrics server, chosen zone, brightness, weather town,
   news feed) in NVS.
 - Lyrics are their own question in direct mode: the music server exposes none (checked 2026-11-14),
-  so the panel either finds a companion on the network by itself, asks an LRCLIB-compatible server
-  whose address it is given, or shows none. A companion run with `ROON_ENABLED=false` is a lyrics
-  server and nothing else — no pairing, nothing to enable in Roon — and answers both its own
-  `/api/lrclib/lookup` (what the panel asks a companion it discovered) and LRCLIB's `/api/get`
-  (what it asks an address it was given), so either path reaches it.
+  so the panel climbs a ladder (`src/net/lyrics_ladder.h`, host-tested): a companion found on the
+  network first, else the fallback LRCLIB-compatible server typed on its page, else nothing — said
+  on the screen and on the page, and looked for again once a minute. A companion run with
+  `ROON_ENABLED=false` is a lyrics server and nothing else — no pairing, nothing to enable in Roon.
+  Its mDNS TXT record carries `api=get` since v0.7.1: the panel then asks LRCLIB's `/api/get`, which
+  the companion answers from the player's own chain (local files, corrections, per-track offset);
+  an older companion is asked its `/api/lrclib/lookup`. The fallback server is asked `/api/get`.
 - Name never contains "Roon" (Roon Labs trademark).
 - 🪤 **mDNS gives several addresses and the first is not always usable.** A Mac announces every
   interface it has: a laptop with a dock or a second adapter often lists a self-assigned
@@ -180,7 +182,9 @@ carries `zone_or_output_id` = the followed zone, so actions play there.
 - Each line is shown `lead` ms before its timestamp (default 250, `lead <ms>` on the console), then
   the per-track `offset_ms` from the companion applies.
 - Lyrics fetched on each new track (the call waits while the companion resolves them: 20 s
-  timeout); "not found" is retried up to 3 times, once a minute.
+  timeout); "not found" is retried up to 3 times, once a minute; "no source at all" is asked again
+  every minute for as long as the song lasts (one mDNS look, 3 s on the net task), so a companion
+  that starts shows words without a track change. Changing the lyrics setting asks again at once.
 - Commands (control, volume, zone) go through a FreeRTOS queue to the net task, so a tap never
   blocks the UI: `POST /api/roon/control {action, zone_id}`, `POST /api/roon/volume {output_id,
   how: relative_step, value: ±1}` on every output of the zone. A failure shows in red for 5 s.

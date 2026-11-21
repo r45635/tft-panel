@@ -347,6 +347,36 @@ showcase picture.
       small. Cost on the VIEWE: 105 KB of a 6 MB slot (34.9 % used). Checked on the glass with
       `demo` + `show controls` + a screenshot over Wi-Fi, not by reasoning.
 
+## Lyrics that survive the laptop: the ladder (2026-11-21, v0.1.23)
+
+- [x] **The lyrics setting was a switch and is now a ladder.** A panel in direct mode asked either
+      a companion found over mDNS or one typed address, never both. On 2026-11-21 the companion was
+      the desktop app on a laptop that had simply quit, the LRCLIB mirror on the NAS was alive and
+      unasked, and three panels showed a blank space under the cover with the reason on a serial
+      cable nobody had attached. Now (`src/net/lyrics_ladder.h`, host-tested, 8 cases): a companion
+      on the network first, else the **fallback lyrics server** typed on the page, else nothing —
+      said on the screen with the panel's own address, said on the page under the field, and looked
+      for again **once a minute** for as long as the song lasts, so a companion that starts shows
+      words without a track change (measured: words 40 s after `node src/server.js`, no track line
+      in between). Changing the setting anywhere (console, page, settings screen) asks again at once.
+- [x] **One resolver for every client.** The companion's mDNS TXT record carries `api=get` and
+      `version` since its v0.7.1 (released the same day); the panel reads them and asks LRCLIB's
+      `/api/get`, which the companion answers from the player's own chain (local `.lrc`, tags,
+      *Wrong lyrics*, per-track offset — now applied on the panel), instead of the bare
+      `/api/lrclib/lookup`. An older companion is still asked the old way. The page shows
+      "Asking the companion v0.7.1 on <host>". The companion's "Asked by your screens" card saw the
+      panel's request on the first try.
+- [x] 🪤 The search result is kept a minute whether or not a companion was found: before, only a
+      hit was memoised, so a panel with no companion paid a 3 s blocking mDNS query on every lookup
+      and retry. `forgetDiscovered()` is now a flag the net task honours, not a `String` written
+      from three tasks.
+- [x] Flash: **+5,088 B** on the CrowPanel, 1,990,592 B — **97.98 % of the slot, 41,024 B left**.
+      The first cut used `std::string` in the ladder and cost 1,168 B more: it was the only use of
+      that class in the image, so the header is templated on the string type (Arduino `String` on
+      the board, `std::string` in the test). The rest is mostly the sentences on the page and the
+      `status` line — words that say what is wrong are worth their bytes here.
+
+
 ## Other boards (not started)
 
 - **Guition JC1060P470C** (ESP32-P4, JD9165, 16 MB flash) — asked by a user 2026-11-11; about half a day

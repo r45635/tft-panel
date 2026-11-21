@@ -21,8 +21,9 @@ struct Settings {
     String serverHost;     // direct mode: "host:port" to skip discovery; empty = find it
     String serverId;       // direct mode: the server this pairing belongs to
     String serverToken;    // direct mode: the pairing token, so it is asked for only once
-    // Where lyrics come from when the music source has none: empty = find a companion on the
-    // network, "none" = do without, anything else = an LRCLIB-compatible server's base URL.
+    // Where lyrics come from when the music source has none (src/net/lyrics_ladder.h): a
+    // companion found on the network always comes first; this is the fallback - "" = none typed,
+    // "none" = do without lyrics, anything else = an LRCLIB-compatible server's base URL.
     String lyricsUrl;
     String lyricsToken;    // bearer token, for a lyrics server that asks for one
     String webToken;       // what a browser shows instead of typing the code again

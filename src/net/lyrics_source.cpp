@@ -6,6 +6,7 @@
 #include <WiFi.h>
 
 #include "../app/lyrics.h"
+#include "lyrics_ladder.h"
 #include "net.h"
 #include "net_internal.h"
 #include "settings.h"
@@ -16,11 +17,23 @@ using namespace internal;
 
 namespace {
 
-String g_discovered;        // a companion found on the network, remembered between tracks
-uint32_t g_discoveryAt = 0;
-// Read by the web task for the panel's page: an enum, never the String above, which the net
-// task rewrites.
-CompanionSearch g_lastSearch = CompanionSearch::Unknown;
+// What the last look found, read by the web and console tasks: always copied under the lock,
+// since the net task rewrites it.
+CompanionInfo g_companion;
+SemaphoreHandle_t companionLock() {
+    static SemaphoreHandle_t l = xSemaphoreCreateMutex();
+    return l;
+}
+void setCompanion(const CompanionInfo &ci) {
+    xSemaphoreTake(companionLock(), portMAX_DELAY);
+    g_companion = ci;
+    xSemaphoreGive(companionLock());
+}
+// The result - found or not - is kept a minute: a search blocks the net task up to 3 s, and a
+// song with nothing to show would otherwise pay it on every retry.
+uint32_t g_searchedAt = 0;
+bool g_searched = false;
+volatile bool g_forgetRequested = false;   // set from any task, honoured by the net task
 constexpr uint32_t REDISCOVER_MS = 60000;
 
 // Percent-encodes a query value: track and artist names carry spaces, accents and punctuation.
@@ -40,18 +53,34 @@ String urlEncode(const String &in) {
     return out;
 }
 
-// The companion announces itself; nothing else on the network does, so this is how "auto" works.
-String findCompanion() {
+// The companion announces itself; nothing else on the network does. Net task only.
+CompanionInfo findCompanion() {
     uint32_t now = millis();
-    if (g_discovered.length() && now - g_discoveryAt < REDISCOVER_MS) return g_discovered;
-    g_discoveryAt = now ? now : 1;
-    g_discovered = mdnsServiceUrl("textfromtrack", "tcp");
-    g_lastSearch = g_discovered.length() ? CompanionSearch::Found : CompanionSearch::NotFound;
+    if (g_forgetRequested) {
+        g_forgetRequested = false;
+        g_searched = false;
+    }
+    if (g_searched && now - g_searchedAt < REDISCOVER_MS) return companionInfo();
+    g_searchedAt = now;
+    g_searched = true;
+    CompanionInfo ci;
+    ci.url = mdnsServiceUrl("textfromtrack", "tcp", &ci.host, &ci.api, &ci.version);
+    ci.state = ci.url.length() ? CompanionInfo::State::Found : CompanionInfo::State::NotFound;
+    setCompanion(ci);
     // Said out loud either way: a track with no lyrics and no reason given is the one thing
     // this screen must not do. The memo above keeps it to once a minute at worst.
-    if (g_discovered.length()) Serial.printf("[net] lyrics from the companion at %s\n", g_discovered.c_str());
-    else Serial.println("[net] no lyrics server: none announced on the network, and none set on the page");
-    return g_discovered;
+    if (ci.url.length())
+        Serial.printf("[net] lyrics: companion %s%s at %s, asked on %s\n", ci.version.length() ? "v" : "",
+                      ci.version.c_str(), ci.url.c_str(), ci.api == "get" ? "/api/get" : "/api/lrclib/lookup");
+    else Serial.println("[net] lyrics: no companion announced on the network");
+    return ci;
+}
+
+// The ladder, from what is typed and what the network answered.
+using Choice = ladder::Choice<String>;
+Choice decide(const settings::Settings &st, const CompanionInfo &ci) {
+    return ladder::choose<String>(st.lyricsUrl, ci.state == CompanionInfo::State::Found ? ci.url : String(),
+                                  ci.api, net::hostName());
 }
 
 struct Answer {
@@ -98,7 +127,7 @@ Answer get(const String &url, const String &token) {
 
 // Publishes what one answer holds. The two server kinds name their fields differently and agree
 // on everything else, so one reader covers both.
-void publish(JsonDocument &doc, bool companionShape, const char *sourceName) {
+void publish(JsonDocument &doc, bool companionShape, const char *sourceName, int32_t offsetMs) {
     bool instrumental = (companionShape ? doc["instrumental"] : doc["instrumental"]) | false;
     if (instrumental) {
         Serial.println("[net] lyrics: instrumental");
@@ -117,48 +146,48 @@ void publish(JsonDocument &doc, bool companionShape, const char *sourceName) {
         publishLyricsFailed(LyricsStatus::NotFound, "");
         return;
     }
-    Serial.printf("[net] lyrics: found, %u lines, %s, from %s\n", (unsigned)parsed->lines.size(),
-                  parsed->synced ? "synced" : "plain", sourceName);
-    publishLyrics(LyricsStatus::Found, parsed, sourceName, 0);
+    Serial.printf("[net] lyrics: found, %u lines, %s, from %s%s\n", (unsigned)parsed->lines.size(),
+                  parsed->synced ? "synced" : "plain", sourceName, offsetMs ? " (with its timing offset)" : "");
+    publishLyrics(LyricsStatus::Found, parsed, sourceName, offsetMs);
 }
 
 }  // namespace
 
 void forgetDiscovered() {
-    g_discovered = "";
-    g_discoveryAt = 0;
-    g_lastSearch = CompanionSearch::Unknown;
+    g_forgetRequested = true;
+    setCompanion(CompanionInfo{});
 }
 
-CompanionSearch lastCompanionSearch() { return g_lastSearch; }
+CompanionInfo companionInfo() {
+    xSemaphoreTake(companionLock(), portMAX_DELAY);
+    CompanionInfo ci = g_companion;
+    xSemaphoreGive(companionLock());
+    return ci;
+}
 
-String whyNoLyrics() {
-    settings::Settings st = settings::get();
-    if (st.lyricsUrl == "none") return "Lyrics are turned off for this panel";
-    if (st.lyricsUrl.length()) return "";   // a server is set; its answers speak for themselves
-    // Said in the order the listener can act on: what is missing, then where to fix it. The
-    // address is this panel's own page, which is where both answers are typed.
-    return "No lyrics source\n\nNo companion is announcing itself on your network, and no lyrics "
-           "server is set.\nSet one at http://" + net::hostName() + ".local";
+String whyNoLyrics() { return decide(settings::get(), companionInfo()).why; }
+
+bool waitingForServer() {
+    return decide(settings::get(), companionInfo()).kind == Choice::Kind::None;
 }
 
 bool lookup(const String &title, const String &artist, const String &album, uint32_t durationMs) {
     settings::Settings st = settings::get();
-    if (st.lyricsUrl == "none") return false;
+    if (st.lyricsUrl == "none") return false;   // a decision: no look on the network either
     if (!title.length() || !artist.length()) return false;
 
-    bool companionShape = false;
-    String base = st.lyricsUrl;
-    if (!base.length()) {   // "auto": the companion if there is one, nothing otherwise
-        base = findCompanion();
-        companionShape = true;
-        if (!base.length()) return false;
+    Choice c = decide(st, findCompanion());
+    if (c.kind == Choice::Kind::None) {
+        Serial.println("[net] no lyrics server: no companion on the network, and no fallback typed on the page");
+        return false;
     }
-    while (base.endsWith("/")) base.remove(base.length() - 1);
+    const bool companion = c.kind == Choice::Kind::Companion;
+    const bool lookupShape = companion && !c.getApi;   // a companion before 0.7.1
+    const char *sourceName = companion ? "companion" : "lyrics server";
 
     publishLyricsLoading();
-    String url = base;
-    if (companionShape) {
+    String url = c.base;
+    if (lookupShape) {
         url += "/api/lrclib/lookup?title=" + urlEncode(title) + "&artist=" + urlEncode(artist);
         if (album.length()) url += "&album=" + urlEncode(album);
         if (durationMs) url += "&duration=" + String(durationMs / 1000);
@@ -179,16 +208,18 @@ bool lookup(const String &title, const String &artist, const String &album, uint
     if (a.code != 200) {
         Serial.printf("[net] lyrics failed: %s\n", a.message.c_str());
         publishLyricsFailed(LyricsStatus::Error, a.message);
-        if (companionShape) forgetDiscovered();   // it may have moved or stopped
+        if (companion) forgetDiscovered();   // it may have moved or stopped: the retry climbs down
         return true;
     }
-    // The companion answers 200 with found:false when it has nothing.
-    if (companionShape && !(a.doc["found"] | false)) {
+    // The old companion endpoint answers 200 with found:false when it has nothing.
+    if (lookupShape && !(a.doc["found"] | false)) {
         Serial.println("[net] lyrics: none for this track");
         publishLyricsFailed(LyricsStatus::NotFound, "");
         return true;
     }
-    publish(a.doc, companionShape, companionShape ? "companion" : "lyrics server");
+    // /api/get from a companion carries the per-track timing offset the listener set there.
+    const int32_t offsetMs = companion && c.getApi ? (int32_t)(a.doc["offsetMs"] | 0) : 0;
+    publish(a.doc, lookupShape, sourceName, offsetMs);
     return true;
 }
 

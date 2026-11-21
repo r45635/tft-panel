@@ -82,8 +82,8 @@ void sendForm(const String &error, const String &typedSsid = String()) {
          ">The TextFromTrack companion</option>"
          "<option value=direct" + String(s.source == settings::SourceKind::Direct ? " selected" : "") +
          ">The music server, directly</option></select></label>"
-         "<label>Lyrics server <small>(direct only; empty = a companion on the network, "
-         "<code>none</code> = no lyrics)</small>"
+         "<label>Fallback lyrics server <small>(direct only; a companion found on the network "
+         "always comes first; this is asked when there is none. <code>none</code> = no lyrics)</small>"
          "<input name=lyrics placeholder=\"http://192.168.1.30:3300\" value=\"" + esc(s.lyricsUrl) + "\"></label>"
          "<label>Lyrics server token <small>(only if it asks for one)</small>"
          "<input name=lyricstoken type=password placeholder=\"" +

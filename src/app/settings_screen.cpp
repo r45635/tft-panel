@@ -370,6 +370,7 @@ void buildRows() {
         g_lyricsDrop = dropdown(r, "A companion on the network\nNo lyrics", sel, [](lv_event_t *) {
             settings::setLyricsUrl(lv_dropdown_get_selected(g_lyricsDrop) == 1 ? "none" : "");
             net::lyricsrc::forgetDiscovered();
+            net::relookupLyrics();
             showLyricsSource();
         });
         // A lyrics server of one's own is typed on the setup page, not here: it is a URL.

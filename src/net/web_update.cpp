@@ -59,8 +59,8 @@ a{color:#6db56d}</style></head><body>
 <input name=companion placeholder="http://192.168.1.20:3888" value="%COMPANION%"></label>
 <label>Companion access token <small>(only if it has one; empty leaves it unchanged)</small>
 <input name=token type=password autocomplete=off></label>
-<label>Lyrics <small>(empty = a companion on the network, <code>none</code> = no lyrics,
- or the address of an LRCLIB-compatible server)</small>
+<label>Fallback lyrics server <small>(a companion found on the network always comes first;
+ this LRCLIB-compatible address is asked when there is none. <code>none</code> = no lyrics)</small>
 <input name=lyrics placeholder="http://192.168.1.30:3300" value="%LYRICS%"></label>
 <label>Lyrics server token <small>(only if it asks for one)</small>
 <input name=lyricstoken type=password autocomplete=off></label>%LNOTE%
@@ -352,24 +352,34 @@ void sendSettings(const String &message, bool error = false, bool keepTyped = fa
     // Lyrics are why this panel exists, so the page says what it is actually asking - and warns
     // when the answer is "nobody", which otherwise only showed as a screen with no words on it.
     String lnote;
+    const bool fallback = st.lyricsUrl.length() && st.lyricsUrl != "none";
     if (st.source == settings::SourceKind::Companion)
         lnote = "<p class=found>In companion mode the companion supplies the lyrics; "
                 "this setting is used in direct mode.</p>";
     else if (st.lyricsUrl == "none") lnote = "<p class=found>Lyrics are turned off.</p>";
-    else if (st.lyricsUrl.length()) lnote = "<p class=found>This panel asks " + esc(st.lyricsUrl) + ".</p>";
-    else
-        switch (net::lyricsrc::lastCompanionSearch()) {
-            case net::lyricsrc::CompanionSearch::Found:
-                lnote = "<p class=found>A companion was found on your network.</p>"; break;
-            case net::lyricsrc::CompanionSearch::NotFound:
-                lnote = "<p class=warn>No companion is announcing itself on your network and no "
-                        "address is set, so this panel has no lyrics to show. Run the "
-                        "TextFromTrack companion on a computer here, or type the address of an "
-                        "LRCLIB-compatible server above.</p>"; break;
-            case net::lyricsrc::CompanionSearch::Unknown:
-                lnote = "<p class=found>Empty: this panel looks for a companion on your network "
-                        "when a track starts.</p>"; break;
+    else {
+        using State = net::lyricsrc::CompanionInfo::State;
+        net::lyricsrc::CompanionInfo ci = net::lyricsrc::companionInfo();
+        if (ci.state == State::Found) {
+            lnote = "<p class=found>Asking the companion" + String(ci.version.length() ? " v" + esc(ci.version) : "") +
+                    (ci.host.length() ? " on " + esc(ci.host) : "") + " (" + esc(ci.url) + ")" +
+                    (fallback ? ", with " + esc(st.lyricsUrl) + " as the fallback" : "") +
+                    (ci.api == "get" ? "." : ". It is older than 0.7.1, so it answers without your files, "
+                                             "corrections or timing offset.") + "</p>";
+        } else if (ci.state == State::NotFound && fallback) {
+            lnote = "<p class=found>No companion found on your network &mdash; asking " + esc(st.lyricsUrl) +
+                    ". A companion that starts here is used first, from the next song.</p>";
+        } else if (ci.state == State::NotFound) {
+            lnote = "<p class=warn>No companion is announcing itself on your network and no fallback "
+                    "server is set, so this panel has no lyrics to show. Run the TextFromTrack companion "
+                    "on a computer here, or type the address of an LRCLIB-compatible server above. The "
+                    "panel looks again every minute.</p>";
+        } else {
+            lnote = "<p class=found>This panel looks for a companion on your network when a track "
+                    "starts" + String(fallback ? ", and asks " + esc(st.lyricsUrl) + " when there is none." : ".") +
+                    "</p>";
         }
+    }
     h.replace("%LNOTE%", lnote);
     h.replace("%WEATHER%", esc(val("weather", st.weatherPlace)));
     net::weather::Now w = net::snapshot().weather;

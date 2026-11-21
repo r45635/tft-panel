@@ -32,11 +32,13 @@ class DirectSource : public Source {
     void zoneSelectionChanged() override;
 
     void command(const Command &c) override;
-    // No lyrics of its own: a music server does not hand them to an extension. With a lyrics
-    // server configured (an LRCLIB-compatible one, a mirror on the network or the public site)
-    // it looks them up itself; without one it says there are none, and is not asked again.
+    // No lyrics of its own: a music server does not hand them to an extension. It climbs the
+    // ladder of lyrics_ladder.h itself - a companion on the network, else the fallback server
+    // typed on the page - and without either says what is missing, then looks again every
+    // minute.
     bool fetchLyrics(const String &zoneId) override;
     String whyNoLyrics() const override;
+    bool lyricsMayAppear() const override;
 
     internal::HttpResult browse(JsonDocument &body, JsonDocument &resp) override;
     internal::HttpResult browseLoad(JsonDocument &body, JsonDocument &resp) override;

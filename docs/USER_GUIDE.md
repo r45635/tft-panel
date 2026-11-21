@@ -22,8 +22,9 @@ zones and cover are invented.*
   installer would give them the Waveshare firmware. Their screen would stay dark.
 - A **Roon** system. The panel can get what is playing in either of two ways:
   - **straight from your music server**, with nothing else running. You enable *TFT Panel* once in
-    Roon's Settings → Extensions and it is done; lyrics then come from an LRCLIB-compatible server
-    you give it (the public lrclib.net, or your own mirror), or from a companion if you run one;
+    Roon's Settings → Extensions and it is done; lyrics then come from a companion if you run one,
+    else from the fallback LRCLIB-compatible server you give it (the public lrclib.net, or your own
+    mirror);
   - from the free **TextFromTrack companion** on a computer of the same network, which also finds,
     ranks and lets you correct the lyrics. Several passages below assume it, because it is where
     the lyrics are managed rather than merely looked up.
@@ -128,12 +129,15 @@ the same setup page.
 ## 4. Lyrics and cover
 
 Roon serves no lyrics of its own, so the panel is told where to find them, on
-[its own page](#8-the-panels-own-page). Either run the **TextFromTrack companion** anywhere on your
-network — one container, `ROON_ENABLED=false`, nothing to enable in Roon, and the panel finds it by
-itself — or type the address of any **LRCLIB-compatible server** (the public lrclib.net, or your own
-mirror). Set it to *none* if you came for the controls and the cover. The companion is also what
-gives you *your* lyrics: the `.lrc` files beside your music, the words in your tags, the wrong ones
-replaced, a per-song offset that is remembered.
+[its own page](#8-the-panels-own-page). It climbs a ladder: a **TextFromTrack companion** found on
+your network always comes first — one container anywhere, `ROON_ENABLED=false`, nothing to enable in
+Roon, and the panel finds it by itself; when there is none, it asks the **fallback lyrics server**
+typed on the page, any LRCLIB-compatible address (the public lrclib.net, or your own mirror); with
+neither, the screen says what is missing and where it is typed, and the panel looks again every
+minute. Set the fallback to *none* if you came for the controls and the cover. The companion is also
+what gives you *your* lyrics: the `.lrc` files beside your music, the words in your tags, the wrong
+ones replaced, a per-song offset that is remembered — a companion from v0.7.1 answers the panel from
+that same chain. The page says, under the field, which one the panel is asking today.
 
 The panel follows the zone that is playing. The current line is large, the lines around it
 dimmed; they slide up as the song goes.
@@ -239,8 +243,8 @@ Everything that has to be typed lives on one page, in any browser on your networ
 address and firmware are written at the top, so two panels are never confused. The QR closes
 itself as soon as the page asks for the code, which is shown on the same screen it was covering.
 
-It carries where the music comes from, the companion's address and token, the lyrics server and its
-token, the weather town and the news feed.
+It carries where the music comes from, the companion's address and token, the fallback lyrics
+server and its token, the weather town and the news feed.
 
 Changing something asks once for the **six digits shown on that panel's screen**: being on the
 network is not enough, you have to be in front of it. After that the panel remembers your browser
@@ -293,7 +297,7 @@ flash until the new one has proved it starts.
 | The weather shows the wrong town | On the panel's page, add a region or country after the name (`Paris, Texas`). |
 | The page says the code is wrong | The code on the screen changes every five minutes; read the new one. |
 | "No lyrics found for this track" | The lyrics server found none; the cover view shows instead. |
-| *No lyrics source* on every song | Nothing is set to look them up, and the screen says so with the address of this panel's page. That page takes either answer: run the TextFromTrack companion on your network, or type the address of an LRCLIB-compatible server. It also states, under the field, what the panel is asking today and whether a companion was found. |
+| *No lyrics source* on every song | No companion is on your network and no fallback server is typed, and the screen says so with the address of this panel's page. That page takes either answer: run the TextFromTrack companion on your network (the panel picks it up within a minute, no restart), or type the address of an LRCLIB-compatible server. It also states, under the field, what the panel is asking today and whether a companion was found. |
 | Lyrics early or late for one song | Press and hold the lyrics, adjust *Earlier* / *Later*. |
 | Lyrics early or late for every song | Settings → *Lyrics ahead by*. |
 | The screen looks bluish or yellowish | Settings → *Colour test*, move the warmth slider. |

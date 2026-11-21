@@ -51,7 +51,10 @@ String followedZoneId();                   // empty if none
 // each, and a Mac announces every interface it has - a laptop with a dock or a second adapter
 // often lists a self-assigned 169.254 address first, which is not routable from here. Those are
 // refused; an address on our own /24 wins over anything else. `hostOut` takes the host name.
-String mdnsServiceUrl(const char *service, const char *proto, String *hostOut = nullptr);
+// `txtApi` / `txtVersion` take the `api` and `version` TXT keys of the chosen answer (a
+// companion since 0.7.1 announces api=get: its /api/get goes through the player's chain).
+String mdnsServiceUrl(const char *service, const char *proto, String *hostOut = nullptr,
+                      String *txtApi = nullptr, String *txtVersion = nullptr);
 std::vector<OutputInfo> followedOutputs();
 void currentTrack(String &title, String &artist, String &album, uint32_t *durationMs = nullptr);
 // The followed zone's track. Runs the position clock, spots a track change, asks for the cover

@@ -52,9 +52,11 @@ steps, one action each — stop at the one you want:
 Step 2 is a lyrics server and nothing else: it never pairs with Roon. It looks up
 [LRCLIB](https://lrclib.net) for you, keeps what it finds, and can ask your own mirror first.
 
-Two shortcuts, on the panel's page: point it straight at any **LRCLIB-compatible server** if you
-would rather run nothing (one address to type — the public lrclib.net, or your mirror), or set the
-lyrics to **none** if you came for the controls and the cover.
+Two shortcuts, on the panel's page: give it a **fallback lyrics server** — any LRCLIB-compatible
+address (the public lrclib.net, or your mirror) — if you would rather run nothing, or set the
+lyrics to **none** if you came for the controls and the cover. It is a ladder, not a switch: a
+companion found on the network always comes first, the fallback is asked when there is none, and a
+panel with neither says so on its screen and looks again every minute.
 
 The companion can also give the panel what is playing, instead of the music server — that is the
 other mode, and the panel asks nothing of Roon then.
