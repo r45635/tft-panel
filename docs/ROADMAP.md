@@ -337,6 +337,16 @@ showcase picture.
       build that never reports itself healthy, three minutes, `never got healthy: restarting into
       the previous one`, back on the previous image with no `first boot` line.
 
+## Icons a size too small on one board (2026-11-21, v0.1.22)
+
+- [x] **The VIEWE drew every icon one step below the text beside it.** Both P4 boards are
+      1024 x 600 and scale the 800 x 480 design by 1.25, but the larger Montserrat symbol faces
+      (18/24/36) were enabled in `include/lv_conf.h` for the Waveshare alone, so the VIEWE fell
+      back to the CrowPanel's 14/20/28. The gate now names both boards. 🪤 Adding a board means
+      adding its define there as well as its `pins_*.h`: nothing warns, the icons simply come out
+      small. Cost on the VIEWE: 105 KB of a 6 MB slot (34.9 % used). Checked on the glass with
+      `demo` + `show controls` + a screenshot over Wi-Fi, not by reasoning.
+
 ## Other boards (not started)
 
 - **Guition JC1060P470C** (ESP32-P4, JD9165, 16 MB flash) — asked by a user 2026-11-11; about half a day
