@@ -1,0 +1,13 @@
+{
+  "name": "TFT Panel (Waveshare ESP32-P4-WIFI6-Touch-LCD-7B)",
+  "version": "v0.1.23",
+  "new_install_prompt_erase": true,
+  "builds": [
+    { "chipFamily": "ESP32-P4", "parts": [
+      { "path": "waveshare-p4-7b-bootloader.bin", "offset": 8192 },
+      { "path": "waveshare-p4-7b-partitions.bin", "offset": 32768 },
+      { "path": "waveshare-p4-7b-boot_app0.bin", "offset": 57344 },
+      { "path": "tft-panel-waveshare-p4-7b-v0.1.23.bin", "offset": 65536 }
+    ] }
+  ]
+}

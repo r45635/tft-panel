@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="brand/icon-32.png">
+<link rel="apple-touch-icon" href="brand/icon-180.png">
+<title>Install TFT Panel</title>
+<!-- ESP Web Tools, pinned (10.4 knows the ESP32-P4). It flashes at 115200 baud, which both CH340
+     boards handle; the Waveshare's USB is native. It picks a build by chip family, and two of the
+     three screens are ESP32-P4 - so this page asks which one is connected and hands it that board's
+     own manifest, rather than guess and leave a panel dark. -->
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<style>
+  :root { --bg: #ffffff; --fg: #1d232a; --dim: #5b6672; --accent: #3b7a3b; --on-accent: #fff; --card: #f3f5f7; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15161a; --fg: #f6f4ee; --dim: #a9aaa6; --accent: #6db56d; --on-accent: #15161a; --card: #202127; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 1.8em; margin: 0 0 4px; }
+  .version { color: var(--dim); margin: 0 0 28px; }
+  ol { padding-left: 1.3em; }
+  li { margin: 0 0 10px; }
+  .card { background: var(--card); border-radius: 12px; padding: 18px 20px; margin: 24px 0; }
+  .install { margin: 28px 0; }
+  esp-web-install-button button, .install button { font-size: 1.1em; padding: 12px 28px; border-radius: 24px;
+    border: 0; background: var(--accent); color: var(--on-accent); cursor: pointer; }
+  esp-web-install-button { --esp-tools-button-color: var(--accent); --esp-tools-button-text-color: var(--on-accent); }
+  a { color: var(--accent); }
+  nav { margin: 0 0 28px; color: var(--dim); }
+  #boards label { display: block; margin: 10px 0; cursor: pointer; }
+  #boards input { margin-right: 8px; }
+  small, .dim { color: var(--dim); }
+  footer.site { max-width: 820px; margin: 0 auto 32px; padding: 0 16px; color: var(--dim); font-size: 0.85em; text-align: center; }
+  footer.site a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="index.html">TFT Panel</a> · <a href="guide.html">User guide</a> · <b>Install</b></nav>
+  <h1>Install TFT Panel</h1>
+  <p class="version">Firmware v0.1.23 for the three supported screens.</p>
+  <div class="card">
+    <b>Which screen do you have?</b>
+    <p id="boards">
+      <label><input type="radio" name="board" value="crowpanel7">
+        <b>Elecrow CrowPanel 7.0"</b> — DIS08070H, board V3.0 <small>(ESP32-S3)</small></label>
+      <label><input type="radio" name="board" value="waveshare-p4-7b">
+        <b>Waveshare ESP32-P4-WIFI6-Touch-LCD-7B</b> <small>(ESP32-P4)</small></label>
+      <label><input type="radio" name="board" value="p4-s070-wba">
+        <b>VIEWE ESP32-P4 7"</b> — UEP4S070H1024V600C-WB-C <small>(ESP32-P4)</small></label>
+    </p>
+    <small>The installer sees the chip, not the screen, and two of these three answer to the same
+    one — so it asks instead of guessing and leaving a panel dark. Other screens are not supported,
+    even look-alikes with the same chip and display controller: see
+    <a href="https://github.com/r45635/tft-panel/blob/main/docs/HARDWARE.md#other-boards">other boards</a>.</small>
+  </div>
+
+  <ol>
+    <li>Use <b>Chrome or Edge on a computer</b> (Windows, macOS, Linux). Phones and Safari/Firefox cannot do this.</li>
+    <li>Connect the panel's <b>USB-C</b> port to the computer with a cable that carries data.</li>
+    <li>Pick your screen above, then click <b>Connect</b> and choose the serial port. The dialog that
+      opens offers <b>Install</b> and names the screen you picked — a last chance to check it is the
+      one in front of you. It takes about 3 minutes on the CrowPanel, about 1 minute on the ESP32-P4
+      boards.
+      <ul>
+        <li>CrowPanel: <i>USB Serial</i> / <i>CH340</i> / <i>usbserial</i></li>
+        <li>Waveshare: use the USB-C port <i>USB 1.1</i> (not <i>USB to UART</i>); the port is <i>USB JTAG/serial debug unit</i> / <i>usbmodem</i></li>
+        <li>VIEWE: <i>USB Serial</i> / <i>CH340</i> / <i>usbserial</i></li>
+      </ul></li>
+    <li>The panel restarts on its Wi-Fi setup screen: scan the first QR code with your phone to join it,
+      then the second one to choose your Wi-Fi network.</li>
+  </ol>
+
+  <div class="card">
+    <b>This overwrites whatever is on the board, for good.</b><br>
+    A demo firmware your screen came with cannot be downloaded again from anywhere. If you may want it
+    back, save it first — one command, a few minutes, nothing written to the board:
+    <code>tools/backup-firmware.py --port &lt;your port&gt;</code> from the
+    <a href="https://github.com/r45635/tft-panel">repository</a>. It copies the whole flash, writes the
+    copy's sha256, then reads the board back to check the copy against it, and says so if the copy is
+    not good. It also names your board, which is worth knowing before you answer the question above: a
+    computer cannot tell the two ESP32-P4 screens apart. If a flashed panel stays dark, the firmware says <b>WRONG BOARD</b> on the
+    USB serial console and names the image you need.
+  </div>
+
+  <div class="install" id="install"><p class="dim">Choose your screen above, and the Install button appears here.</p></div>
+  <script>
+    // The button is built when a screen is chosen, so it can never be pressed with the wrong
+    // firmware behind it, and it is rebuilt on every change so the manifest is always re-read.
+    document.getElementById('boards').addEventListener('change', e => {
+      const b = document.createElement('esp-web-install-button');
+      const m = 'manifest-' + e.target.value + '.json';
+      b.setAttribute('manifest', m);   // and the property: the element may read either
+      b.manifest = m;
+      b.innerHTML = '<span slot="unsupported">This browser cannot flash devices: please open this page in Chrome or Edge on a computer.</span>'
+                  + '<span slot="not-allowed">Flashing needs a secure page (https).</span>';
+      document.getElementById('install').replaceChildren(b);
+    });
+  </script>
+
+  <div class="card">
+    <b>No serial port in the list?</b><br>
+    CrowPanel on Windows: install the CH340 USB driver from
+    <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html">WCH</a>, then unplug and replug the panel
+    (macOS and Linux already include it). The Waveshare needs no driver. Some USB-C cables only charge: try another one.
+  </div>
+
+  <div class="card">
+    <b>What happens next, screen by screen.</b><br>
+    <a href="guide.html#2-the-first-start-screen-by-screen">The guide's walkthrough</a> shows the whole
+    first start as a film: the setup screen, your Wi-Fi, the wait while it looks for your music, the
+    first song.
+  </div>
+
+  <div class="card">
+    <b>After this, no cable needed.</b><br>
+    The panel checks for new versions by itself and shows <i>Update</i> at the top of the screen: tap it to
+    install. If an update ever fails to start, the panel goes back to the previous version.
+    The <a href="guide.html">user guide</a> explains the rest.
+  </div>
+
+  <p class="dim"><small>TFT Panel is open source (MIT):
+    <a href="https://github.com/r45635/tft-panel">github.com/r45635/tft-panel</a>. It controls what you play on your music server and shows it:
+    cover, synced lyrics, library, zones and volume.</small></p>
+</main>
+<footer class="site">TFT Panel v0.1.23 · <a href="https://github.com/r45635/tft-panel/blob/main/LICENSE">MIT licence</a> · <a href="https://github.com/r45635/tft-panel/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a> · <a href="media-kit.html">Media kit</a> · <a href="https://github.com/r45635/tft-panel">GitHub</a></footer>
+</body>
+</html>

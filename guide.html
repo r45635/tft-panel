@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="brand/icon-32.png">
+<link rel="apple-touch-icon" href="brand/icon-180.png">
+<title>TFT Panel - user guide</title>
+<style>
+  :root { --bg: #15161a; --fg: #f6f4ee; --dim: #a9aaa6; --accent: #6db56d; --card: #202127; --line: #2f3037; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 16px 56px; }
+  nav { color: var(--dim); margin-bottom: 18px; }
+  a { color: var(--accent); }
+  h1 { font-size: 2em; margin: 0.4em 0; }
+  h2 { margin-top: 2em; padding-top: 0.6em; border-top: 1px solid var(--line); }
+  img { max-width: 100%; height: auto; border-radius: 10px; }
+  p img, li img { display: block; margin: 12px 0; }
+  code { background: var(--card); padding: 1px 6px; border-radius: 5px; font-size: 0.92em; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  em { color: var(--dim); }
+  footer.site { max-width: 820px; margin: 0 auto 32px; padding: 0 16px; color: #a9aaa6; font-size: 0.85em; text-align: center; }
+  footer.site a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="index.html">TFT Panel</a> · <b>User guide</b> · <a href="install.html">Install</a></nav>
+<h1 id="tft-panel-user-guide">TFT Panel — user guide</h1>
+<p>TFT Panel turns a 7" touch screen (Elecrow CrowPanel 7", Waveshare ESP32-P4 7B or VIEWE ESP32-P4 7")
+into a remote for the music you play on your music server, and a screen that shows it: pause, skip, change the
+volume, pick the zone, search your library and start an album, all with a touch — while the cover
+and the words of the song scroll in time with the music.</p>
+<p><img alt="TFT Panel" src="media/hero.png" /></p>
+<p><em>All pictures in this guide come from the panel itself, in its showcase mode: the song, lyrics,
+zones and cover are invented.</em></p>
+<h2 id="what-you-need">What you need</h2>
+<ul>
+<li>One of these screens, and a USB-C cable that carries data:</li>
+<li><strong>Elecrow CrowPanel ESP32 Display 7.0"</strong> (DIS08070H), board <strong>V3.0</strong>;</li>
+<li><strong>Waveshare ESP32-P4-WIFI6-Touch-LCD-7B</strong> (1024×600);</li>
+<li><strong>VIEWE ESP32-P4 7"</strong> (UEP4S070H1024V600C-WB-C, 1024×600).</li>
+</ul>
+<p>Other screens are not supported, even look-alikes with the same ESP32-P4 chip and the same display
+  controller (for example the Guition JC1060P470C): their display needs different settings, and the
+  installer would give them the Waveshare firmware. Their screen would stay dark.
+- A <strong>Roon</strong> system. The panel can get what is playing in either of two ways:
+  - <strong>straight from your music server</strong>, with nothing else running. You enable <em>TFT Panel</em> once in
+    Roon's Settings → Extensions and it is done; lyrics then come from a companion if you run one,
+    else from the fallback LRCLIB-compatible server you give it (the public lrclib.net, or your own
+    mirror);
+  - from the free <strong>TextFromTrack companion</strong> on a computer of the same network, which also finds,
+    ranks and lets you correct the lyrics. Several passages below assume it, because it is where
+    the lyrics are managed rather than merely looked up.
+- Your <strong>Wi-Fi</strong> network name and password (2.4 GHz).</p>
+<h2 id="1-install-the-firmware-once">1. Install the firmware (once)</h2>
+<h3 id="before-you-flash-save-what-is-on-the-board">Before you flash: save what is on the board</h3>
+<p>Whatever your screen came with — a vendor demo, another firmware — is <strong>overwritten and cannot be
+downloaded again from anywhere</strong>. Saving it first takes one command and a few minutes:</p>
+<p><code>bash
+tools/backup-firmware.py --port /dev/cu.usbserial-XXXX     # Windows: COM5</code></p>
+<p>It says what the board is and which image it takes, copies the whole flash to
+<code>~/tft-panel-backups/</code>, writes the copy's <code>sha256</code> beside it, <strong>and then reads the flash back to
+check the copy against the board</strong>. If anything is short or different it tells you there is no
+backup rather than leaving you a file that looks like one. Nothing is written to the board.</p>
+<p>One day, to put it back: <code>tools/backup-firmware.py --port … --restore &lt;the .bin&gt;</code>. That restores
+the settings too — a restored panel rejoins your Wi-Fi and finds its music server with nothing to
+set up again, because the copy holds the panel's whole memory. Which is also why the file deserves
+the same care as a password, and should never be attached to a bug report.</p>
+<p>It is also the only thing that tells the two ESP32-P4 boards apart before you flash them — the
+browser installer sees one chip for both, and the wrong image leaves the screen dark. If you
+already flashed and the screen stayed black, plug in the USB cable and read the serial console
+(<code>pio device monitor</code>): the firmware says <strong>WRONG BOARD</strong> and names the image you need.</p>
+<h3 id="flash-it">Flash it</h3>
+<ol>
+<li>On a computer, open the <a href="install.html">web installer</a> in <strong>Chrome or Edge</strong>.</li>
+<li><strong>Say which screen you have.</strong> The page asks, because it only sees the chip and two of the three
+   boards answer to the same one — picking for you would risk leaving a panel dark.</li>
+<li>Connect the panel with the USB-C cable — on the Waveshare, the port marked <strong>USB 1.1</strong> — click
+   <strong>Connect</strong> and pick the serial port. The dialog then offers <strong>Install</strong>, and names the screen you
+   chose, so you can check it one last time. It takes about 3 minutes on the CrowPanel, about a
+   minute on the ESP32-P4 boards.</li>
+<li>CrowPanel and VIEWE: the port is called <em>USB Serial</em>, <em>CH340</em> or <em>usbserial</em>.</li>
+<li>Waveshare: <em>USB JTAG/serial debug unit</em> or <em>usbmodem</em>.</li>
+<li>CrowPanel or VIEWE on Windows: if no port shows up, install the
+   <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html">CH340 driver</a> and plug the panel again.</li>
+</ol>
+<p>After this, updates come over Wi-Fi (see <a href="#updates">Updates</a>).</p>
+<h2 id="2-the-first-start-screen-by-screen">2. The first start, screen by screen</h2>
+<p>Half a minute, from the screen you meet when you plug it in to the clock it settles on. Nothing
+here is typed except your Wi-Fi password.</p>
+<p><img alt="The first start, from the setup screen to the clock" src="media/first-start.gif" /></p>
+<p><em>Better quality: <a href="media/first-start.mp4">first-start.mp4</a>. The song, the networks and the password
+in the picture are invented.</em></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What you see</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Set up TFT Panel</strong>, two QR codes</td>
+<td>Tap <strong>Set up on this screen</strong>, or scan the codes with a phone</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Choose your Wi-Fi</strong></td>
+<td>Tap your network</td>
+</tr>
+<tr>
+<td>3</td>
+<td>A keyboard</td>
+<td>Type the password, <strong>Connect</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Looking for your music server…</strong></td>
+<td>Nothing. It is searching; this is the normal wait</td>
+</tr>
+<tr>
+<td>5</td>
+<td>The song, its words in time with it</td>
+<td>Swipe for the cover, swipe again for the clock</td>
+</tr>
+</tbody>
+</table>
+<p>If step 4 never ends, the panel is on your network but nothing answered: see
+<a href="#troubleshooting">Troubleshooting</a>. If the screen stays dark from the start, it is not the Wi-Fi —
+it is the wrong firmware for your board, and the USB serial console says <strong>WRONG BOARD</strong> with the
+image you need.</p>
+<h2 id="3-connect-it-to-your-wi-fi-in-detail">3. Connect it to your Wi-Fi, in detail</h2>
+<p>On its first start the panel shows two QR codes and a button. Two ways to go on:</p>
+<p><img alt="Wi-Fi setup" src="images/wifi-setup.png" /></p>
+<p><strong>On the panel itself</strong> — tap <strong>Set up on this screen</strong>. The panel lists the Wi-Fi networks it
+hears, strongest first; tap yours, type its password on the keyboard (<strong>Show</strong> reveals it) and tap
+<strong>Connect</strong>. An open network needs no password.</p>
+<p><img alt="Networks the panel hears" src="images/wifi-list.png" /></p>
+<p><img alt="Password keyboard" src="images/wifi-keyboard.png" /></p>
+<p><strong>With a phone</strong> — useful for a hidden network, or to enter the companion's address:</p>
+<ol>
+<li>Scan the <strong>first</strong> code with your phone: it joins the panel's own network.</li>
+<li>Scan the <strong>second</strong> one: the setup page opens and lists the networks the panel hears. Tap
+   yours, type its password, <strong>Save</strong>. A network that is not listed can be typed by hand.</li>
+</ol>
+<p>The panel restarts, joins your network and looks for a music server — this is what it shows while
+it does, and it is nothing to worry about for the first few seconds:</p>
+<p><img alt="Looking for your music server" src="images/searching.png" /></p>
+<p>It finds the companion by itself. Only 2.4 GHz networks
+work (most routers offer both). To move the panel to another network later: <strong>Settings &gt; Wi-Fi &gt;
+Change...</strong>. If the companion is
+on another network segment, its address (and its access token, if you set one) can be typed on
+the same setup page.</p>
+<h2 id="4-lyrics-and-cover">4. Lyrics and cover</h2>
+<p>Roon serves no lyrics of its own, so the panel is told where to find them, on
+<a href="#8-the-panels-own-page">its own page</a>. It climbs a ladder: a <strong>TextFromTrack companion</strong> found on
+your network always comes first — one container anywhere, <code>ROON_ENABLED=false</code>, nothing to enable in
+Roon, and the panel finds it by itself; when there is none, it asks the <strong>fallback lyrics server</strong>
+typed on the page, any LRCLIB-compatible address (the public lrclib.net, or your own mirror); with
+neither, the screen says what is missing and where it is typed, and the panel looks again every
+minute. Set the fallback to <em>none</em> if you came for the controls and the cover. The companion is also
+what gives you <em>your</em> lyrics: the <code>.lrc</code> files beside your music, the words in your tags, the wrong
+ones replaced, a per-song offset that is remembered — a companion from v0.7.1 answers the panel from
+that same chain. The page says, under the field, which one the panel is asking today.</p>
+<p>The panel follows the zone that is playing. The current line is large, the lines around it
+dimmed; they slide up as the song goes.</p>
+<p><img alt="Lyrics" src="images/lyrics.png" /></p>
+<p><strong>Swipe left or right</strong> to switch to the cover view, and back. The panel remembers your choice.
+A song without lyrics shows the cover view by itself, and returns to the lyrics as soon as
+there are some.</p>
+<p><img alt="Cover view" src="images/cover-view.png" /></p>
+<p><img alt="Scrolling lyrics" src="media/lyrics.gif" /></p>
+<h2 id="5-controls">5. Controls</h2>
+<p><strong>Tap</strong> the screen to show the controls (they hide after a few seconds): zone, previous,
+play/pause, next, volume − / +, settings.</p>
+<p><img alt="Controls" src="images/controls.png" /></p>
+<ul>
+<li><strong>Zone</strong>: follow the playing zone (<em>auto</em>), or stay on one zone.</li>
+</ul>
+<p><img alt="Zones" src="images/zones.png" /></p>
+<ul>
+<li><strong>Volume</strong>: tap the number between − and + for a slider and <strong>Mute</strong>.</li>
+</ul>
+<p><img alt="Volume" src="images/volume.png" /></p>
+<ul>
+<li><strong>Lyrics timing</strong>: if the lyrics run early or late for a song, <strong>press and hold</strong> the lyrics,
+  then <em>Earlier</em> / <em>Later</em> (by 0.25 s) or <em>Reset</em>. It is saved for that song.</li>
+</ul>
+<p><img alt="Lyrics timing" src="images/lyrics-timing.png" /></p>
+<h2 id="find-music">Find music</h2>
+<p>The controls bar has a <strong>folder</strong> button: the music library (on all three screens; on the
+CrowPanel since v0.1.17).</p>
+<p><img alt="Library" src="images/library.png" /></p>
+<ul>
+<li><strong>Search</strong>: the green cursor blinks in the field; type an artist, album or track on the
+  keyboard, then <strong>Search</strong>. The results come
+  by kind (artists, albums, tracks…); tap one to open it.</li>
+<li><strong>Browse</strong>: Roon's own menus — Library (artists, albums, tracks, composers, tags), playlists,
+  radio, genres.</li>
+<li><strong>◀</strong> goes back one level; <strong>Show more</strong> loads the rest of a long list.</li>
+<li>A row with a green <strong>▶</strong> can be played: tap it and choose <strong>Play Now</strong>, <strong>Add Next</strong>,
+  <strong>Queue</strong> or <strong>Start Radio</strong>. It plays on the zone shown at the top right (<em>Plays on: …</em>),
+  the one the panel follows; pick another zone with the zone button first.</li>
+</ul>
+<p><img alt="Play options" src="images/library-actions.png" /></p>
+<p>Browsing from the panel does not move what Roon's other apps or the companion's web player are
+showing.</p>
+<h3 id="from-what-is-playing">From what is playing</h3>
+<p>On the <strong>cover view</strong>, the artist and the album under the title are tappable: the artist opens
+that artist's albums, the album opens its track list, ready to play. When the name is not exactly
+one thing in your library — several artists on a track, an album title shared by other records —
+the panel shows what it found and lets you choose rather than opening a guess.</p>
+<h2 id="6-settings">6. Settings</h2>
+<p>The gear button opens the settings: brightness, colour warmth, when the screen turns off, how
+far ahead the lyrics show, the blurred cover background, smooth scrolling, the idle clock and its
+time zone, the zone, forgetting the Wi-Fi, the firmware version and updates.</p>
+<p><img alt="Settings" src="images/settings.png" /></p>
+<p><strong>Colour warmth</strong>: this panel's white is bluish. <em>Colour test</em> shows white, greys and colours
+with a live slider: move it until the white looks neutral to you.</p>
+<p><img alt="Colour test" src="images/colour-test.png" /></p>
+<h2 id="7-the-clock-the-weather-and-the-news">7. The clock, the weather and the news</h2>
+<p>The clock is both an idle screen and a view of its own: swipe to it like the lyrics and the cover.
+After a minute without music the panel shows it by itself, dims, and turns the screen off after the
+delay chosen in the settings. A touch, or music starting, wakes it.</p>
+<p><img alt="Idle clock" src="images/idle-clock.png" /></p>
+<p>Give it a <strong>town</strong> and it shows the temperature, the sky and today's range beside the time. Towns
+share their names, so add what tells yours apart: <code>Montreal, Canada</code>, <code>Paris, Texas</code>,
+<code>Lyon, France</code>. The page says which town it settled on, with its coordinates, and says so plainly
+when it cannot find the one you meant.</p>
+<p>The title under the date is the track the panel is following, which may well have finished hours
+ago. So that you can tell one from the other at a glance, <strong>five small bars dance in the top right
+corner while music is playing</strong> and disappear when it stops — the lyrics and cover views have their
+progress bar for that, the clock had nothing.</p>
+<p>Give it the address of an <strong>RSS or Atom feed</strong> and the headlines slide under the clock at reading
+pace. Both are typed on the panel's page, below. If nothing slides, the page says why, under the
+field: the feed did not answer, or the address holds a web page rather than a feed.</p>
+<h2 id="8-the-panels-own-page">8. The panel's own page</h2>
+<p>Everything that has to be typed lives on one page, in any browser on your network:
+<code>http://tft-panel-xxxx.local</code> — the settings screen shows it as a QR code, and its name, board,
+address and firmware are written at the top, so two panels are never confused. The QR closes
+itself as soon as the page asks for the code, which is shown on the same screen it was covering.</p>
+<p>It carries where the music comes from, the companion's address and token, the fallback lyrics
+server and its token, the weather town and the news feed.</p>
+<p>Changing something asks once for the <strong>six digits shown on that panel's screen</strong>: being on the
+network is not enough, you have to be in front of it. After that the panel remembers your browser
+for a month, so later changes are two taps; <em>Forget this browser</em> on the page undoes that, and so
+does forgetting the Wi-Fi or erasing the panel. A firmware upload always asks for a fresh code.</p>
+<h2 id="updates">Updates</h2>
+<p>The panel looks for a new version every day. When there is one, <strong>Update</strong> appears at the top:</p>
+<p><img alt="Update available" src="images/update-available.png" /></p>
+<p>Tap it and confirm. The panel downloads the update, <strong>checks its sha256 against the one published
+with the release</strong> and refuses it if a single byte differs, then restarts (about a minute).
+Don't unplug it meanwhile — the screen says so, and shows how far it has got. There is nothing to
+back up first: the version you are running stays in the other half of the flash, and the panel
+returns to it by itself if the new one never starts properly.</p>
+<p><img alt="Update confirmation" src="images/update-confirm.png" /> <img alt="Updating" src="images/update-progress.png" /></p>
+<h3 id="from-a-computer-instead">From a computer instead</h3>
+<p>Open <code>http://tft-panel-xxxx.local/update</code> (the name is shown in the settings, under <em>About</em>),
+choose a firmware file, and type the 6-digit code the panel shows:</p>
+<p><img alt="Upload code" src="images/upload-code.png" /></p>
+<p>Beside the file there is a box for the <strong>sha256</strong> published with each release, in the
+<code>…-vX.Y.Z.sha256</code> file next to the firmware. Paste it and the panel refuses the upload unless
+every byte matches, naming both digests so you can see which file you actually have. Leave it
+empty and the panel still tells you the digest of what it received, so you can compare afterwards.</p>
+<p>The panel shows the same <em>Updating… do not unplug</em> picture as it does for an update of its own,
+from the first byte to the last, so you can see it working from across the room. If it refuses the
+file, it says so on its screen too, and goes back to what it was doing.</p>
+<p>A wrong code is used up the moment it is refused: read the new one on the screen, or reload the
+page. And whatever happens here, the version you are replacing stays in the other half of the
+flash until the new one has proved it starts.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>You see</th>
+<th>Do this</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The setup QR codes come back</td>
+<td>The panel cannot join your Wi-Fi for a minute: check the password, or that the network is 2.4 GHz.</td>
+</tr>
+<tr>
+<td>"Looking for the TextFromTrack companion"</td>
+<td>Start the companion on its computer; same network as the panel. If it runs on a laptop with a dock or a second network adapter, give the panel its address on the panel's page instead: a machine can announce an address that is not reachable from the panel.</td>
+</tr>
+<tr>
+<td>"Enable TFT Panel in Roon"</td>
+<td>Direct mode: open Roon → Settings → Extensions and enable it once.</td>
+</tr>
+<tr>
+<td>The panel says <em>Paused</em> while music is playing</td>
+<td>The panel shows what your music server is playing, and nothing else. Sound sent to the same amplifier from somewhere else — AirPlay, Spotify Connect, Bluetooth, an input on the amplifier — is invisible to it: the zone really is paused.</td>
+</tr>
+<tr>
+<td>The weather shows the wrong town</td>
+<td>On the panel's page, add a region or country after the name (<code>Paris, Texas</code>).</td>
+</tr>
+<tr>
+<td>The page says the code is wrong</td>
+<td>The code on the screen changes every five minutes; read the new one.</td>
+</tr>
+<tr>
+<td>"No lyrics found for this track"</td>
+<td>The lyrics server found none; the cover view shows instead.</td>
+</tr>
+<tr>
+<td><em>No lyrics source</em> on every song</td>
+<td>No companion is on your network and no fallback server is typed, and the screen says so with the address of this panel's page. That page takes either answer: run the TextFromTrack companion on your network (the panel picks it up within a minute, no restart), or type the address of an LRCLIB-compatible server. It also states, under the field, what the panel is asking today and whether a companion was found.</td>
+</tr>
+<tr>
+<td>Lyrics early or late for one song</td>
+<td>Press and hold the lyrics, adjust <em>Earlier</em> / <em>Later</em>.</td>
+</tr>
+<tr>
+<td>Lyrics early or late for every song</td>
+<td>Settings → <em>Lyrics ahead by</em>.</td>
+</tr>
+<tr>
+<td>The screen looks bluish or yellowish</td>
+<td>Settings → <em>Colour test</em>, move the warmth slider.</td>
+</tr>
+</tbody>
+</table>
+</main>
+<footer class="site">TFT Panel v0.1.23 · <a href="https://github.com/r45635/tft-panel/blob/main/LICENSE">MIT licence</a> · <a href="https://github.com/r45635/tft-panel/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a> · <a href="media-kit.html">Media kit</a> · <a href="https://github.com/r45635/tft-panel">GitHub</a></footer>
+</body>
+</html>

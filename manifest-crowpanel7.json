@@ -1,0 +1,13 @@
+{
+  "name": "TFT Panel (Elecrow CrowPanel 7.0in (DIS08070H V3.0))",
+  "version": "v0.1.23",
+  "new_install_prompt_erase": true,
+  "builds": [
+    { "chipFamily": "ESP32-S3", "parts": [
+      { "path": "crowpanel7-bootloader.bin", "offset": 0 },
+      { "path": "crowpanel7-partitions.bin", "offset": 32768 },
+      { "path": "crowpanel7-boot_app0.bin", "offset": 57344 },
+      { "path": "tft-panel-v0.1.23.bin", "offset": 65536 }
+    ] }
+  ]
+}
