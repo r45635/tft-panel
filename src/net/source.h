@@ -80,6 +80,9 @@ class Source {
     // Resolves the lyrics of what is playing and publishes them. false = this source has none,
     // and the caller will not retry.
     virtual bool fetchLyrics(const String &zoneId) = 0;
+    // What to put on the screen when fetchLyrics() said no: the reason, in the listener's words,
+    // or "" when there is nothing useful to say (the companion simply has none for this track).
+    virtual String whyNoLyrics() const { return ""; }
 
     // --- Music library (HAS_LIBRARY boards) ---
     // The body is already in the server's own terms (hierarchy, multi_session_key, item_key...).

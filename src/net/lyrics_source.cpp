@@ -6,6 +6,7 @@
 #include <WiFi.h>
 
 #include "../app/lyrics.h"
+#include "net.h"
 #include "net_internal.h"
 #include "settings.h"
 
@@ -17,6 +18,9 @@ namespace {
 
 String g_discovered;        // a companion found on the network, remembered between tracks
 uint32_t g_discoveryAt = 0;
+// Read by the web task for the panel's page: an enum, never the String above, which the net
+// task rewrites.
+CompanionSearch g_lastSearch = CompanionSearch::Unknown;
 constexpr uint32_t REDISCOVER_MS = 60000;
 
 // Percent-encodes a query value: track and artist names carry spaces, accents and punctuation.
@@ -42,6 +46,7 @@ String findCompanion() {
     if (g_discovered.length() && now - g_discoveryAt < REDISCOVER_MS) return g_discovered;
     g_discoveryAt = now ? now : 1;
     g_discovered = mdnsServiceUrl("textfromtrack", "tcp");
+    g_lastSearch = g_discovered.length() ? CompanionSearch::Found : CompanionSearch::NotFound;
     // Said out loud either way: a track with no lyrics and no reason given is the one thing
     // this screen must not do. The memo above keeps it to once a minute at worst.
     if (g_discovered.length()) Serial.printf("[net] lyrics from the companion at %s\n", g_discovered.c_str());
@@ -122,6 +127,19 @@ void publish(JsonDocument &doc, bool companionShape, const char *sourceName) {
 void forgetDiscovered() {
     g_discovered = "";
     g_discoveryAt = 0;
+    g_lastSearch = CompanionSearch::Unknown;
+}
+
+CompanionSearch lastCompanionSearch() { return g_lastSearch; }
+
+String whyNoLyrics() {
+    settings::Settings st = settings::get();
+    if (st.lyricsUrl == "none") return "Lyrics are turned off for this panel";
+    if (st.lyricsUrl.length()) return "";   // a server is set; its answers speak for themselves
+    // Said in the order the listener can act on: what is missing, then where to fix it. The
+    // address is this panel's own page, which is where both answers are typed.
+    return "No lyrics source\n\nNo companion is announcing itself on your network, and no lyrics "
+           "server is set.\nSet one at http://" + net::hostName() + ".local";
 }
 
 bool lookup(const String &title, const String &artist, const String &album, uint32_t durationMs) {

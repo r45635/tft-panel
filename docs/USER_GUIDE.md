@@ -293,7 +293,7 @@ flash until the new one has proved it starts.
 | The weather shows the wrong town | On the panel's page, add a region or country after the name (`Paris, Texas`). |
 | The page says the code is wrong | The code on the screen changes every five minutes; read the new one. |
 | "No lyrics found for this track" | The lyrics server found none; the cover view shows instead. |
-| No lyrics at all, on every song | Nothing is set to look them up: on the panel's page, give a lyrics server, or run the companion on your network. The serial console says `no lyrics server`. |
+| *No lyrics source* on every song | Nothing is set to look them up, and the screen says so with the address of this panel's page. That page takes either answer: run the TextFromTrack companion on your network, or type the address of an LRCLIB-compatible server. It also states, under the field, what the panel is asking today and whether a companion was found. |
 | Lyrics early or late for one song | Press and hold the lyrics, adjust *Earlier* / *Later*. |
 | Lyrics early or late for every song | Settings → *Lyrics ahead by*. |
 | The screen looks bluish or yellowish | Settings → *Colour test*, move the warmth slider. |

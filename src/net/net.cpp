@@ -409,11 +409,13 @@ namespace {
 // never asked again for that track.
 void askLyrics(const String &zoneId) {
     if (!source().fetchLyrics(zoneId)) {
-        update([](Snapshot &s) {
+        String why = source().whyNoLyrics();
+        update([&why](Snapshot &s) {
             s.lyricsStatus = LyricsStatus::None;
             s.lyrics.reset();
             s.lyricsSerial++;
-            s.lyricsSource = s.lyricsError = "";
+            s.lyricsSource = "";
+            s.lyricsError = why;   // shown on the screen: a blank screen explains nothing
         });
         g_lyricsRetries = LYRICS_MAX_RETRIES;
     }

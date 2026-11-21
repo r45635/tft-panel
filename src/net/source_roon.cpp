@@ -211,6 +211,8 @@ void DirectSource::publishEverything(const tftcore::ZoneList &zones, const tftco
 
 // ---- Lyrics, from a server that has them ----
 
+String DirectSource::whyNoLyrics() const { return lyricsrc::whyNoLyrics(); }
+
 bool DirectSource::fetchLyrics(const String &) {
     String title, artist, album;
     uint32_t durationMs = 0;

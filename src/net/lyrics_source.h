@@ -25,4 +25,14 @@ bool lookup(const String &title, const String &artist, const String &album, uint
 // Forget a discovered companion, so the next lookup looks for one again.
 void forgetDiscovered();
 
+// Why this panel has no lyrics to show, in the listener's words, or "" when it has a server to
+// ask. A screen that shows nothing and says nothing is the one failure this product cannot
+// afford: lyrics are the reason it exists, so "no companion, no address" is said out loud, on
+// the screen and on the panel's page, not only in the serial log.
+String whyNoLyrics();
+
+// What the last look for a companion found: Unknown until a track made the panel look.
+enum class CompanionSearch : uint8_t { Unknown, NotFound, Found };
+CompanionSearch lastCompanionSearch();
+
 }  // namespace net::lyricsrc

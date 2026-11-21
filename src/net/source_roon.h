@@ -36,6 +36,7 @@ class DirectSource : public Source {
     // server configured (an LRCLIB-compatible one, a mirror on the network or the public site)
     // it looks them up itself; without one it says there are none, and is not asked again.
     bool fetchLyrics(const String &zoneId) override;
+    String whyNoLyrics() const override;
 
     internal::HttpResult browse(JsonDocument &body, JsonDocument &resp) override;
     internal::HttpResult browseLoad(JsonDocument &body, JsonDocument &resp) override;

@@ -1358,7 +1358,7 @@ void applySnapshot() {
         case net::LyricsStatus::Instrumental: showMessage("Instrumental", COL_MID); break;
         case net::LyricsStatus::NotFound: showMessage("No lyrics found for this track", COL_DIM); break;
         case net::LyricsStatus::Error: showMessage("Lyrics unavailable: " + g_s.lyricsError, COL_ERROR); break;
-        case net::LyricsStatus::None: showMessage("", COL_DIM); break;
+        case net::LyricsStatus::None: showMessage(g_s.lyricsError, COL_DIM); break;
     }
 }
 

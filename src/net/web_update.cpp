@@ -63,7 +63,7 @@ a{color:#6db56d}</style></head><body>
  or the address of an LRCLIB-compatible server)</small>
 <input name=lyrics placeholder="http://192.168.1.30:3300" value="%LYRICS%"></label>
 <label>Lyrics server token <small>(only if it asks for one)</small>
-<input name=lyricstoken type=password autocomplete=off></label>
+<input name=lyricstoken type=password autocomplete=off></label>%LNOTE%
 <label>Weather town <small>(add a region or country if the name is shared:
  <code>Montreal, Canada</code>, <code>Paris, Texas</code>, <code>Lyon, France</code>)</small>
 <input name=weather placeholder="Montreal" value="%WEATHER%"></label>%WNOTE%
@@ -349,6 +349,28 @@ void sendSettings(const String &message, bool error = false, bool keepTyped = fa
     h.replace("%CSEL%", direct ? "" : " selected");
     h.replace("%DSEL%", direct ? " selected" : "");
     h.replace("%LYRICS%", esc(val("lyrics", st.lyricsUrl)));
+    // Lyrics are why this panel exists, so the page says what it is actually asking - and warns
+    // when the answer is "nobody", which otherwise only showed as a screen with no words on it.
+    String lnote;
+    if (st.source == settings::SourceKind::Companion)
+        lnote = "<p class=found>In companion mode the companion supplies the lyrics; "
+                "this setting is used in direct mode.</p>";
+    else if (st.lyricsUrl == "none") lnote = "<p class=found>Lyrics are turned off.</p>";
+    else if (st.lyricsUrl.length()) lnote = "<p class=found>This panel asks " + esc(st.lyricsUrl) + ".</p>";
+    else
+        switch (net::lyricsrc::lastCompanionSearch()) {
+            case net::lyricsrc::CompanionSearch::Found:
+                lnote = "<p class=found>A companion was found on your network.</p>"; break;
+            case net::lyricsrc::CompanionSearch::NotFound:
+                lnote = "<p class=warn>No companion is announcing itself on your network and no "
+                        "address is set, so this panel has no lyrics to show. Run the "
+                        "TextFromTrack companion on a computer here, or type the address of an "
+                        "LRCLIB-compatible server above.</p>"; break;
+            case net::lyricsrc::CompanionSearch::Unknown:
+                lnote = "<p class=found>Empty: this panel looks for a companion on your network "
+                        "when a track starts.</p>"; break;
+        }
+    h.replace("%LNOTE%", lnote);
     h.replace("%WEATHER%", esc(val("weather", st.weatherPlace)));
     net::weather::Now w = net::snapshot().weather;
     String note;
