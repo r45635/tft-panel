@@ -117,6 +117,31 @@ check("a section that is short is reported",
 check("a residual inside the tolerance passes",
       flashmap.check({".flash.rodata": 407434}, {}, {".flash.rodata": 407284}, out), [])
 
+# trap 5: a map written by another link -- CMake's compiler check, after an IDE re-configure --
+# must be recognised as such, not parsed into a table of zeros or of someone else's sections.
+print("recognising a map that is not this build's")
+
+
+def foreign(text, env="demo"):
+    with tempfile.NamedTemporaryFile("w", suffix=".map", delete=False) as fh:
+        fh.write(text)
+        name = fh.name
+    try:
+        return flashmap.foreign_map(name, env)
+    finally:
+        os.unlink(name)
+
+
+check("this build's map is accepted",
+      foreign("LOAD /x/libgcc.a\nLOAD .pio/build/demo/src/main.cpp.o\n"), None)
+check("CMake's compiler-check map is named",
+      foreign("LOAD CMakeFiles/cmTC_c8a9d.dir/src.c.obj\nLOAD /x/libc.a\n"),
+      "CMakeFiles/cmTC_c8a9d.dir/src.c.obj")
+check("another environment's map is refused",
+      foreign("LOAD .pio/build/other/src/main.cpp.o\n"), ".pio/build/other/src/main.cpp.o")
+check("a map with no object at all is refused", foreign("Linker script and memory map\n"),
+      "(no object at all)")
+
 # flashed_sections() must read the ELF's flags, not a list of section names. Build a minimal
 # ELF32 with one ALLOC+PROGBITS section, one ALLOC+NOBITS (.bss, not in the image) and one
 # PROGBITS without ALLOC (debug info).

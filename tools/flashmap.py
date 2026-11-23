@@ -24,6 +24,12 @@ while this script was being written:
      excluded, and the right test is not a list of section names but the ELF's own flags:
      a section is in the image when it is ALLOC and PROGBITS.
 
+  5. firmware.map is not always this image's map. Every link that uses the build's flags writes
+     it, and an IDE re-configure (PlatformIO regenerating idedata.json) runs CMake's compiler
+     check, whose throw-away program is linked with those flags: on 2026-11-21 that replaced the
+     CrowPanel's 15 MB map with a 7 KB one hours after the ELF was built. So the map must name
+     this environment's own objects before anything is read from it.
+
 So the totals are checked per section against the ELF before any table is printed, and the
 script refuses to print one that does not add up. A wrong table is worse than no table: it is
 the kind of thing that gets quoted in a roadmap for a week.
@@ -175,6 +181,18 @@ def parse(mapfile, wanted):
     return by_bucket, by_object, by_section, fill
 
 
+def foreign_map(mapfile, env):
+    """None when the map links this environment's objects; else the first object it does link."""
+    first = None
+    for line in open(mapfile, errors="replace"):
+        if line.startswith("LOAD "):
+            path = line[5:].strip()
+            if (".pio/build/%s/" % env) in path:
+                return None
+            first = first or path
+    return first or "(no object at all)"
+
+
 def check(by_section, fill, expect, out=sys.stdout):
     """Print the per-section comparison. Returns the sections that are out of tolerance."""
     bad = []
@@ -217,6 +235,12 @@ def main(argv):
                      "Careful -- building another environment can wipe .pio/build entirely."
                      % (p, env))
 
+    stranger = foreign_map(mapfile, env)                     # trap 5
+    if stranger:
+        sys.exit("%s is not the map of this build: it links %s, not .pio/build/%s/.\n"
+                 "Something else was linked into that directory since (an IDE re-configure runs "
+                 "CMake's compiler check, which writes this file). Run `pio run -e %s` again."
+                 % (mapfile, stranger, env, env))
     expect = flashed_sections(elf)
     by_bucket, by_object, by_section, fill = parse(mapfile, set(expect))
     bad = check(by_section, fill, expect)
