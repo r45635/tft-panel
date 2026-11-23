@@ -37,7 +37,10 @@
       anything — a wrong table is worse than no table, so it refuses to print one that does not add
       up. `python3 -I tools/test_flashmap.py` covers the four ways of reading an ld map wrongly,
       each of which produced a confident wrong table while the tool was written (the funniest
-      charged 168 KB of strings shared by the whole firmware to Arduino's `FS.cpp.o`).
+      charged 168 KB of strings shared by the whole firmware to Arduino's `FS.cpp.o`), and a fifth
+      trap found later: `firmware.map` can be another link's map (CMake's compiler check, run when
+      the IDE re-configures, writes the same file), so the tool now refuses a map that does not link
+      this environment's objects and says to rebuild (2026-11-23).
       At v0.1.20 the CrowPanel's image is: **LVGL 372,417 B (18.9 %)**, this repo's `src/`
       216,070 (11.0 %), read-only strings merged across every object 174,457 (8.9 %), the Wi-Fi
       stack (net80211 + lwip + pp + wpa_supplicant + phy) ~415,000 (21 %), TLS
