@@ -68,6 +68,8 @@ running the fix with it fails exactly the way the failure did and looks like the
 Use `~/.local/bin/pio` (plain 6.2.0, what `pio` on PATH resolves to) for the reinstall *and* the
 build. Then expect the `.sconsign312.tmp` failure below on the first run and simply run it again:
 the two traps fire in that order, every time (2026-11-19).
+🪤 The uninstall can also follow a build that printed SUCCESS (2026-11-23, after a `lib_deps` change), and
+nothing says so until the next build: after building, `ls ~/.platformio/platforms` should list `espressif32`.
 Serial console (115200, type `help`): `status`, `portal`, `wifi <ssid> [password]`, `companion <url>|auto`,
 `source companion|direct` (restarts), `server <host:port>|auto` (restarts), `lyrics auto|<url>|none`, `lyrics-token <t>|none`,
 `forget-pairing` (restarts), `weather <town>|none`, `news <rss url>|none`, `zone <id>|auto`, `token`, `lead <ms>`,
